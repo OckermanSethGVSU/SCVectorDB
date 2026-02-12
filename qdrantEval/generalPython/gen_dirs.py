@@ -93,6 +93,7 @@ config = {
         "p2p": {
             "port": base_ports["p2p"] + rank * 100
         },
+        
         # "consensus": {
         #     "tick_period_ms": tick_period_ms
         # }
@@ -108,6 +109,11 @@ config = {
 
     # }
 }
+
+if storage_medium == "DAOS":
+    config.setdefault("cluster", {}).setdefault("consensus", {})
+    config["cluster"]["consensus"]["consensus_wal_path"] = f"/dev/shm/node{rank}/consensus_wal"
+
 
 config_path = os.path.join(node_dir, "config.yaml")
 with open(config_path, "w") as f:
