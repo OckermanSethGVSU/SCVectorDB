@@ -15,40 +15,20 @@ export LD_PRELOAD="/milvus/internal/core/output/lib/libjemalloc.so"
 
 
 apt-get update && apt-get install -y libatomic1 libelf-dev libdw-dev libslang2-dev libperl-dev python3-dev libnuma-dev libtraceevent-dev
-# apt-get update && apt-get install -y libatomic1 libelf-dev libdw-dev libslang2-dev libperl-dev python3-dev libnuma-dev libtraceevent-dev
-# apt-get install -y \
-    # build-essential ca-certificates pkg-config \
-    # libssl-dev zlib1g-dev libcurl4-openssl-dev gnupg
-
 echo "Install Complete"
 sleep 3
 
 cd /milvus
 
 
-
-
-
-# # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
-# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-#  /perfDir/perf record  -F 99 -g --call-graph fp --proc-map-timeout 5000 -o /workerOut/perf.data -- ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
-# # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-# # /perfDir/perf record  -F 99 -g --call-graph fp --proc-map-timeout 5000 -o /workerOut/perf.data -- ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
-
-# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-#  /perfDir/perf record  -F 99 -g --no-buildid-cache --call-graph dwarf --proc-map-timeout 5000 -o /workerOut/perf.data -- ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
-# # /perfDir/perf probe -x milvus -F > probe.txt
-
 NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
  ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
 MILVUS_PID=$!
 
-# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" milvus run standalone > /workerOut/standalone.txt 2>&1
 sleep 10
-
 touch /workerOut/milvus_running.txt
 
-# wait until the file exists
+# wait until the start file exists
 TARGET="/workerOut/workflow_start.txt"
 while [ ! -e "$TARGET" ]; do
   sleep 0.1
@@ -61,8 +41,7 @@ if [[ "$USEPERF" == "true" ]]; then
 fi
 
 
-
-# wait until the file exists
+# wait until the stop file exists
 TARGET="/workerOut/workflow_stop.txt"
 while [ ! -e "$TARGET" ]; do
   sleep 0.1
@@ -78,6 +57,23 @@ fi
 echo "Rank ${RANK} done"
 sleep 15 
 
+# apt-get update && apt-get install -y libatomic1 libelf-dev libdw-dev libslang2-dev libperl-dev python3-dev libnuma-dev libtraceevent-dev
+# apt-get install -y \
+    # build-essential ca-certificates pkg-config \
+    # libssl-dev zlib1g-dev libcurl4-openssl-dev gnupg
+
+
+# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" milvus run standalone > /workerOut/standalone.txt 2>&1
+
+# # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
+# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+#  /perfDir/perf record  -F 99 -g --call-graph fp --proc-map-timeout 5000 -o /workerOut/perf.data -- ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
+# # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+# # /perfDir/perf record  -F 99 -g --call-graph fp --proc-map-timeout 5000 -o /workerOut/perf.data -- ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
+
+# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+#  /perfDir/perf record  -F 99 -g --no-buildid-cache --call-graph dwarf --proc-map-timeout 5000 -o /workerOut/perf.data -- ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
+# # /perfDir/perf probe -x milvus -F > probe.txt
 
 # while true; do
 #   if [ -f /workerOut/stop.txt ]; then

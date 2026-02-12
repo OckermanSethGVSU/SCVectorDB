@@ -7,12 +7,12 @@ module load frameworks
 RANK=${1:?Usage: $0 <rank>}
 RANK=$((RANK))
 STORAGE_MEDIUM=${2:?Usage: $0 <rank> <storage_medium>}
-USEPERF=${3:?Usage: $0 <rank> <storage_medium>}
+USEPERF=${3:?Usage: $0 <rank> <storage_medium> <perf>}
 
 
 
 if [[ "$STORAGE_MEDIUM" == "memory" ]]; then
-    TARGET_BASE="/dev/shm/milvusDir/"
+    TARGET_BASE="/dev/shm/"
     (( RANK == 0 )) && echo "Using memory for persistence"
 
 DAOS_ARGS=()
@@ -44,10 +44,18 @@ echo $IP_ADDR > worker.ip
 conda deactivate
 
 mkdir -p ${TARGET_BASE}/volumes/milvus/
-mkdir -p ${TARGET_BASE}/config/
 mkdir -p ./workerOut/
 
-cat << EOF > ${TARGET_BASE}/config/embedEtcd.yaml
+
+
+# Create and pass in modified config #####
+base="/lus/flare/projects/radix-io/sockerman/temp/milvus"
+cp -r ${base}/cpuMilvus/configs/ .
+
+cat << EOF > ./configs/user.yaml
+# Extra config to override default milvus.yaml
+EOF
+cat << EOF > ./configs/embedEtcd.yaml
 listen-client-urls: http://${IP_ADDR}:2379
 advertise-client-urls: http://${IP_ADDR}:2379
 quota-backend-bytes: 4294967296
@@ -55,10 +63,10 @@ auto-compaction-mode: revision
 auto-compaction-retention: '1000'
 EOF
 
-base="/lus/flare/projects/radix-io/sockerman/temp/milvus"
-
-cp -r ${base}/cpuMilvus/configs/ .
 python3 replace.py
+cp -r ./configs/ $TARGET_BASE/
+#####
+
 
 apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --pwd /milvus \
@@ -71,13 +79,12 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env CUDA_VISIBLE_DEVICES="" \
     -B ./execute.sh:/milvus/app_execute.sh \
     -B ${base}/cpuMilvus/:/milvus/ \
+    -B ${TARGET_BASE}/configs/:/milvus/configs/ \
     -B ${base}/perfDir/:/perfDir/ \
-    -B ./configs/:/milvus/configs/ \
     -B ./workerOut/:/workerOut/ \
-    -B "${TARGET_BASE}/volumes/milvus:/var/lib/milvus" \
-    -B "${TARGET_BASE}/config/user.yaml:/milvus/configs/user.yaml" \
-    -B "${TARGET_BASE}/config/embedEtcd.yaml:/milvus/configs/embedEtcd.yaml" \
+    -B ${TARGET_BASE}/volumes/milvus:/var/lib/milvus \
     milvus.sif bash app_execute.sh
+
 
 
 
@@ -139,5 +146,3 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
 #   docker://milvusdb/milvus \
 #   milvus run standalone \
 #   > ./milvus.out 2>&1 &
-
-

@@ -115,7 +115,8 @@ do
 
                     # Copy in basic python utils
                     cp generalPython/net_mapping.py $dir/
-                    cp generalPYthon/replace.py $dir/
+                    cp generalPython/replace.py $dir/
+                    cp generalPython/profile.py $dir/
                     
                     # cp -r utils/* $dir/
                     # # cp insert.py $dir/
