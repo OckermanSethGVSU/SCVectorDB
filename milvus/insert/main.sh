@@ -10,6 +10,17 @@ second_node=$(sed -n '2p' "$PBS_NODEFILE")
 module load apptainer
 module load frameworks
 
+if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
+    module use /soft/modulefiles
+    module load daos
+    DAOS_POOL="radix-io"
+    DAOS_CONT="vectorDBTesting"
+
+    launch-dfuse.sh ${DAOS_POOL}:${DAOS_CONT}
+    mkdir -p /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
+fi
+
+
 
 mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./workerLaunch.sh 0 $STORAGE_MEDIUM $USEPERF &
 
@@ -59,6 +70,7 @@ cd /lus/flare/projects/radix-io/sockerman/temp/milvus/$myDIR
 # # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 convert_to_gpu_cargra.py
 touch ./workerOut/workflow_end.txt
 touch flag.txt
+python3 multi_client_summary.py
 
 # sleep 5
 
