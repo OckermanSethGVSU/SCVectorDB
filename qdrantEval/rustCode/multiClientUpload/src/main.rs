@@ -247,7 +247,7 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
    
 
     let client = Qdrant::from_url(&qdrant_url)
-    .timeout(Duration::from_secs(120))
+    .timeout(Duration::from_secs(9999))
     .build()?;
     let collection_name = "singleShard";
     let info = client.collection_info(collection_name).await?;
@@ -301,7 +301,7 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
         })
         .collect();
         
-        let batch = UpsertPointsBuilder::new(collection_name, points).wait(true);
+        let batch = UpsertPointsBuilder::new(collection_name, points).wait(false);
         // let batch = UpsertPointsBuilder::new(collection_name, points).shard_key_selector((target).to_string());
         let start_upload = Instant::now();
 
@@ -327,7 +327,7 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
 
         loop {
             let start_count = Instant::now();
-            let count = client.count(CountPointsBuilder::new(collection_name).exact(true)).await?.result.unwrap().count;
+            let count = client.count(CountPointsBuilder::new(collection_name).exact(true).timeout(9999)).await?.result.unwrap().count;
             let end_count = Instant::now();
             elapsed_count_times.push(end_count.duration_since(start_count).as_secs_f64());
             
