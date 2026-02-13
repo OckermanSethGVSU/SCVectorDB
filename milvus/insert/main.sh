@@ -1,23 +1,17 @@
 
 cd /lus/flare/projects/radix-io/sockerman/temp/milvus/$myDIR
-export $myDIR
+export myDIR=$myDIR
+export RESULT_PATH=/lus/flare/projects/radix-io/sockerman/temp/milvus/$myDIR
 
+TOTAL=$((NODES * WORKERS_PER_NODE))
 cat $PBS_NODEFILE > all_nodefile.txt
 second_node=$(sed -n '2p' "$PBS_NODEFILE")
-
-# download go dependices before we get rid of proxy
-cd go
-mkdir -p temp
-export GOMODCACHE=$(pwd)/temp
-go mod download
-cd ..
-
 
 module load apptainer
 module load frameworks
 
 
-mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./workerLaunch.sh 0 &
+mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./workerLaunch.sh 0 $STORAGE_MEDIUM $USEPERF &
 
 
 # launch profiling on worker and client nodes
@@ -39,41 +33,31 @@ python3 poll.py
 
 NUMEXPR_NUM_THREADS=108 NUMEXPR_MAX_THREADS=108 \
 NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-python3 status.py
-# python3 setup_collection.py
+python3 setup_collection.py
 
 
 
 IP_ADDR=$(jq -r '.hsn0.ipv4[0]' interfaces0.json)
-
 export MILVUS_HOST=${IP_ADDR}
-export BATCH_SIZE=$BATCH_SIZE
-export NClients=$NClients
-export N_WORKERS=$NClients
-# export CORPUS_SIZE=$CORPUS_SIZE
-
-# NUMEXPR_NUM_THREADS=108 NUMEXPR_MAX_THREADS=108 \
-# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-# python3 mpInsert.py
+export CORPUS_SIZE=$CORPUS_SIZE
+export UPLOAD_CLIENTS_PER_WORKER=$UPLOAD_CLIENTS_PER_WORKER
+export N_WORKERS=$TOTAL
+export DATA_FILEPATH=$DATA_FILEPATH
+export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
 
 
-# NUMEXPR_NUM_THREADS=108 NUMEXPR_MAX_THREADS=108 \
-# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-# python3 convert_to_hnsw.py
-
-touch ./workerOut/perf_start.txt
+touch ./workerOut/workflow_start.txt
 sleep 5
 
-cd go
-export BATCH_SIZE=1
-export NClients=1
-NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" go run .
-
-# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY=""  python3 query.py
-cd .. 
+cd /lus/flare/projects/radix-io/sockerman/temp/milvus/goCode/multiClientInsert/
+export GOPATH=/home/treewalker/go
+export GOMODCACHE=/home/treewalker/go/pkg/mod
+export GOCACHE=/home/treewalker/.cache/go-build
+NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" go run main.go
+cd /lus/flare/projects/radix-io/sockerman/temp/milvus/$myDIR
 
 # # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 convert_to_gpu_cargra.py
-touch ./workerOut/perf_stop.txt
+touch ./workerOut/workflow_end.txt
 touch flag.txt
 
 # sleep 5

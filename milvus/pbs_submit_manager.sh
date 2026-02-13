@@ -12,20 +12,21 @@ UPLOAD_BATCH_SIZE=(64)
 QUERY_BATCH_SIZE=(2048)
 
 # PBS Vars
-WALLTIME="01:00:00"
+WALLTIME="02:00:00"
 queue=debug # [preemptable, debug, debug-scaling, prod]
 
 
 ### Runtime variables ###
 task="insert" # [insert]
-STORAGE_MEDIUM="memory" # [memory, DAOS, lustre]
+STORAGE_MEDIUM="lustre" # [memory, DAOS, lustre]
 usePerf="false" # [true, false]
-CORPUS_SIZE=1000000 # total data to insert
+CORPUS_SIZE=5000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=1
-
 # Aurora
 # 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
 DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
+
+
 
 
 for num_nodes in "${NODES[@]}"
@@ -117,9 +118,12 @@ do
                     cp generalPython/net_mapping.py $dir/
                     cp generalPython/replace.py $dir/
                     cp generalPython/profile.py $dir/
+                    cp generalPython/poll.py $dir/
+                    cp generalPython/status.py $dir/
                     
-                    # cp -r utils/* $dir/
-                    # # cp insert.py $dir/
+                    if [[ "$task" == "insert" ]]; then
+                        cp ./insert/setup_collection.py $dir/
+                    fi
 
                     mv $target_file $dir
 

@@ -42,7 +42,7 @@ fi
 
 
 # wait until the stop file exists
-TARGET="/workerOut/workflow_stop.txt"
+TARGET="/workerOut/workflow_end.txt"
 while [ ! -e "$TARGET" ]; do
   sleep 0.1
 done
