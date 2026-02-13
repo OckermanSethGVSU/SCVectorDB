@@ -10,7 +10,7 @@ STORAGE_MEDIUM=${2:?Usage: $0 <rank> <storage_medium>}
 USEPERF=${3:?Usage: $0 <rank> <storage_medium> <perf>}
 
 
-
+ETCD_FLAG="--env ETCD_DATA_DIR=/var/lib/milvus/etcd"
 if [[ "$STORAGE_MEDIUM" == "memory" ]]; then
     TARGET_BASE="/dev/shm/"
     (( RANK == 0 )) && echo "Using memory for persistence"
@@ -25,6 +25,7 @@ elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
         --bind "/home/treewalker/daos_lib64:/opt/daos/lib64:ro"
         --env LD_LIBRARY_PATH=/opt/daos/lib64
     )
+    ETCD_FLAG="--env ETCD_DATA_DIR=$RESULT_PATH/var/lib/milvus/etcd"
 
 elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
     TARGET_BASE="./milvusDir"
@@ -72,7 +73,7 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --pwd /milvus \
     --env MILVUSCONF=/milvus/configs/ \
     --env ETCD_USE_EMBED=true \
-    --env ETCD_DATA_DIR=/var/lib/milvus/etcd \
+    $ETCD_FLAG \
     --env ETCD_CONFIG_PATH=/milvus/configs/embedEtcd.yaml \
     --env COMMON_STORAGETYPE=local \
     --env DEPLOY_MODE=STANDALONE \
