@@ -84,3 +84,11 @@ python3 multi_client_summary.py
 # # chmod 777 ./go/temp/
 # # rm -fr ./go/temp/
 sleep 60
+
+if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
+    DAOS_POOL="radix-io"
+    DAOS_CONT="vectorDBTesting"
+    rm -r /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
+elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
+    # rm -r ./milvusDir/
+fi
