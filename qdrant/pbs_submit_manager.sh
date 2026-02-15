@@ -4,17 +4,17 @@
 
 
 ### Loop variables ###
-NODES=(1)
-WORKERS_PER_NODE=(1)
+NODES=(1 2 4 8)
+WORKERS_PER_NODE=(4)
 CORES=(112)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-UPLOAD_BATCH_SIZE=(65536) 
+UPLOAD_BATCH_SIZE=(128) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
 
-UPLOAD_CLIENTS_PER_WORKER=(4)
+UPLOAD_CLIENTS_PER_WORKER=(1)
 # PBS Vars
 WALLTIME="01:00:00"
 queue=prod # [preemptable, debug, debug-scaling, prod]
@@ -22,11 +22,11 @@ queue=prod # [preemptable, debug, debug-scaling, prod]
 
 ### Runtime variables ###
 task="insert" # [insert]
-STORAGE_MEDIUM="lustre" # [memory, DAOS, lustre]
+STORAGE_MEDIUM="memory" # [memory, DAOS, lustre]
 usePerf="false" # [true, false]
-CORPUS_SIZE=500000 # total data to insert
-# UPLOAD_CLIENTS_PER_WORKER=2
-
+CORPUS_SIZE=10000000 # total data to insert
+UPLOAD_CLIENTS_PER_WORKER=4
+UPLOAD_BALANCE_STRATEGY="NO_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Aurora
 # 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
 DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
@@ -102,7 +102,8 @@ do
                         echo "UPLOAD_BATCH_SIZE=${upload_bs}" >> $target_file
                         echo "UPLOAD_CLIENTS_PER_WORKER=${UCPW}" >> $target_file
                         echo "DATA_FILEPATH=${DATA_FILEPATH}" >> $target_file
-
+                        echo "UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}" >> $target_file
+                        
                         # # echo "NUM_SEGEMENTS=${NUM_SEGEMENTS}" >> $target_file
                         # # echo "TARGET_SEGEMENTS=${TARGET_SEGEMENTS}" >> $target_file
                         # # echo "HNSW_M=${HNSW_M}" >> $target_file

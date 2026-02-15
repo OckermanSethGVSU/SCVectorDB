@@ -186,8 +186,16 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
         .expect("UPLOAD_BATCH_SIZE must be a valid integer");
         
     // let qdrant_url = env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6334".to_string());
-    
-    let target = rank / nClients;
+    let balance_strategy = env::var("UPLOAD_BALANCE_STRATEGY")
+        .expect("Environment variable UPLOAD_BALANCE_STRATEGY is missing");
+
+
+
+    let target = match balance_strategy.as_str() {
+        "NO_BALANCE" => 0,
+        "WORKER_BALANCE" => rank / nClients,
+        _ => panic!("Unknown balance strategy"),
+    };
     let endpoint = read_endpoint_line("ip_registry.txt", target + 1)?
         .expect("line not found");
     let qdrant_url = format!("http://{}:{}", endpoint.ip, endpoint.port - 1);

@@ -23,8 +23,7 @@ if [[ "$STORAGE_MEDIUM" == "memory" ]]; then
     TARGET_BASE="/dev/shm/qdrantDir"
     (( RANK == 0 )) && echo "Using memory for persistence"
 
-DAOS_ARGS=()
-
+APPTAINER_ARGS=()
 elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
     DAOS_CONT="vectorDBTesting"

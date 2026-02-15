@@ -2,7 +2,7 @@ module load apptainer
 module load frameworks
 
 source /lus/flare/projects/radix-io/sockerman/qdrant/qEnv/bin/activate
-cd /lus/flare/projects/radix-io/sockerman/temp/qdrantEval/$myDIR
+cd /lus/flare/projects/radix-io/sockerman/temp/qdrant/$myDIR
 export myDIR=$myDIR
 
 DAOS_POOL="radix-io"
@@ -97,6 +97,7 @@ export UPLOAD_CLIENTS_PER_WORKER=$UPLOAD_CLIENTS_PER_WORKER
 export N_WORKERS=$TOTAL
 export DATA_FILEPATH=$DATA_FILEPATH
 export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
+export UPLOAD_BALANCE_STRATEGY=$UPLOAD_BALANCE_STRATEGY
 NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientUpload
 
 touch ./perf/workflow_stop.txt
