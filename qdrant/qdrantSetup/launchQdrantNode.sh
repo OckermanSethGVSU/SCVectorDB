@@ -39,6 +39,10 @@ elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
     TARGET_BASE="./qdrantDir"
     (( RANK == 0 )) && echo "Using lustre for persistence"
 
+elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
+    TARGET_BASE="/local/scratch/qdrantDir"
+    (( RANK == 0 )) && echo "Using SSD for persistence"
+
 else
     (( RANK == 0 )) && echo "Error: unknown STORAGE_MEDIUM '$STORAGE_MEDIUM'" >&2
     exit 1

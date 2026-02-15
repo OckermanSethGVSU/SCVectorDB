@@ -1,14 +1,29 @@
-module load apptainer
-module load frameworks
 
-source /lus/flare/projects/radix-io/sockerman/qdrant/qEnv/bin/activate
-cd /lus/flare/projects/radix-io/sockerman/temp/qdrant/$myDIR
 export myDIR=$myDIR
+if [[ "$PLATFORM" == "POLARIS" ]]; then
+    ml use /soft/modulefiles
+    ml spack-pe-base/0.8.1
+    ml use /soft/spack/testing/0.8.1/modulefiles
+    ml apptainer/main
+    ml load e2fsprogs
+    module use /soft/modulefiles; module load conda; conda activate base
+    source /eagle/projects/radix-io/sockerman/cleanQdrant/qdrantEnv/bin/activate
 
-DAOS_POOL="radix-io"
-DAOS_CONT="vectorDBTesting"
+    cd /eagle/projects/radix-io/sockerman/SCVectorDB/qdrant/$myDIR
+elif [[ "$PLATFORM" == "AURORA" ]]; then
+    module load apptainer
+    module load frameworks
+    source /lus/flare/projects/radix-io/sockerman/qdrant/qEnv/bin/activate
+    cd /lus/flare/projects/radix-io/sockerman/temp/qdrant/$myDIR
+fi
+
+
+
+
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
+    DAOS_POOL="radix-io"
+    DAOS_CONT="vectorDBTesting"
     module use /soft/modulefiles
     module load daos
     
@@ -63,7 +78,7 @@ for ((i=0; i<allNodes; i++)); do
         profile_arg="worker_$((i - 1))"
     fi
 
-    mpirun -n 1 --ppn 1 --cpu-bind none --host $entry python3 profile.py $profile_arg &
+    mpirun -n 1 --ppn 1 --cpu-bind none --host $entry python3 profile.py $profile_arg $PLATFORM &
     sleep 1
     
 done

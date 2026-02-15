@@ -60,10 +60,12 @@ if storage_medium == "memory":
 elif storage_medium == "DAOS":
     print("Using DAOS for persistence",flush=True)
     targetBase = f"{DAOS_PATH}/qdrantDir"
-
 elif storage_medium == "lustre":
     print("Using lustre for persistence",flush=True)
     targetBase = "./qdrantDir"
+elif storage_medium == "SSD":
+    print("Using SDD for persistence",flush=True)
+    targetBase = "/local/scratch/qdrantDir"
 
 dirs = ["config","data","snapshots/"]
 for dir in dirs:
@@ -77,7 +79,6 @@ for dir in dirs:
 
 # === Generate configs ===
 
-# node_dir = f"/dev/shm/qdrantDIR/config/node{rank}"
 node_dir = f"{targetBase}/config/node{rank}"
 os.makedirs(node_dir, exist_ok=True)
 

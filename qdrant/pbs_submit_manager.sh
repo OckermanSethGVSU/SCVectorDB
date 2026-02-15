@@ -4,8 +4,8 @@
 
 
 ### Loop variables ###
-NODES=(1 2 4 8)
-WORKERS_PER_NODE=(4)
+NODES=(1)
+WORKERS_PER_NODE=(1)
 CORES=(112)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
@@ -22,21 +22,19 @@ queue=prod # [preemptable, debug, debug-scaling, prod]
 
 ### Runtime variables ###
 task="insert" # [insert]
-STORAGE_MEDIUM="memory" # [memory, DAOS, lustre]
+STORAGE_MEDIUM="SSD" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
-CORPUS_SIZE=10000000 # total data to insert
-UPLOAD_CLIENTS_PER_WORKER=4
+CORPUS_SIZE=1000 # total data to insert
+UPLOAD_CLIENTS_PER_WORKER=1
 UPLOAD_BALANCE_STRATEGY="NO_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
-# Aurora
-# 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
 
-# SEARCH_THREADS=1
+# 
+# Aurora 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
+# Polaris 10 million subset: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
+# 
+DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
 
-# NUM_SEGEMENTS=256
-# TARGET_SEGEMENTS=$NUM_SEGEMENTS
-# HNSW_M=32
-# EF_CONSTRUCT=100
+PLATFORM="POLARIS" # [POLARIS, AURORA]
 
 for num_nodes in "${NODES[@]}"
 do
@@ -103,6 +101,7 @@ do
                         echo "UPLOAD_CLIENTS_PER_WORKER=${UCPW}" >> $target_file
                         echo "DATA_FILEPATH=${DATA_FILEPATH}" >> $target_file
                         echo "UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}" >> $target_file
+                        echo "PLATFORM=${PLATFORM}" >> $target_file
                         
                         # # echo "NUM_SEGEMENTS=${NUM_SEGEMENTS}" >> $target_file
                         # # echo "TARGET_SEGEMENTS=${TARGET_SEGEMENTS}" >> $target_file
@@ -181,7 +180,7 @@ do
                         chmod -R g+w $dir
                         cd $dir
 
-                        qsub $target_file
+                        # qsub $target_file
                         sleep 5
                         cd .. 
                     done

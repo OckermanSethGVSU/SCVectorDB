@@ -19,12 +19,33 @@ def extract_last_digit(name: str) -> int:
 
 def monitorSystem(batch=-1, interval=1.0, stop_event=None):
     rank = sys.argv[1]
+    platform = sys.argv[2]
     
 
     cpuNum = len(psutil.cpu_percent(interval=1.0,percpu=True))
     headers = ['timestamp','max_rss','total_rss','disk_read','disk_write','net_recv','net_sent',
                 "systemCPU"
                 ] + [f"cpu{i}" for i in range(cpuNum)]
+    
+    if platform == "POLARIS":
+        from pynvml import (
+            nvmlInit,
+            nvmlDeviceGetCount,
+            nvmlDeviceGetHandleByIndex,
+            nvmlDeviceGetMemoryInfo,
+            nvmlDeviceGetUtilizationRates,
+            nvmlDeviceGetName,
+            nvmlShutdown
+        )
+        nvmlInit()
+
+        headers += [
+            "gpu0_util", "gpu0_mem","gpu0_totalMem",
+            "gpu1_util", "gpu1_mem","gpu1_totalMem",
+            "gpu2_util", "gpu2_mem","gpu2_totalMem",
+            "gpu3_util", "gpu3_mem","gpu3_totalMem",
+        ]
+
     event_row = ["event" for i in range(len(headers) - 1)]
 
     stats = [
@@ -49,6 +70,15 @@ def monitorSystem(batch=-1, interval=1.0, stop_event=None):
             row = [timestamp,total_rss,system_memory_total,disk.read_bytes, disk.write_bytes,net.bytes_recv,net.bytes_sent]
  
             row.extend(cpu_percent)
+
+            if platform == "POLARIS":
+                for i in range(4):
+                    handle = nvmlDeviceGetHandleByIndex(i)
+                    util = nvmlDeviceGetUtilizationRates(handle)
+                    meminfo = nvmlDeviceGetMemoryInfo(handle)
+
+                    row.extend([util.gpu, meminfo.used, meminfo.total])
+            
             stats.append(row)
         except:
             pass
