@@ -9,7 +9,7 @@ WORKERS_PER_NODE=(1)
 CORES=(112)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-UPLOAD_BATCH_SIZE=(64 128 256 512 1024 2048 4096 8192 16384 32768) 
+UPLOAD_BATCH_SIZE=(512) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
@@ -17,14 +17,14 @@ QUERY_BATCH_SIZE=(2048)
 UPLOAD_CLIENTS_PER_WORKER=(1)
 # PBS Vars
 WALLTIME="01:00:00"
-queue=preemptable # [preemptable, debug, debug-scaling, prod]
+queue=debug # [preemptable, debug, debug-scaling, prod]
 
 
 ### Runtime variables ###
 task="insert" # [insert]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
-CORPUS_SIZE=10000000 # total data to insert
+CORPUS_SIZE=5000000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=1
 UPLOAD_BALANCE_STRATEGY="NO_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 
@@ -80,6 +80,11 @@ do
 
 
                         echo "" >> $target_file
+
+                        if [[ "$PLATFORM" == "POLARIS" ]]; then
+                            echo "exec > >(tee output.log) 2>&1" >> $target_file    
+                        
+                        fi
                         echo "NODES=${num_nodes}" >> $target_file
                         echo "WORKERS_PER_NODE=${workers}" >> $target_file
 
@@ -151,7 +156,7 @@ do
                             exit
                         fi
 
-
+                        
                         # cp ${task}/${target} $dir/
                         # cp ${task}/index.py $dir/
                         # # cp ${task}/query.py $dir/
