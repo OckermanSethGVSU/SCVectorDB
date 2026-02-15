@@ -10,6 +10,7 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
     source /eagle/projects/radix-io/sockerman/cleanQdrant/qdrantEnv/bin/activate
 
     cd /eagle/projects/radix-io/sockerman/SCVectorDB/qdrant/$myDIR
+    exec > >(tee output.log) 2>&1
 elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
     module load frameworks

@@ -9,20 +9,20 @@ WORKERS_PER_NODE=(1)
 CORES=(112)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-UPLOAD_BATCH_SIZE=(512) 
+UPLOAD_BATCH_SIZE=(1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
 
 UPLOAD_CLIENTS_PER_WORKER=(1)
 # PBS Vars
-WALLTIME="01:00:00"
-queue=debug # [preemptable, debug, debug-scaling, prod]
+WALLTIME="02:00:00"
+queue=preemptable # [preemptable, debug, debug-scaling, prod]
 
 
 ### Runtime variables ###
 task="insert" # [insert]
-STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
+STORAGE_MEDIUM="lustre" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
 CORPUS_SIZE=5000000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=1
@@ -81,10 +81,6 @@ do
 
                         echo "" >> $target_file
 
-                        if [[ "$PLATFORM" == "POLARIS" ]]; then
-                            echo "exec > >(tee output.log) 2>&1" >> $target_file    
-                        
-                        fi
                         echo "NODES=${num_nodes}" >> $target_file
                         echo "WORKERS_PER_NODE=${workers}" >> $target_file
 
@@ -100,7 +96,6 @@ do
                         fi
                         
                         echo "myDIR=${dir}" >> $target_file
-
 
                         echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}" >> $target_file
                         echo "CORPUS_SIZE=${CORPUS_SIZE}" >> $target_file
