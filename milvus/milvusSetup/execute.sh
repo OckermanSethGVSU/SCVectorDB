@@ -7,12 +7,13 @@ LIBDIR=/milvus/internal/core/output/lib && \
 export LD_LIBRARY_PATH="$LIBDIR:${LD_LIBRARY_PATH}" && \
 export LD_PRELOAD="/milvus/internal/core/output/lib/libjemalloc.so"
 
-# export CUDAToolkit_ROOT=/usr/local/cuda
-# export CUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda
-# export PATH="/usr/local/cuda/bin:$PATH"
-# export LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
-# export PATH="/usr/local/cuda/bin:$PATH"
-
+if [[ "$PLATFORM" == "POLARIS" ]]; then
+  export CUDAToolkit_ROOT=/usr/local/cuda
+  export CUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda
+  export PATH="/usr/local/cuda/bin:$PATH"
+  export LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
+  export PATH="/usr/local/cuda/bin:$PATH"
+fi
 
 apt-get update && apt-get install -y libatomic1 libelf-dev libdw-dev libslang2-dev libperl-dev python3-dev libnuma-dev libtraceevent-dev
 echo "Install Complete"

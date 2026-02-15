@@ -8,6 +8,7 @@ RANK=${1:?Usage: $0 <rank>}
 RANK=$((RANK))
 STORAGE_MEDIUM=${2:?Usage: $0 <rank> <storage_medium>}
 USEPERF=${3:?Usage: $0 <rank> <storage_medium> <perf>}
+PLATFORM=${4:?Usage: $0 <rank> <storage_medium> <perf> <platform>}
 
 
 ETCD_FLAG="--env ETCD_DATA_DIR=/var/lib/milvus/etcd"
@@ -30,6 +31,9 @@ elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
 elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
     TARGET_BASE="./milvusDir"
     (( RANK == 0 )) && echo "Using lustre for persistence"
+elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
+    TARGET_BASE="/local/scratch/milvusDir"
+    (( RANK == 0 )) && echo "Using SSD for persistence"
 
 else
     (( RANK == 0 )) && echo "Error: unknown STORAGE_MEDIUM '$STORAGE_MEDIUM'" >&2
@@ -42,15 +46,25 @@ group=$(( RANK / 4 ))
 IP_ADDR=$(jq -r '.hsn0.ipv4[0]' interfaces${group}.json)
 echo $IP_ADDR > worker.ip
 
-conda deactivate
 
 mkdir -p ${TARGET_BASE}/volumes/milvus/
 mkdir -p ./workerOut/
 
 
-
+POLARIS_BINDS=()
+if [[ "$PLATFORM" == "AURORA" ]]; then
+    base="/lus/flare/projects/radix-io/sockerman/temp/milvus"
+elif [[ "$PLATFORM" == "POLARIS" ]]; then
+    base="/lus/eagle/projects/radix-io/sockerman/SCVectorDB/milvus"
+    POLARIS_BINDS+=(
+        -B "/eagle/projects/argonne_tpc/sockerman/buildingFromSource/gpuMilvus/cuda-merged:/usr/local/cuda:ro"
+        -B "/opt/nvidia/hpc_sdk:/opt/nvidia/hpc_sdk:ro"
+        --env PLATFORM=POLARIS
+    )
+    
+fi
 # Create and pass in modified config #####
-base="/lus/flare/projects/radix-io/sockerman/temp/milvus"
+
 cp -r ${base}/cpuMilvus/configs/ .
 
 cat << EOF > ./configs/user.yaml
@@ -84,6 +98,7 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     -B ${base}/perfDir/:/perfDir/ \
     -B ./workerOut/:/workerOut/ \
     -B ${TARGET_BASE}/volumes/milvus:/var/lib/milvus \
+    "${POLARIS_BINDS[@]}" \
     milvus.sif bash app_execute.sh
 
 

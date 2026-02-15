@@ -18,13 +18,17 @@ queue=debug # [preemptable, debug, debug-scaling, prod]
 
 ### Runtime variables ###
 task="insert" # [insert]
-STORAGE_MEDIUM="lustre" # [memory, DAOS, lustre]
+STORAGE_MEDIUM="SSD" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
 CORPUS_SIZE=5000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=1
 # Aurora
 # 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
+# Polaris 10 million subset: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
+# 
+DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
+
+PLATFORM="POLARIS" # [POLARIS, AURORA]
 
 
 
@@ -53,12 +57,15 @@ do
                     echo "#PBS -l walltime=${WALLTIME}" >> $target_file
                     echo "#PBS -q $queue" >> $target_file
                     
-                    if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
-                        echo "#PBS -l filesystems=home:flare:daos_user_fs" >> $target_file
-                        echo "#PBS -l daos=daos_user" >> $target_file
-                        
-                    else
-                        echo "#PBS -l filesystems=home:flare" >> $target_file
+                    if [[ "$PLATFORM" == "POLARIS" ]]; then
+                        echo "#PBS -l filesystems=home:eagle" >> $target_file    
+                    elif [[ "$PLATFORM" == "AURORA" ]]; then
+                        if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
+                            echo "#PBS -l filesystems=home:flare:daos_user_fs" >> $target_file
+                            echo "#PBS -l daos=daos_user" >> $target_file
+                        else
+                            echo "#PBS -l filesystems=home:flare" >> $target_file
+                        fi
                     fi
                     
                     echo "#PBS -A radix-io" >> $target_file
@@ -91,7 +98,7 @@ do
                     echo "UPLOAD_BATCH_SIZE=${upload_bs}" >> $target_file
                     echo "UPLOAD_CLIENTS_PER_WORKER=${UPLOAD_CLIENTS_PER_WORKER}" >> $target_file
                     echo "DATA_FILEPATH=${DATA_FILEPATH}" >> $target_file
-
+                    echo "PLATFORM=${PLATFORM}" >> $target_file
 
                     # base="${target%%.*}"
                     # dir="${task}_${base}_bs_${BATCH_SIZE}_c_${NClients}_${num_nodes}_${workers}_${DATE}"
@@ -123,6 +130,9 @@ do
                     
                     if [[ "$task" == "insert" ]]; then
                         cp ./insert/setup_collection.py $dir/
+                        cp ./insert/multi_client_summary.py $dir/
+                        cp ./goCode/multiClientInsert/multiClientInsert $dir/
+                        cp ./goCode/multiClientInsert/main.go $dir/multiClientInsert.go
                     fi
 
                     mv $target_file $dir
