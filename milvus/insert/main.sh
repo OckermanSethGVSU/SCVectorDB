@@ -1,5 +1,12 @@
 
-EXPR_ENV=()
+PYTHON_ENV_VARS=(
+    NO_PROXY=""
+    no_proxy=""
+    http_proxy=""
+    https_proxy=""
+    HTTP_PROXY=""
+    HTTPS_PROXY=""
+)
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -22,7 +29,7 @@ elif [[ "$PLATFORM" == "AURORA" ]]; then
 
     export myDIR=$myDIR
     export RESULT_PATH=/lus/flare/projects/radix-io/sockerman/temp/milvus/$myDIR
-    EXPR_ENV=(NUMEXPR_NUM_THREADS=108 NUMEXPR_MAX_THREADS=108)
+    PYTHON_ENV_VARS+=(NUMEXPR_NUM_THREADS=108 NUMEXPR_MAX_THREADS=108)
 
     cd /lus/flare/projects/radix-io/sockerman/temp/milvus/$myDIR
 fi
@@ -33,7 +40,6 @@ fi
 
 TOTAL=$((NODES * WORKERS_PER_NODE))
 cat $PBS_NODEFILE > all_nodefile.txt
-second_node=$(sed -n '2p' "$PBS_NODEFILE")
 
 
 
@@ -48,29 +54,29 @@ if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
 fi
 
 
+if [[ "$MODE" == "STANDALONE" ]]; then
+    second_node=$(sed -n '2p' "$PBS_NODEFILE")
+    mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $USEPERF $PLATFORM &
+    # launch profiling on worker and client nodes
+    mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node python3 profile.py worker_0 $PLATFORM &
+    python3 profile.py client_node $PLATFORM & 
 
-mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./workerLaunch.sh 0 $STORAGE_MEDIUM $USEPERF $PLATFORM &
+    TARGET="./workerOut/milvus_running.txt"
+    while [ ! -e "$TARGET" ]; do
+    sleep 0.1
+    done
 
+    env "${PYTHON_ENV_VARS[@]}" python3 poll.py
 
-# launch profiling on worker and client nodes
-mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node python3 profile.py worker_0 $PLATFORM &
-
-python3 profile.py client_node $PLATFORM & 
-
-
-TARGET="./workerOut/milvus_running.txt"
-while [ ! -e "$TARGET" ]; do
-  sleep 0.1
-done
-
-
-
-NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" "${EXPR_ENV[@]}"\
-python3 poll.py
+elif [[ "$MODE" == "DISTRIBUTED" ]]; then
+    echo "yay"
+fi
 
 
-NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" "${EXPR_ENV[@]}" \
-python3 setup_collection.py
+
+
+
+env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
 
 
 
@@ -95,7 +101,7 @@ NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="
 # # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 convert_to_gpu_cargra.py
 touch ./workerOut/workflow_end.txt
 touch flag.txt
-"${EXPR_ENV[@]}" python3 multi_client_summary.py
+env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
 
 # sleep 5
 

@@ -1,9 +1,5 @@
 #!/bin/bash
 
-module load apptainer
-module load frameworks
-
-
 RANK=${1:?Usage: $0 <rank>}
 RANK=$((RANK))
 STORAGE_MEDIUM=${2:?Usage: $0 <rank> <storage_medium>}

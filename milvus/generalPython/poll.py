@@ -11,7 +11,7 @@ def read_ip_from_file(path):
 
 def wait_for_milvus(host, port):
     print(f"Waiting for Milvus at {host}:{port}...")
-    for _ in range(120):
+    for _ in range(10000):
         try:
             r = requests.get(f"http://{host}:{port}/healthz", timeout=2)
             if r.status_code == 200:
@@ -19,7 +19,7 @@ def wait_for_milvus(host, port):
                 return
         except Exception:
             pass
-        time.sleep(1)
+        time.sleep(3)
     raise RuntimeError("Milvus did not respond in time", flush=True)
 
 

@@ -6,7 +6,7 @@ WORKERS_PER_NODE=(1)
 CORES=(112)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-UPLOAD_BATCH_SIZE=(1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768) 
+UPLOAD_BATCH_SIZE=(512) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
@@ -20,16 +20,18 @@ queue=preemptable # [preemptable, debug, debug-scaling, prod]
 task="insert" # [insert]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
-CORPUS_SIZE=10000000 # total data to insert
+CORPUS_SIZE=10000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=1
 # Aurora
 # 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
 # Polaris 10 million subset: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
 # 
-DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
+# DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
+DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
 
-PLATFORM="POLARIS" # [POLARIS, AURORA]
+PLATFORM="AURORA" # [POLARIS, AURORA]
 
+MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 
 
 
@@ -80,7 +82,7 @@ do
                     
                     DATE=$(date +"%Y-%m-%d_%H_%M_%S")
                     if [[ "$task" == "insert" ]]; then
-                        dir="${task}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_C${UPLOAD_CLIENTS_PER_WORKER}_uploadBS${upload_bs}_${DATE}"
+                        dir="${task}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_C${UPLOAD_CLIENTS_PER_WORKER}_uploadBS${upload_bs}_${DATE}"
                     elif [[ "$task" == "aurora" ]]; then
                         echo "Running on Aurora"
                     else
@@ -99,6 +101,7 @@ do
                     echo "UPLOAD_CLIENTS_PER_WORKER=${UPLOAD_CLIENTS_PER_WORKER}" >> $target_file
                     echo "DATA_FILEPATH=${DATA_FILEPATH}" >> $target_file
                     echo "PLATFORM=${PLATFORM}" >> $target_file
+                    echo "MODE=${MODE}" >> $target_file
 
                     # base="${target%%.*}"
                     # dir="${task}_${base}_bs_${BATCH_SIZE}_c_${NClients}_${num_nodes}_${workers}_${DATE}"
@@ -116,10 +119,20 @@ do
                     mkdir -p $dir
 
                     
-                    # Copy in Milvus files
-                    cp milvus.sif $dir/
-                    cp milvusSetup/workerLaunch.sh $dir/
-                    cp milvusSetup/execute.sh $dir/
+
+                    # Copy in mode specific files
+                    if [[ "$MODE" == "STANDALONE" ]]; then
+                        cp milvus.sif $dir/
+                        cp milvusSetup/standaloneLaunch.sh $dir/
+                        cp milvusSetup/execute.sh $dir/
+
+                    elif [[ "$task" == "DISTRIBUTED" ]]; then
+                        echo "Running on Aurora"
+                    else
+                        echo "Unknown task: $SYSTEM"
+                        exit
+                    fi
+
 
                     # Copy in basic python utils
                     cp generalPython/net_mapping.py $dir/
@@ -142,7 +155,7 @@ do
                     
                     chmod -R g+w $dir
                     cd $dir
-                    qsub $target_file
+                    # qsub $target_file
                     sleep 1
                     cd .. 
                 done

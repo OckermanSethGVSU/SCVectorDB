@@ -27,6 +27,7 @@ NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="
 MILVUS_PID=$!
 
 sleep 10
+
 touch /workerOut/milvus_running.txt
 
 # wait until the start file exists
