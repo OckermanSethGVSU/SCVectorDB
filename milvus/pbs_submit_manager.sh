@@ -5,22 +5,22 @@ NODES=(1)
 WORKERS_PER_NODE=(1)
 CORES=(112)
 
-# Batch: 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768
-UPLOAD_BATCH_SIZE=(64) 
+# Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
+UPLOAD_BATCH_SIZE=(1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
 
 # PBS Vars
 WALLTIME="02:00:00"
-queue=debug # [preemptable, debug, debug-scaling, prod]
+queue=preemptable # [preemptable, debug, debug-scaling, prod]
 
 
 ### Runtime variables ###
 task="insert" # [insert]
-STORAGE_MEDIUM="SSD" # [memory, DAOS, lustre, SSD]
+STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
-CORPUS_SIZE=5000 # total data to insert
+CORPUS_SIZE=10000000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=1
 # Aurora
 # 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
@@ -139,12 +139,12 @@ do
 
                     # cp -r $task/* $dir
                     # # cp -r $task/$target $dir
-                    # chmod -R g+w $dir
-                    # cd $dir
-
-                    # qsub $target_file
-                    # sleep 1
-                    # cd .. 
+                    
+                    chmod -R g+w $dir
+                    cd $dir
+                    qsub $target_file
+                    sleep 1
+                    cd .. 
                 done
             done
         done

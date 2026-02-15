@@ -13,6 +13,7 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
     export RESULT_PATH=/eagle/projects/radix-io/sockerman/SCVectorDB/milvus/$myDIR
 
     cd /eagle/projects/radix-io/sockerman/SCVectorDB/milvus/$myDIR
+    exec > >(tee output.log) 2>&1
 
 elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
