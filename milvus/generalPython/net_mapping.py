@@ -102,12 +102,26 @@ if __name__ == "__main__":
         required=True,         # make it mandatory; remove this if optional
         help="Rank number to use (integer)"
     )
+    
+    parser.add_argument(
+        "--name",
+        type=str,              # or str if you expect a non-numeric rank
+        required=False,         # make it mandatory; remove this if optional
+        default="default",
+    )
 
     args = parser.parse_args()
     rank = args.rank
+    name = args.name
 
-    if rank % 4 == 0:
-        mapping = get_running_interface_ips(include_loopback=False)
+    if name != "default":
+         if rank % 4 == 0:
+            mapping = get_running_interface_ips(include_loopback=False)
+            with open(f"{name}.json", "w") as f:
+                json.dump(mapping, f, indent=4)
+    else:
+        if rank % 4 == 0:
+            mapping = get_running_interface_ips(include_loopback=False)
 
-        with open(f"interfaces{rank}.json", "w") as f:
-            json.dump(mapping, f, indent=4)
+            with open(f"interfaces{rank}.json", "w") as f:
+                json.dump(mapping, f, indent=4)

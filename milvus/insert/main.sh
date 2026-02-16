@@ -69,9 +69,16 @@ if [[ "$MODE" == "STANDALONE" ]]; then
     env "${PYTHON_ENV_VARS[@]}" python3 poll.py
 
 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
-    echo "yay"
-fi
+    second_node=$(sed -n '2p' "$PBS_NODEFILE")
 
+    mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./launch_etcd.sh $STORAGE_MEDIUM &
+    mapfile -t NODES < <(awk '!seen[$0]++' "$PBS_NODEFILE")
+    HOSTS="${NODES[1]},${NODES[2]},${NODES[3]},${NODES[4]}"
+    
+    mpirun -n 4 --ppn 1 --cpu-bind none --host "$HOSTS" \
+     ./launch_minio.sh $STORAGE_MEDIUM &
+fi
+exit
 
 
 
