@@ -31,7 +31,7 @@ DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embedding
 
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
-MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
+MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
 
 
 
@@ -126,8 +126,12 @@ do
                         cp milvusSetup/standaloneLaunch.sh $dir/
                         cp milvusSetup/execute.sh $dir/
 
-                    elif [[ "$task" == "DISTRIBUTED" ]]; then
-                        echo "Running on Aurora"
+                    elif [[ "$MODE" == "DISTRIBUTED" ]]; then
+                        cp milvus.sif $dir/
+                        cp etcd_v3.5.18.sif $dir/
+                        cp minio.sif $dir/
+                        cp milvusSetup/launch_etcd.sh $dir/
+                        cp milvusSetup/launch_minio.sh $dir/
                     else
                         echo "Unknown task: $SYSTEM"
                         exit
