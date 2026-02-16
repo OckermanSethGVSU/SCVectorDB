@@ -49,9 +49,9 @@ mkdir -p ./workerOut/
 
 POLARIS_BINDS=()
 if [[ "$PLATFORM" == "AURORA" ]]; then
-    base="/lus/flare/projects/radix-io/sockerman/temp/milvus"
+    base=$BASE_DIR
 elif [[ "$PLATFORM" == "POLARIS" ]]; then
-    base="/lus/eagle/projects/radix-io/sockerman/SCVectorDB/milvus"
+    base=$BASE_DIR
     POLARIS_BINDS+=(
         -B "/eagle/projects/argonne_tpc/sockerman/buildingFromSource/gpuMilvus/cuda-merged:/usr/local/cuda:ro"
         -B "/opt/nvidia/hpc_sdk:/opt/nvidia/hpc_sdk:ro"

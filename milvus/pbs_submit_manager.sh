@@ -22,16 +22,25 @@ STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
 CORPUS_SIZE=10000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=1
+BASE_DIR="$(pwd)" # directory you are running this script is the base for what the run dir will need to cd into
+
+### Path to embeddings
 # Aurora
-# 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
-# Polaris 10 million subset: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
-# 
+    # 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
+# Polaris 
+    # 10 million subset: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
+
 # DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
 DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
 
+# Path to Python env
+# Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
+# Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
+ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
+
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
-MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
+MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 
 
 
@@ -91,6 +100,8 @@ do
                     fi
 
                     echo "myDIR=${dir}" >> $target_file
+                    echo "BASE_DIR=${BASE_DIR}" >> $target_file
+                    echo "ENV_PATH=${ENV_PATH}" >> $target_file
 
                     echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}" >> $target_file
                     echo "CORPUS_SIZE=${CORPUS_SIZE}" >> $target_file

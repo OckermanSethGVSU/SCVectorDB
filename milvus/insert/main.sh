@@ -8,32 +8,30 @@ PYTHON_ENV_VARS=(
     HTTPS_PROXY=""
 )
 
+cd $BASE_DIR/$myDIR
+export BASE_DIR=$BASE_DIR
+export myDIR=$myDIR
+export RESULT_PATH=$BASE_DIR/$myDIR
+
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
     ml spack-pe-base/0.8.1
     ml use /soft/spack/testing/0.8.1/modulefiles
     ml apptainer/main
     ml load e2fsprogs
-    module use /soft/modulefiles; module load conda; conda activate base
-    source /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/bin/activate
-    export myDIR=$myDIR
-    export RESULT_PATH=/eagle/projects/radix-io/sockerman/SCVectorDB/milvus/$myDIR
 
-    cd /eagle/projects/radix-io/sockerman/SCVectorDB/milvus/$myDIR
+    module use /soft/modulefiles; module load conda; conda activate base
     exec > >(tee output.log) 2>&1
 
 elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
     module load frameworks
-    source /lus/flare/projects/radix-io/sockerman/milvusEnv/bin/activate
-
-    export myDIR=$myDIR
-    export RESULT_PATH=/lus/flare/projects/radix-io/sockerman/temp/milvus/$myDIR
+    
     PYTHON_ENV_VARS+=(NUMEXPR_NUM_THREADS=108 NUMEXPR_MAX_THREADS=108)
-
-    cd /lus/flare/projects/radix-io/sockerman/temp/milvus/$myDIR
 fi
 
+# Activate Python env
+source $ENV_PATH/bin/activate
 
 
 
@@ -78,8 +76,6 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     mpirun -n 4 --ppn 1 --cpu-bind none --host "$HOSTS" \
      ./launch_minio.sh $STORAGE_MEDIUM &
 fi
-exit
-
 
 
 
