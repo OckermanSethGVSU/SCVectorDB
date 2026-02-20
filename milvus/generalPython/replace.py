@@ -44,10 +44,12 @@ def get_ip_by_rank(filename: str, target_rank: int, timeout_s: float = 60.0,) ->
 parser = argparse.ArgumentParser()
 parser.add_argument("--mode", required=True, help="Required mode argument")
 parser.add_argument("--rank", required=False, help="rank of component", default=-1,)
+parser.add_argument("--wal", required=False, help="Which MQ to use for WAL", default="default",)
 args = parser.parse_args()
 
 mode = args.mode
 rank = args.rank
+wal = args.wal
 
 if mode == "standalone":
     milvus_path = Path("configs/milvus.yaml")
@@ -76,6 +78,7 @@ elif mode == "distributed":
     text = text.replace("<ETCD0>",etcd0)
     text = text.replace("<ETCD1>",etcd1)
     text = text.replace("<ETCD2>",etcd2)
+    text = text.replace("<WAL>",wal)
     dist_milvus_path.write_text(text)
 
 elif mode in ["COORDINATOR", "STREAMING","QUERY","PROXY", "DATA"]:

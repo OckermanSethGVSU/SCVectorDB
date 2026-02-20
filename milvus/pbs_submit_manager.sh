@@ -12,17 +12,19 @@ UPLOAD_BATCH_SIZE=(512)
 QUERY_BATCH_SIZE=(2048)
 
 # PBS Vars
-WALLTIME="02:00:00"
-queue=preemptable # [preemptable, debug, debug-scaling, prod]
+WALLTIME="01:00:00"
+queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
 
 
 ### Runtime variables ###
 task="insert" # [insert]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
-CORPUS_SIZE=10000 # total data to insert
-UPLOAD_CLIENTS_PER_WORKER=1
+CORPUS_SIZE=10000000 # total data to insert
+UPLOAD_CLIENTS_PER_WORKER=32
 BASE_DIR="$(pwd)" # directory you are running this script is the base for what the run dir will need to cd into
+WAL="woodpecker" # woodpecker, default
+MINIO_MODE="stripped" # single, stripped
 
 ### Path to embeddings
 # Aurora
@@ -58,7 +60,13 @@ do
                 for numCores in "${CORES[@]}"
                 do 
 
-                    total_nodes=$((num_nodes + 1))
+
+                    if [[ "$MODE" == "DISTRIBUTED" ]]; then
+                        total_nodes=$((num_nodes + 4))
+                    else
+                        total_nodes=$((num_nodes + 1))
+
+                    fi
                     DATE=$(date +"%Y-%m-%d_%T")
                     target_file="submit.sh"
                     
@@ -113,6 +121,11 @@ do
                     echo "DATA_FILEPATH=${DATA_FILEPATH}" >> $target_file
                     echo "PLATFORM=${PLATFORM}" >> $target_file
                     echo "MODE=${MODE}" >> $target_file
+
+                    if [[ "$MODE" == "DISTRIBUTED" ]]; then
+                        echo "WAL=${WAL}" >> $target_file
+                        echo "MINIO_MODE=${MINIO_MODE}" >> $target_file
+                    fi
 
                     # base="${target%%.*}"
                     # dir="${task}_${base}_bs_${BATCH_SIZE}_c_${NClients}_${num_nodes}_${workers}_${DATE}"
@@ -172,7 +185,7 @@ do
                     
                     chmod -R g+w $dir
                     cd $dir
-                    # qsub $target_file
+                    qsub $target_file
                     sleep 1
                     cd .. 
                 done

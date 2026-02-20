@@ -69,6 +69,8 @@ if [[ "$MODE" == "STANDALONE" ]]; then
 
 
 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
+
+    export MINIO_MODE=$MINIO_MODE
     # BASE CONFIG
     # 0: client, proxy
     # 1: minio, etcd, cord
@@ -82,15 +84,20 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     HOSTS="${NODES[1]},${NODES[2]},${NODES[3]}"
     mpirun -n 3 --ppn 1 --cpu-bind none --host $HOSTS ./launch_etcd.sh $STORAGE_MEDIUM &
     
-    # Launch 4 Minio instances to use erasure coding
-    HOSTS="${NODES[1]},${NODES[2]},${NODES[3]},${NODES[4]}"
-    mpirun -n 4 --ppn 1 --cpu-bind none --host "$HOSTS" \
-     ./launch_minio.sh lustre & # must be lustre for erasure coding to work
+    if [[ "$MINIO_MODE" == "stripped" ]]; then
+        # Launch 4 Minio instances to use erasure coding
+        HOSTS="${NODES[1]},${NODES[2]},${NODES[3]},${NODES[4]}"
+        mpirun -n 4 --ppn 1 --cpu-bind none --host "$HOSTS" \
+        ./launch_minio.sh lustre & # must be lustre for erasure coding to work
 
+    elif [[ "$MINIO_MODE" == "single" ]]; then
+        # Launch 1 Minio instance
+        mpirun -n 1 --ppn 1 --cpu-bind none --host "${NODES[1]}"  ./launch_minio.sh lustre & # must be lustre for erasure coding to work
+    fi
     # setup ETCD/Minio info which all parts will need
     cp -r ${BASE_DIR}/cpuMilvus/configs/ .
     rm ./configs/milvus.yaml
-    python3 replace.py --mode distributed
+    python3 replace.py --mode distributed --wal $WAL
     
     # Launch cordinator
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM COORDINATOR &
@@ -107,6 +114,14 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     
     # Launch proxy
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[0]} ./launch_milvus_part.sh $STORAGE_MEDIUM PROXY &
+
+    # BASE CONFIG
+    # 0: client, proxy
+    # 1: minio, etcd, cord
+    # 2: minio, etcd, streaming
+    # 3: minio, etcd, query
+    # 4: minio, data
+
 
     # verify milvus is running
     TARGET="./workerOut/proxy0_running.txt"
