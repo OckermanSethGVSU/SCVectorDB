@@ -40,6 +40,76 @@ func (b *Barrier) Wait() {
 	<-b.notify
 }
 
+// SharedTiming records one global window:
+// loop start (first inserter enters the loop) -> searchable (global visibility reached).
+type SharedTiming struct {
+	loopStart      time.Time
+	searchableAt   time.Time
+	startOnce      sync.Once
+	searchableOnce sync.Once
+	searchableCh   chan struct{}
+	mu             sync.Mutex
+	expected       int
+	ready          int
+}
+
+func NewSharedTiming(expected int) *SharedTiming {
+	return &SharedTiming{
+		searchableCh: make(chan struct{}),
+		expected:     expected,
+	}
+}
+
+func (t *SharedTiming) MarkLoopStart() {
+	t.startOnce.Do(func() {
+		t.loopStart = time.Now()
+	})
+}
+
+func (t *SharedTiming) MarkSearchable() {
+	t.searchableOnce.Do(func() {
+		t.searchableAt = time.Now()
+		close(t.searchableCh)
+	})
+}
+
+func (t *SharedTiming) WaitSearchable() {
+	<-t.searchableCh
+}
+
+func (t *SharedTiming) MarkClientReady() {
+	t.mu.Lock()
+	t.ready++
+	reachedAll := t.ready == t.expected
+	t.mu.Unlock()
+	if reachedAll {
+		t.MarkSearchable()
+	}
+}
+
+func waitForLocalLastIDSearchable(
+	ctx context.Context,
+	mclient *milvusclient.Client,
+	collectionName string,
+	idField string,
+	lastLocalID int64,
+) bool {
+	deadline := time.Now().Add(10 * time.Minute)
+	for {
+		opt := milvusclient.NewQueryOption(collectionName).
+			WithIDs(column.NewColumnInt64(idField, []int64{lastLocalID})).
+			WithConsistencyLevel(entity.ClStrong)
+		res, err := mclient.Get(ctx, opt)
+		if err == nil && res.ResultCount == 1 {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 // splitRange splits [0, n) into `parts` contiguous chunks.
 // Returns [start,end) for the chunk `idx`.
 // Example: n=10, parts=2 => idx0 [0,5), idx1 [5,10)
@@ -67,6 +137,7 @@ func splitRange(n, parts, idx int) (start, end int) {
 func clientWorker(
 	wg *sync.WaitGroup,
 	barrier *Barrier,
+	sharedTiming *SharedTiming,
 	workerRank int,
 	clientID int,
 	clientsPerWorker int,
@@ -102,7 +173,9 @@ func clientWorker(
 	local := matrix[startIdx:endIdx]
 	localRows := len(local)
 	if localRows == 0 {
+		sharedTiming.MarkClientReady()
 		// Still participate in barriers to avoid deadlock.
+		sharedTiming.WaitSearchable()
 		barrier.Wait()
 		barrier.Wait()
 		barrier.Wait()
@@ -128,10 +201,11 @@ func clientWorker(
 	collectionName := "standalone" // TODO
 	vectorField := "vector"        // TODO
 	idField := "id"
+	localLastID := int64(endIdx - 1)
 
 	// sanity check ID: last ID in the whole run
-	lastID := int64(totalRows - 1)
-	option := milvusclient.NewQueryOption(collectionName).
+	lastID := int64(totalRows - 1) // global last id
+	globalOpt := milvusclient.NewQueryOption(collectionName).
 		WithIDs(column.NewColumnInt64("id", []int64{lastID})).
 		WithConsistencyLevel(entity.ClStrong)
 
@@ -151,6 +225,7 @@ func clientWorker(
 		uploadDurations  []float64
 	)
 
+	sharedTiming.MarkLoopStart()
 	startLoop := time.Now()
 	for i := 0; i < localRows; i += BATCH_SIZE {
 		end := i + BATCH_SIZE
@@ -185,32 +260,38 @@ func clientWorker(
 		totalDurations = append(totalDurations, endUpload.Sub(startTotal).Seconds())
 	}
 	endLoop := time.Now()
-
 	// Wait for everyone to finish inserting
 	barrier.Wait()
 
-	// Only ONE goroutine does the "wait until searchable" poke
-	if globalClientRank == 0 {
-		_, _ = mclient.Get(ctx, option)
+	localExists := waitForLocalLastIDSearchable(
+		ctx, mclient, collectionName, idField, localLastID,
+	)
+	if !localExists {
+		log.Printf("Timed out waiting for local last ID visibility worker=%d client=%d lastID=%d",
+			workerRank, clientID, localLastID)
 	}
+	sharedTiming.MarkClientReady()
+
+	sharedTiming.WaitSearchable()
+	searchableAtClient := time.Now()
 	barrier.Wait()
 
-	searchable := time.Now()
-
-	// sanity check for everyone
-	result, err := mclient.Get(ctx, option)
-	if err != nil {
-		log.Printf("Get sanity check failed worker=%d client=%d: %v", workerRank, clientID, err)
+	// --- per-client global sanity check ---
+	globalRes, globalErr := mclient.Get(ctx, globalOpt)
+	globalExists := (globalErr == nil && globalRes.ResultCount == 1)
+	if globalErr != nil {
+		log.Printf("Global sanity check failed worker=%d client=%d lastID=%d: %v",
+			workerRank, clientID, lastID, globalErr)
 	}
 
-	existsStr := "false"
-	if result.ResultCount == 1 {
-		existsStr = "true"
-	}
+	barrier.Wait()
+
+	
 
 	loopDuration := endLoop.Sub(startLoop).Seconds()
-	waitPeriod := searchable.Sub(endLoop).Seconds()
-	total := searchable.Sub(startLoop).Seconds()
+	waitDuration := searchableAtClient.Sub(endLoop).Seconds()
+	clientTotalToSearchable := searchableAtClient.Sub(startLoop).Seconds()
+	sharedWindow := sharedTiming.searchableAt.Sub(sharedTiming.loopStart).Seconds()
 
 	// stagger file writes a bit
 	time.Sleep(time.Second * time.Duration(globalClientRank*2))
@@ -228,7 +309,9 @@ func clientWorker(
 		_ = writer.Write([]string{
 			"worker", "client", "global_client",
 			"start_idx", "end_idx",
-			"sanity_check", "loop_duration", "wait_period", "total",
+			"local_sanity_check", "global_sanity_check",
+			"loop_duration", "wait_after_loop", "client_total_to_searchable",
+			"shared_loop_start_to_searchable",
 		})
 	}
 	_ = writer.Write([]string{
@@ -237,10 +320,12 @@ func clientWorker(
 		strconv.Itoa(globalClientRank),
 		strconv.Itoa(startIdx),
 		strconv.Itoa(endIdx),
-		existsStr,
+		strconv.FormatBool(localExists),
+		strconv.FormatBool(globalExists),
 		strconv.FormatFloat(loopDuration, 'g', -1, 64),
-		strconv.FormatFloat(waitPeriod, 'g', -1, 64),
-		strconv.FormatFloat(total, 'g', -1, 64),
+		strconv.FormatFloat(waitDuration, 'g', -1, 64),
+		strconv.FormatFloat(clientTotalToSearchable, 'g', -1, 64),
+		strconv.FormatFloat(sharedWindow, 'g', -1, 64),
 	})
 
 	w1, _ := gonpy.NewFileWriter(fmt.Sprintf(RESULT_PATH + "/batch_construction_times_w%d_c%d.npy", workerRank, clientID))
@@ -316,11 +401,12 @@ func main() {
 
 	var wg sync.WaitGroup
 	barrier := NewBarrier(totalClients)
+	sharedTiming := NewSharedTiming(totalClients)
 
 	for w := 0; w < nWorkers; w++ {
 		for c := 0; c < clientsPerWorker; c++ {
 			wg.Add(1)
-			go clientWorker(&wg, barrier, w, c, clientsPerWorker, CORPUS_SIZE, matrix)
+			go clientWorker(&wg, barrier, sharedTiming, w, c, clientsPerWorker, CORPUS_SIZE, matrix)
 		}
 	}
 

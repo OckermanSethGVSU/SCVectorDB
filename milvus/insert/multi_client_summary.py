@@ -39,7 +39,7 @@ def extract_time(rank):
     # end = datetime.fromisoformat(targetRow[2])
     # globalEnd = datetime.fromisoformat(targetRow[3])
 
-    return float(targetRow[8])
+    return float(targetRow[10])
 
 
    
