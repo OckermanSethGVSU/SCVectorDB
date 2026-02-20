@@ -5,6 +5,7 @@ RANK=$((RANK))
 STORAGE_MEDIUM=${2:?Usage: $0 <rank> <storage_medium>}
 USEPERF=${3:?Usage: $0 <rank> <storage_medium> <perf>}
 PLATFORM=${4:?Usage: $0 <rank> <storage_medium> <perf> <platform>}
+TYPE=${5:?Usage: $0 <rank> <storage_medium> <perf> <platform> <type>}
 
 
 ETCD_FLAG="--env ETCD_DATA_DIR=/var/lib/milvus/etcd"
@@ -74,7 +75,7 @@ auto-compaction-mode: revision
 auto-compaction-retention: '1000'
 EOF
 
-python3 replace.py
+python3 replace.py --mode standalone
 cp -r ./configs/ $TARGET_BASE/
 #####
 
@@ -88,6 +89,7 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env COMMON_STORAGETYPE=local \
     --env DEPLOY_MODE=STANDALONE \
     --env CUDA_VISIBLE_DEVICES="" \
+    --env TYPE=$TYPE \
     -B ./execute.sh:/milvus/app_execute.sh \
     -B ${base}/cpuMilvus/:/milvus/ \
     -B ${TARGET_BASE}/configs/:/milvus/configs/ \
@@ -95,7 +97,7 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     -B ./workerOut/:/workerOut/ \
     -B ${TARGET_BASE}/volumes/milvus:/var/lib/milvus \
     "${POLARIS_BINDS[@]}" \
-    milvus.sif bash app_execute.sh
+    milvus.sif bash app_execute.sh 
 
 
 

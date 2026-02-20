@@ -40,7 +40,7 @@ ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
 
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
-MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
+MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
 
 
 
@@ -141,8 +141,10 @@ do
                         cp milvus.sif $dir/
                         cp etcd_v3.5.18.sif $dir/
                         cp minio.sif $dir/
+                        cp milvusSetup/execute.sh $dir/
                         cp milvusSetup/launch_etcd.sh $dir/
                         cp milvusSetup/launch_minio.sh $dir/
+                        cp milvusSetup/launch_milvus_part.sh $dir/
                     else
                         echo "Unknown task: $SYSTEM"
                         exit

@@ -54,7 +54,7 @@ fi
 
 if [[ "$MODE" == "STANDALONE" ]]; then
     second_node=$(sed -n '2p' "$PBS_NODEFILE")
-    mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $USEPERF $PLATFORM &
+    mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $USEPERF $PLATFORM STANDALONE &
     # launch profiling on worker and client nodes
     mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node python3 profile.py worker_0 $PLATFORM &
     python3 profile.py client_node $PLATFORM & 
@@ -65,16 +65,57 @@ if [[ "$MODE" == "STANDALONE" ]]; then
     done
 
     env "${PYTHON_ENV_VARS[@]}" python3 poll.py
+    IP_ADDR=$(jq -r '.hsn0.ipv4[0]' interfaces0.json)
+
 
 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
-    second_node=$(sed -n '2p' "$PBS_NODEFILE")
-
-    mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./launch_etcd.sh $STORAGE_MEDIUM &
-    mapfile -t NODES < <(awk '!seen[$0]++' "$PBS_NODEFILE")
-    HOSTS="${NODES[1]},${NODES[2]},${NODES[3]},${NODES[4]}"
+    # BASE CONFIG
+    # 0: client, proxy
+    # 1: minio, etcd, cord
+    # 2: minio, etcd
+    # 3: minio, etcd
+    # 4: minio, 
     
+    mapfile -t NODES < <(awk '!seen[$0]++' "$PBS_NODEFILE")
+    
+    # launch 3 etcd instances
+    HOSTS="${NODES[1]},${NODES[2]},${NODES[3]}"
+    mpirun -n 3 --ppn 1 --cpu-bind none --host $HOSTS ./launch_etcd.sh $STORAGE_MEDIUM &
+    
+    # Launch 4 Minio instances to use erasure coding
+    HOSTS="${NODES[1]},${NODES[2]},${NODES[3]},${NODES[4]}"
     mpirun -n 4 --ppn 1 --cpu-bind none --host "$HOSTS" \
-     ./launch_minio.sh $STORAGE_MEDIUM &
+     ./launch_minio.sh lustre & # must be lustre for erasure coding to work
+
+    # setup ETCD/Minio info which all parts will need
+    cp -r ${BASE_DIR}/cpuMilvus/configs/ .
+    rm ./configs/milvus.yaml
+    python3 replace.py --mode distributed
+    
+    # Launch cordinator
+    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM COORDINATOR &
+    
+    
+    # Launch streaming nodes
+    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[2]} ./launch_milvus_part.sh $STORAGE_MEDIUM STREAMING &
+
+    # Launch query nodes
+    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[3]} ./launch_milvus_part.sh $STORAGE_MEDIUM QUERY &
+
+    # Launch data nodes
+    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[4]} ./launch_milvus_part.sh $STORAGE_MEDIUM DATA &
+    
+    # Launch proxy
+    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[0]} ./launch_milvus_part.sh $STORAGE_MEDIUM PROXY &
+
+    # verify milvus is running
+    TARGET="./workerOut/proxy0_running.txt"
+    while [ ! -e "$TARGET" ]; do
+    sleep 0.1
+    done
+    IP_ADDR=$(jq -r '.hsn0.ipv4[0]' PROXY0.json)
+    echo $IP_ADDR > worker.ip
+    env "${PYTHON_ENV_VARS[@]}" python3 poll.py
 fi
 
 
@@ -82,16 +123,12 @@ fi
 env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
 
 
-
-IP_ADDR=$(jq -r '.hsn0.ipv4[0]' interfaces0.json)
 export MILVUS_HOST=${IP_ADDR}
 export CORPUS_SIZE=$CORPUS_SIZE
 export UPLOAD_CLIENTS_PER_WORKER=$UPLOAD_CLIENTS_PER_WORKER
 export N_WORKERS=$TOTAL
 export DATA_FILEPATH=$DATA_FILEPATH
 export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
-
-
 touch ./workerOut/workflow_start.txt
 sleep 5
 

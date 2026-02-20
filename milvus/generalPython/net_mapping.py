@@ -115,10 +115,9 @@ if __name__ == "__main__":
     name = args.name
 
     if name != "default":
-         if rank % 4 == 0:
-            mapping = get_running_interface_ips(include_loopback=False)
-            with open(f"{name}.json", "w") as f:
-                json.dump(mapping, f, indent=4)
+        mapping = get_running_interface_ips(include_loopback=False)
+        with open(f"{name}{rank}.json", "w") as f:
+            json.dump(mapping, f, indent=4)
     else:
         if rank % 4 == 0:
             mapping = get_running_interface_ips(include_loopback=False)

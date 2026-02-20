@@ -1,6 +1,8 @@
 #!/bin/bash
 
 USEPERF=$1
+RANK=$2
+
 # LD_PRELOADS
 export LD_PRELOAD=""
 LIBDIR=/milvus/internal/core/output/lib && \
@@ -21,14 +23,46 @@ sleep 3
 
 cd /milvus
 
+if [[ "$TYPE" == "STANDALONE" ]]; then
+  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+  ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
+    MILVUS_PID=$!
+    SIGNAL_FILE="milvus_running.txt"
 
-NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
- ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
-MILVUS_PID=$!
+elif [[ "$TYPE" == "COORDINATOR" ]]; then
+  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+  ./bin/milvus run mixcoord &
+    MILVUS_PID=$!
+    SIGNAL_FILE="cord${RANK}_running.txt"
+
+elif [[ "$TYPE" == "PROXY" ]]; then
+  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+  ./bin/milvus run proxy &
+    MILVUS_PID=$!
+    SIGNAL_FILE="proxy${RANK}_running.txt"
+
+elif [[ "$TYPE" == "DATA" ]]; then
+  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+  ./bin/milvus run datanode &
+    MILVUS_PID=$!
+    SIGNAL_FILE="data${RANK}_running.txt"
+
+elif [[ "$TYPE" == "QUERY" ]]; then
+  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+  ./bin/milvus run querynode &
+    MILVUS_PID=$!
+    SIGNAL_FILE="query${RANK}_running.txt"
+
+elif [[ "$TYPE" == "STREAMING" ]]; then
+  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+  ./bin/milvus run streamingnode &
+    MILVUS_PID=$!
+    SIGNAL_FILE="streaming${RANK}_running.txt"
+fi
 
 sleep 10
 
-touch /workerOut/milvus_running.txt
+touch /workerOut/$SIGNAL_FILE
 
 # wait until the start file exists
 TARGET="/workerOut/workflow_start.txt"

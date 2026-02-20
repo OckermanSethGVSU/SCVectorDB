@@ -1,16 +1,97 @@
+#!/usr/bin/env python3
+
+import argparse
 from pathlib import Path
+import time
+import os
 
-milvus_path = Path("configs/milvus.yaml")
-worker_ip_path = Path("worker.ip")
+def get_ip_by_rank(filename: str, target_rank: int, timeout_s: float = 60.0,) -> str:
+    """
+    Reads a file formatted as:
+        rank,ip,port
+    and returns the IP associated with target_rank.
+    """
+    deadline = time.time() + timeout_s
+    target_rank_str = str(target_rank)
 
-# Read replacement value (strip to avoid accidental newlines)
-replacement = worker_ip_path.read_text().strip()
+    # Wait for the file to appear
+    while not os.path.exists(filename):
+        if time.time() >= deadline:
+            raise TimeoutError(f"Timed out after {timeout_s}s waiting for file: {filename}")
+        time.sleep(1)
 
-# Read milvus config
-text = milvus_path.read_text()
+    target_rank = str(target_rank)
+    deadline = time.time() + timeout_s
+    while True:
+        with open(filename) as f:
+            for line in f:
+                parts = line.strip().split(",")
+                if len(parts) != 3:
+                    continue  # skip malformed lines
 
-# Replace all occurrences
-text = text.replace("<HNS0>", replacement)
+                rank, ip, _ = parts
+                if rank == target_rank:
+                    return ip
+        if time.time() >= deadline:
+            break
+        
+        time.sleep(1)
 
-# Write back in place
-milvus_path.write_text(text)
+    raise ValueError(f"Rank {target_rank} not found in {filename}")
+
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--mode", required=True, help="Required mode argument")
+parser.add_argument("--rank", required=False, help="rank of component", default=-1,)
+args = parser.parse_args()
+
+mode = args.mode
+rank = args.rank
+
+if mode == "standalone":
+    milvus_path = Path("configs/milvus.yaml")
+    worker_ip_path = Path("worker.ip")
+
+    # Read replacement value (strip to avoid accidental newlines)
+    replacement = worker_ip_path.read_text().strip()
+
+    # Read milvus config
+    text = milvus_path.read_text()
+
+    # Replace all occurrences
+    text = text.replace("<HNS0>", replacement)
+
+    # Write back in place
+    milvus_path.write_text(text)
+elif mode == "distributed":
+    dist_milvus_path = Path("configs/distributed_milvus.yaml")
+    text = dist_milvus_path.read_text()
+
+    minio_ip = get_ip_by_rank("minio_registry.txt",0)
+    etcd0 = get_ip_by_rank("etcd_registry.txt",0)
+    etcd1 = get_ip_by_rank("etcd_registry.txt",1)
+    etcd2 = get_ip_by_rank("etcd_registry.txt",2)
+    text = text.replace("<MINIO>",minio_ip)
+    text = text.replace("<ETCD0>",etcd0)
+    text = text.replace("<ETCD1>",etcd1)
+    text = text.replace("<ETCD2>",etcd2)
+    dist_milvus_path.write_text(text)
+
+elif mode in ["COORDINATOR", "STREAMING","QUERY","PROXY", "DATA"]:
+    dist_milvus_path = Path("configs/distributed_milvus.yaml")
+    text = dist_milvus_path.read_text()
+    ip = get_ip_by_rank(f"{mode}_registry.txt",rank)
+    text = text.replace(f"<{mode}>",ip)
+
+    for m in ["COORDINATOR", "STREAMING","QUERY","PROXY", "DATA"]:
+        if m == mode:
+            continue
+        text = text.replace(f"<{m}>","")
+        
+    milvus_path = Path(f"configs/{mode}{rank}.yaml")
+    milvus_path.write_text(text)
+
+else:
+    print("Unkown component type passed in", flush=True)
+

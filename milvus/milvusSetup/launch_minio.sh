@@ -32,9 +32,9 @@ else
     (( RANK == 0 )) && echo "Error: unknown STORAGE_MEDIUM '$STORAGE_MEDIUM'" >&2
     exit 1
 fi
-# echo "RANK=$RANK HOST=$(hostname -s)"
 
-python3 net_mapping.py --rank 0 --name minio${RANK}
+
+python3 net_mapping.py --rank ${RANK} --name minio
 sleep 3
 until \
     [[ -f minio0.json ]] && jq empty minio0.json >/dev/null 2>&1 && \
@@ -46,7 +46,12 @@ do
 done
 
 MY_IP_ADDR=$(jq -er '.hsn0.ipv4[0]' "minio${RANK}.json")
-echo $RANK $MY_IP_ADDR
+
+sleep $((RANK * 5))
+OUTPUT_FILE="minio_registry.txt"
+echo "${RANK},${MY_IP_ADDR},9000" >> $OUTPUT_FILE
+
+
 IP_ADDR0=$(jq -er '.hsn0.ipv4[0]' minio0.json)
 IP_ADDR1=$(jq -er '.hsn0.ipv4[0]' minio1.json)
 IP_ADDR2=$(jq -er '.hsn0.ipv4[0]' minio2.json)
@@ -58,10 +63,8 @@ ENDPOINTS=(
   "http://${IP_ADDR3}:9000/data"
 )
 
-
 rm -fr $TARGET_BASE/volumes/minio_volume${RANK}
 mkdir -p $TARGET_BASE/volumes/minio_volume${RANK}
-echo $TARGET_BASE
 apptainer exec --fakeroot \
   --writable-tmpfs \
   --env http_proxy= --env https_proxy= --env HTTP_PROXY= --env HTTPS_PROXY= \
