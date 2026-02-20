@@ -11,8 +11,8 @@ required_paths=(
     "qdrant.sif"
     "qdrant"
     "perf"
-    "qdrantSetup/launch.sh"
     "qdrantSetup/launchQdrantNode.sh"
+    "qdrantSetup/launch.sh"
     "generalPython/gen_dirs.py"
     "generalPython/mapping.py"
     "generalPython/profile.py"
@@ -34,21 +34,24 @@ for path in "${required_paths[@]}"; do
     fi
 done
 
-if (( ${#missing[@]} == 0 )); then
-    exit 0
-fi
-
 if [[ "$MISSING_ONLY" == "false" ]]; then
-    echo "Missing dependencies detected for Qdrant."
+    echo "=== Qdrant dependency check ==="
     echo "Present (${#present[@]}):"
     for path in "${present[@]}"; do
         echo "  - $path"
     done
 fi
 
-echo "Missing (${#missing[@]}):"
-for path in "${missing[@]}"; do
-    echo "  - $path"
-done
+if (( ${#missing[@]} > 0 )); then
+    echo "Missing (${#missing[@]}):"
+    for path in "${missing[@]}"; do
+        echo "  - $path"
+    done
+    exit 1
+fi
 
-exit 1
+if [[ "$MISSING_ONLY" == "false" ]]; then
+    echo "Missing (0): none"
+fi
+
+echo "All required Qdrant dependencies are present."

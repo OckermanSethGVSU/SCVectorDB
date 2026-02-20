@@ -2,9 +2,12 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if ! "$SCRIPT_DIR/check_dependencies.sh"; then
+if ! "$SCRIPT_DIR/check_dependencies.sh" --missing-only; then
     exit 1
 fi
+
+echo "Dependency check passed. Submission is disabled in dependency-check mode."
+exit 0
 
 
 

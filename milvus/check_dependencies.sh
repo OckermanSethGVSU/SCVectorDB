@@ -40,21 +40,25 @@ for path in "${required_paths[@]}"; do
     fi
 done
 
-if (( ${#missing[@]} == 0 )); then
-    exit 0
-fi
-
 if [[ "$MISSING_ONLY" == "false" ]]; then
-    echo "Missing dependencies detected for Milvus."
+    echo "=== Milvus dependency check ==="
     echo "Present (${#present[@]}):"
     for path in "${present[@]}"; do
         echo "  - $path"
     done
 fi
 
-echo "Missing (${#missing[@]}):"
-for path in "${missing[@]}"; do
-    echo "  - $path"
-done
+if (( ${#missing[@]} > 0 )); then
+    echo "Missing (${#missing[@]}):"
+    for path in "${missing[@]}"; do
+        echo "  - $path"
+    done
+    exit 1
+fi
 
-exit 1
+if [[ "$MISSING_ONLY" == "false" ]]; then
+    echo "Missing (0): none"
+fi
+
+echo "All required Milvus dependencies are present."
+
