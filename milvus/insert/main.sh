@@ -147,10 +147,6 @@ export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
 touch ./workerOut/workflow_start.txt
 sleep 5
 
-export GOPATH=/home/treewalker/go
-export GOMODCACHE=/home/treewalker/go/pkg/mod
-export GOCACHE=/home/treewalker/.cache/go-build
-
 NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientInsert
 
 # # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 convert_to_gpu_cargra.py
