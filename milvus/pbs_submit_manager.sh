@@ -23,8 +23,8 @@ usePerf="false" # [true, false]
 CORPUS_SIZE=10000000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=32
 BASE_DIR="$(pwd)" # directory you are running this script is the base for what the run dir will need to cd into
-WAL="woodpecker" # woodpecker, default
-MINIO_MODE="stripped" # single, stripped
+WAL="woodpecker" # [woodpecker, default]
+MINIO_MODE="stripped" # [single, stripped]
 
 ### Path to embeddings
 # Aurora
@@ -179,9 +179,6 @@ do
                     fi
 
                     mv $target_file $dir
-
-                    # cp -r $task/* $dir
-                    # # cp -r $task/$target $dir
                     
                     chmod -R g+w $dir
                     cd $dir
