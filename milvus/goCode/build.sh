@@ -16,8 +16,9 @@ fi
 
 cd "$DIR"
 
-if [ ! -f "main.go" ]; then
-    echo "Error: main.go not found in $DIR"
+# Ensure there is at least one Go file
+if ! ls *.go >/dev/null 2>&1; then
+    echo "Error: No .go files found in $DIR"
     exit 1
 fi
 
@@ -27,10 +28,17 @@ BIN_NAME=$(basename "$DIR")
 echo "Building Go project in: $DIR"
 echo "Output binary: $DIR/$BIN_NAME"
 
-# Optional: ensure dependencies are downloaded once
-go mod download
+# If go.mod does not exist, initialize module
+if [ ! -f "go.mod" ]; then
+    echo "No go.mod found. Initializing module..."
+    go mod init "$BIN_NAME"
+fi
 
-# Build binary in the same directory
-go build -o "$BIN_NAME" main.go
+# Download and clean dependencies
+echo "Tidying modules..."
+go mod tidy
+
+# Build entire module (recommended over building main.go explicitly)
+go build -o "$BIN_NAME"
 
 echo "Build complete."
