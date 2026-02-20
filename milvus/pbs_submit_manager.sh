@@ -6,8 +6,6 @@ if ! "$SCRIPT_DIR/check_dependencies.sh" --missing-only; then
     exit 1
 fi
 
-echo "Dependency check passed. Submission is disabled in dependency-check mode."
-exit 0
 
 
 ### Loop variables ###
@@ -192,7 +190,7 @@ do
                     
                     chmod -R g+w $dir
                     cd $dir
-                    qsub $target_file
+                    # qsub $target_file
                     sleep 1
                     cd .. 
                 done
