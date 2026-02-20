@@ -1,5 +1,12 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if ! "$SCRIPT_DIR/check_dependencies.sh"; then
+    exit 1
+fi
+
+
 ### Loop variables ###
 NODES=(1)
 WORKERS_PER_NODE=(1)
