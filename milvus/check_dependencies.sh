@@ -27,6 +27,7 @@ required_paths=(
     "insert/multi_client_summary.py"
     "goCode/multiClientInsert/multiClientInsert"
     "goCode/multiClientInsert/main.go"
+    "perfDir/perf"
 )
 
 present=()

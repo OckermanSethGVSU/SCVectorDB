@@ -10,7 +10,7 @@ fi
 required_paths=(
     "qdrant.sif"
     "qdrant"
-    "perf"
+    "perf/perf"
     "qdrantSetup/launchQdrantNode.sh"
     "qdrantSetup/launch.sh"
     "generalPython/gen_dirs.py"
