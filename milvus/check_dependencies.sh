@@ -3,6 +3,8 @@
 set -u
 
 MISSING_ONLY=false
+USE_PERF="${USE_PERF:-false}"   # default false unless exported
+
 if [[ "${1:-}" == "--missing-only" ]]; then
     MISSING_ONLY=true
 fi
@@ -27,7 +29,7 @@ required_paths=(
     "insert/multi_client_summary.py"
     "goCode/multiClientInsert/multiClientInsert"
     "goCode/multiClientInsert/main.go"
-    "perfDir/perf"
+    "perfDir/"
 )
 
 present=()
@@ -40,6 +42,25 @@ for path in "${required_paths[@]}"; do
         missing+=("$path")
     fi
 done
+
+# -------------------------------
+# Perf directory validation logic
+# -------------------------------
+
+PERF_WARNING=false
+
+if [[ -d "perfDir/" ]]; then
+    if [[ ! -x "perfDir/perf" ]]; then
+        PERF_WARNING=true
+        if [[ "$USE_PERF" == "true" ]]; then
+            missing+=("perfDir/perf (required because USE_PERF=true)")
+        fi
+    fi
+fi
+
+# -------------------------------
+# Output
+# -------------------------------
 
 if [[ "$MISSING_ONLY" == "false" ]]; then
     echo "=== Milvus dependency check ==="
@@ -61,5 +82,11 @@ if [[ "$MISSING_ONLY" == "false" ]]; then
     echo "Missing (0): none"
 fi
 
-echo "All required Milvus dependencies are present."
+if [[ "$PERF_WARNING" == "true" && "$USE_PERF" == "false" ]]; then
+    echo ""
+    echo "⚠️  Warning: perfDir/ exists but no compatible 'perf' binary found."
+    echo "    Profiling will be skipped (USE_PERF=false)."
+    echo "    If you intend to profile, place a compatible 'perf' binary in perfDir/."
+fi
 
+echo "All required Milvus dependencies are present."
