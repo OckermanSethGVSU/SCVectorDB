@@ -39,6 +39,10 @@ def get_ip_by_rank(filename: str, target_rank: int, timeout_s: float = 60.0,) ->
 
     raise ValueError(f"Rank {target_rank} not found in {filename}")
 
+def get_etcd_mode() -> str:
+    # Default to replicated if not set
+    mode = os.environ.get("ETCD_MODE", "replicated").strip().lower()
+    return mode
 
 
 parser = argparse.ArgumentParser()
@@ -71,14 +75,25 @@ elif mode == "distributed":
     text = dist_milvus_path.read_text()
 
     minio_ip = get_ip_by_rank("minio_registry.txt",0)
-    etcd0 = get_ip_by_rank("etcd_registry.txt",0)
-    etcd1 = get_ip_by_rank("etcd_registry.txt",1)
-    etcd2 = get_ip_by_rank("etcd_registry.txt",2)
     text = text.replace("<MINIO>",minio_ip)
-    text = text.replace("<ETCD0>",etcd0)
-    text = text.replace("<ETCD1>",etcd1)
-    text = text.replace("<ETCD2>",etcd2)
+
+    ETCD_MODE = get_etcd_mode()
     text = text.replace("<WAL>",wal)
+
+    if ETCD_MODE == "single":
+        etcd0 = get_ip_by_rank("etcd_registry.txt",0)
+        text = text.replace("<ETCD0>",etcd0)
+        text = text.replace(",<ETCD1>:2379","")
+        text = text.replace(",<ETCD2>:2379","")
+
+    else:
+        etcd0 = get_ip_by_rank("etcd_registry.txt",0)
+        etcd1 = get_ip_by_rank("etcd_registry.txt",1)
+        etcd2 = get_ip_by_rank("etcd_registry.txt",2)
+        text = text.replace("<ETCD0>",etcd0)
+        text = text.replace("<ETCD1>",etcd1)
+        text = text.replace("<ETCD2>",etcd2)
+    
     dist_milvus_path.write_text(text)
 
 elif mode in ["COORDINATOR", "STREAMING","QUERY","PROXY", "DATA"]:

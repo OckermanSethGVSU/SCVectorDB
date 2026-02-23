@@ -21,7 +21,7 @@ QUERY_BATCH_SIZE=(2048)
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
+queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
 
 
 ### Runtime variables ###
@@ -32,7 +32,8 @@ CORPUS_SIZE=10000000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=32
 BASE_DIR="$(pwd)" # directory you are running this script is the base for what the run dir will need to cd into
 WAL="woodpecker" # [woodpecker, default]
-MINIO_MODE="stripped" # [single, stripped]
+MINIO_MODE="single" # [single, stripped]
+ETCD_MODE="single" # [single, replicated]
 
 ### Path to embeddings
 # Aurora
@@ -50,7 +51,7 @@ ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
 
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
-MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
+MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 
 
 
@@ -70,11 +71,25 @@ do
 
 
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                        total_nodes=$((num_nodes + 4))
-                    else
-                        total_nodes=$((num_nodes + 1))
+                        # ---- MinIO constraint ----
+                        if [[ "$MINIO_MODE" == "stripped" ]]; then
+                            if [[ "$num_nodes" -lt 4 ]]; then
+                                echo "Error: MINIO_MODE=stripped requires at least 4 nodes (num_nodes=$num_nodes)." >&2
+                                exit 1
+                            fi
+                        fi
 
+                        # ---- ETCD constraint ----
+                        if [[ "$ETCD_MODE" == "replicated" ]]; then
+                            if [[ "$num_nodes" -lt 3 ]]; then
+                                echo "Error: ETCD_MODE=replicated requires at least 3 nodes (num_nodes=$num_nodes)." >&2
+                                exit 1
+                            fi
+                        fi
                     fi
+
+                    # add one to run client on
+                    total_nodes=$((num_nodes + 1))
                     DATE=$(date +"%Y-%m-%d_%T")
                     target_file="submit.sh"
                     
@@ -133,24 +148,12 @@ do
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
                         echo "WAL=${WAL}" >> $target_file
                         echo "MINIO_MODE=${MINIO_MODE}" >> $target_file
+                        echo "ETCD_MODE=${ETCD_MODE}" >> $target_file
                     fi
-
-                    # base="${target%%.*}"
-                    # dir="${task}_${base}_bs_${BATCH_SIZE}_c_${NClients}_${num_nodes}_${workers}_${DATE}"
-                    # echo "myDIR=${dir}" >> $target_file
-                    # echo "NClients=${NClients}" >> $target_file
-                    # echo "CORPUS_SIZE=${CORPUS_SIZE}" >> $target_file
-                    # # echo "SEARCH_THREADS=${SEARCH_THREADS}" >> $target_file
-                    # # echo "NUMBER_SEGEMENTS=${NUMBER_SEGEMENTS}" >> $target_file
-                    # # echo "backupDir=''" >> $target_file
-                    # echo "script=${target}" >> $target_file
-                    # # echo "" >> $target_file
 
                     echo "" >> $target_file
                     cat $task/main.sh >> $target_file
                     mkdir -p $dir
-
-                    
 
                     # Copy in mode specific files
                     if [[ "$MODE" == "STANDALONE" ]]; then
@@ -190,7 +193,7 @@ do
                     
                     chmod -R g+w $dir
                     cd $dir
-                    # qsub $target_file
+                    qsub $target_file
                     sleep 1
                     cd .. 
                 done

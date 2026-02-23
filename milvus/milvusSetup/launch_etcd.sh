@@ -38,22 +38,41 @@ else
     exit 1
 fi
 
-python3 net_mapping.py --rank $RANK --name etcd
-IP_ADDR=$(jq -r '.hsn0.ipv4[0]' etcd${RANK}.json)
+# Default to replicated if unset
+ETCD_MODE="${ETCD_MODE:-replicated}"
+
+python3 net_mapping.py --rank "$RANK" --name etcd
+IP_ADDR=$(jq -r '.hsn0.ipv4[0]' "etcd${RANK}.json")
 sleep $((RANK * 5))
 
 OUTPUT_FILE="etcd_registry.txt"
-# rank0 clears it at the beginning
-if [[ "$RANK" -eq 0 ]]; then
+
+# ----- Mode-dependent registry + expected size -----
+if [[ "$ETCD_MODE" == "single" ]]; then
+  # Only rank 0 participates / launches etcd
+  if [[ "$RANK" -ne 0 ]]; then
+    echo "ETCD_MODE=single: rank $RANK not launching etcd (rank0 only)."
+    exit 0
+  fi
+
+  # rank0 clears + writes its own entry
   rm -f "$OUTPUT_FILE"
+  echo "0,${IP_ADDR},2379" >> "$OUTPUT_FILE"
+
+  expected=1
+else
+  # replicated (current behavior): all ranks participate
+  if [[ "$RANK" -eq 0 ]]; then
+    rm -f "$OUTPUT_FILE"
+  fi
+
+  sleep $((RANK * 2))
+  echo "${RANK},${IP_ADDR},2379" >> "$OUTPUT_FILE"
+
+  expected=3
 fi
 
-# stagger writes slightly
-sleep $((RANK * 2))
-echo "${RANK},${IP_ADDR},2379" >> "$OUTPUT_FILE"
-
-# wait for all 3 entries
-expected=3
+# ----- Wait for expected entries -----
 for _ in $(seq 1 60); do
   lines=$(awk 'NF' "$OUTPUT_FILE" 2>/dev/null | wc -l || true)
   if [[ "$lines" -ge "$expected" ]]; then
@@ -70,22 +89,27 @@ if [[ "$lines" -lt "$expected" ]]; then
   exit 1
 fi
 
-# build initial cluster string (rank-sorted)
-IP0=$(awk -F, '$1==0{print $2}' "$OUTPUT_FILE")
-IP1=$(awk -F, '$1==1{print $2}' "$OUTPUT_FILE")
-IP2=$(awk -F, '$1==2{print $2}' "$OUTPUT_FILE")
-if [[ -z "$IP0" || -z "$IP1" || -z "$IP2" ]]; then
-  echo "Error: missing IPs in registry: IP0='$IP0' IP1='$IP1' IP2='$IP2'" >&2
-  cat "$OUTPUT_FILE" >&2
-  exit 1
+# ----- Build INITIAL_CLUSTER depending on mode -----
+if [[ "$ETCD_MODE" == "single" ]]; then
+  INITIAL_CLUSTER="etcd-0=http://${IP_ADDR}:2380"
+else
+  IP0=$(awk -F, '$1==0{print $2}' "$OUTPUT_FILE")
+  IP1=$(awk -F, '$1==1{print $2}' "$OUTPUT_FILE")
+  IP2=$(awk -F, '$1==2{print $2}' "$OUTPUT_FILE")
+  if [[ -z "$IP0" || -z "$IP1" || -z "$IP2" ]]; then
+    echo "Error: missing IPs in registry: IP0='$IP0' IP1='$IP1' IP2='$IP2'" >&2
+    cat "$OUTPUT_FILE" >&2
+    exit 1
+  fi
+  INITIAL_CLUSTER="etcd-0=http://${IP0}:2380,etcd-1=http://${IP1}:2380,etcd-2=http://${IP2}:2380"
 fi
-INITIAL_CLUSTER="etcd-0=http://${IP0}:2380,etcd-1=http://${IP1}:2380,etcd-2=http://${IP2}:2380"
 
-
-
+# ----- Per-rank volume -----
 ETCD_VOL="$ETCD_BASE/volumes/etcd_volume_${RANK}"
 rm -rf "$ETCD_VOL"
 mkdir -p "$ETCD_VOL"
+
+ETCD_NAME="etcd-${RANK}"
 
 apptainer exec --fakeroot \
   --writable-tmpfs \
@@ -95,15 +119,14 @@ apptainer exec --fakeroot \
   --env ETCD_AUTO_COMPACTION_MODE=revision \
   --env ETCD_AUTO_COMPACTION_RETENTION=1000 \
   --env ETCD_QUOTA_BACKEND_BYTES=4294967296 \
-  -B "$ETCD_VOL:/etcd"\
-   etcd_v3.5.18.sif \
+  -B "$ETCD_VOL:/etcd" \
+  etcd_v3.5.18.sif \
     etcd \
-        --name "etcd-${RANK}" \
-        --advertise-client-urls "http://${IP_ADDR}:2379" \
-        --listen-client-urls "http://0.0.0.0:2379" \
-        --initial-advertise-peer-urls "http://${IP_ADDR}:2380" \
-        --listen-peer-urls "http://0.0.0.0:2380" \
-        --initial-cluster "${INITIAL_CLUSTER}" \
-        --initial-cluster-state new \
-        --data-dir /etcd  > etcd${RANK}.out 2>&1 
-
+      --name "$ETCD_NAME" \
+      --advertise-client-urls "http://${IP_ADDR}:2379" \
+      --listen-client-urls "http://0.0.0.0:2379" \
+      --initial-advertise-peer-urls "http://${IP_ADDR}:2380" \
+      --listen-peer-urls "http://0.0.0.0:2380" \
+      --initial-cluster "${INITIAL_CLUSTER}" \
+      --initial-cluster-state new \
+      --data-dir /etcd  > "etcd${RANK}.out" 2>&1

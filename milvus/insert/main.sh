@@ -12,6 +12,7 @@ cd $BASE_DIR/$myDIR
 export BASE_DIR=$BASE_DIR
 export myDIR=$myDIR
 export RESULT_PATH=$BASE_DIR/$myDIR
+export ETCD_MODE=$ETCD_MODE
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -71,6 +72,7 @@ if [[ "$MODE" == "STANDALONE" ]]; then
 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
 
     export MINIO_MODE=$MINIO_MODE
+    export ETCD_MODE=$ETCD_MODE
     # BASE CONFIG
     # 0: client, proxy
     # 1: minio, etcd, cord
@@ -80,9 +82,18 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     
     mapfile -t NODES < <(awk '!seen[$0]++' "$PBS_NODEFILE")
     
-    # launch 3 etcd instances
-    HOSTS="${NODES[1]},${NODES[2]},${NODES[3]}"
-    mpirun -n 3 --ppn 1 --cpu-bind none --host $HOSTS ./launch_etcd.sh $STORAGE_MEDIUM &
+
+
+    if [[ "$ETCD_MODE" == "replicated" ]]; then
+        # launch 3 etcd instances
+        HOSTS="${NODES[1]},${NODES[2]},${NODES[3]}"
+        mpirun -n 3 --ppn 1 --cpu-bind none --host $HOSTS ./launch_etcd.sh $STORAGE_MEDIUM &
+
+    elif [[ "$ETCD_MODE" == "single" ]]; then
+        # Launch 1 etcd instance
+         mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_etcd.sh $STORAGE_MEDIUM &
+    fi
+    
     
     if [[ "$MINIO_MODE" == "stripped" ]]; then
         # Launch 4 Minio instances to use erasure coding
@@ -92,8 +103,10 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
 
     elif [[ "$MINIO_MODE" == "single" ]]; then
         # Launch 1 Minio instance
-        mpirun -n 1 --ppn 1 --cpu-bind none --host "${NODES[1]}"  ./launch_minio.sh lustre & # must be lustre for erasure coding to work
+        mpirun -n 1 --ppn 1 --cpu-bind none --host "${NODES[1]}"  ./launch_minio.sh memory &
     fi
+
+
     # setup ETCD/Minio info which all parts will need
     cp -r ${BASE_DIR}/cpuMilvus/configs/ .
     rm ./configs/milvus.yaml
