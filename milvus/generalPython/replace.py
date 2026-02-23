@@ -26,10 +26,11 @@ def get_ip_by_rank(filename: str, target_rank: int, timeout_s: float = 60.0,) ->
         with open(filename) as f:
             for line in f:
                 parts = line.strip().split(",")
-                if len(parts) != 3:
-                    continue  # skip malformed lines
-
-                rank, ip, _ = parts
+                
+                if len(parts) < 2:
+                    continue
+                rank = parts[0]
+                ip = parts[1]
                 if rank == target_rank:
                     return ip
         if time.time() >= deadline:
@@ -90,9 +91,9 @@ elif mode == "distributed":
         etcd0 = get_ip_by_rank("etcd_registry.txt",0)
         etcd1 = get_ip_by_rank("etcd_registry.txt",1)
         etcd2 = get_ip_by_rank("etcd_registry.txt",2)
-        text = text.replace("<ETCD0>",etcd0)
-        text = text.replace("<ETCD1>",etcd1)
-        text = text.replace("<ETCD2>",etcd2)
+        text = text.replace("<ETCD0>:2379",f"{etcd0}:2379")
+        text = text.replace("<ETCD1>:2379",f"{etcd1}:2479")
+        text = text.replace("<ETCD1>:2379",f"{etcd2}:2579")
     
     dist_milvus_path.write_text(text)
 

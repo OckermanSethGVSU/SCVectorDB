@@ -70,71 +70,86 @@ if [[ "$MODE" == "STANDALONE" ]]; then
 
 
 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
-
     export MINIO_MODE=$MINIO_MODE
-    export ETCD_MODE=$ETCD_MODE
-    # BASE CONFIG
-    # 0: client, proxy
-    # 1: minio, etcd, cord
-    # 2: minio, etcd
-    # 3: minio, etcd
-    # 4: minio, 
-    
+    export ETCD_MODE=$ETCD_MODE    
     mapfile -t NODES < <(awk '!seen[$0]++' "$PBS_NODEFILE")
-    
 
 
-    if [[ "$ETCD_MODE" == "replicated" ]]; then
-        # launch 3 etcd instances
-        HOSTS="${NODES[1]},${NODES[2]},${NODES[3]}"
-        mpirun -n 3 --ppn 1 --cpu-bind none --host $HOSTS ./launch_etcd.sh $STORAGE_MEDIUM &
+    # spreads etcd evenly on up to 3 nodes
+    if [[ "$ETCD_MODE" == "replicated" ]]; then        
+        ETCD_INSTANCES=3
+        TOTAL_NODES=${#NODES[@]}
+        if (( TOTAL_NODES < 2 )); then
+            echo "ERROR: Need at least 2 nodes (NODES[0] reserved) for ETCD_MODE=replicated"
+            exit 1
+        fi
 
+        ETCD_SPREAD=$((TOTAL_NODES - 1))
+        (( ETCD_SPREAD > 3 )) && ETCD_SPREAD=3
+
+        HOSTS=""
+        for ((i=1; i<=ETCD_SPREAD; i++)); do
+            HOSTS+="${HOSTS:+,}${NODES[$i]}"
+        done
+        
+        # enough ranks per node to fit 3 total
+        PPN=$(( (ETCD_INSTANCES + ETCD_SPREAD - 1) / ETCD_SPREAD ))
+        mpirun -n "$ETCD_INSTANCES" --ppn "$PPN" --cpu-bind none --host "$HOSTS" \
+            ./launch_etcd.sh "$STORAGE_MEDIUM" &
+
+    # Launch 1 etcd instance
     elif [[ "$ETCD_MODE" == "single" ]]; then
-        # Launch 1 etcd instance
-         mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_etcd.sh $STORAGE_MEDIUM &
+        mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_etcd.sh $STORAGE_MEDIUM &
     fi
     
-    
+    # spread MINIO on up to 4 nodes
     if [[ "$MINIO_MODE" == "stripped" ]]; then
-        # Launch 4 Minio instances to use erasure coding
-        HOSTS="${NODES[1]},${NODES[2]},${NODES[3]},${NODES[4]}"
-        mpirun -n 4 --ppn 1 --cpu-bind none --host "$HOSTS" \
-        ./launch_minio.sh lustre & # must be lustre for erasure coding to work
+        TOTAL_NODES=${#NODES[@]}
+        MINIO_INSTANCES="${MINIO_INSTANCES:-4}"
+        MINIO_SPREAD=$((TOTAL_NODES - 1))
+        
+        if [[ "$MINIO_SPREAD" -gt 4 ]]; then
+            MINIO_SPREAD=4
+        fi
+
+        HOSTS=""
+        for ((r=0; r<MINIO_INSTANCES; r++)); do
+            # skip index 0
+            node_idx=$(( 1 + (r % MINIO_SPREAD) ))
+            host="${NODES[$node_idx]}"
+            HOSTS+="${HOSTS:+,}${host}"
+        done
+        PPN=$(( (MINIO_INSTANCES + MINIO_SPREAD - 1) / MINIO_SPREAD ))
+        
+        mpirun -n 4 --ppn $PPN --cpu-bind none --host "$HOSTS" \
+        ./launch_minio.sh lustre & # must be lustre for erasure coding to work: TODO test DAOS
 
     elif [[ "$MINIO_MODE" == "single" ]]; then
         # Launch 1 Minio instance
         mpirun -n 1 --ppn 1 --cpu-bind none --host "${NODES[1]}"  ./launch_minio.sh memory &
     fi
 
-
+    
     # setup ETCD/Minio info which all parts will need
     cp -r ${BASE_DIR}/cpuMilvus/configs/ .
     rm ./configs/milvus.yaml
     python3 replace.py --mode distributed --wal $WAL
     
+
     # Launch cordinator
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM COORDINATOR &
     
-    
     # Launch streaming nodes
-    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[2]} ./launch_milvus_part.sh $STORAGE_MEDIUM STREAMING &
+    mpirun -n 16 --ppn 4 --cpu-bind none --host ${NODES[1]},${NODES[2]},${NODES[3]},${NODES[4]} ./launch_milvus_part.sh $STORAGE_MEDIUM STREAMING &
 
     # Launch query nodes
-    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[3]} ./launch_milvus_part.sh $STORAGE_MEDIUM QUERY &
+    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM QUERY &
 
     # Launch data nodes
-    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[4]} ./launch_milvus_part.sh $STORAGE_MEDIUM DATA &
+    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM DATA &
     
     # Launch proxy
-    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[0]} ./launch_milvus_part.sh $STORAGE_MEDIUM PROXY &
-
-    # BASE CONFIG
-    # 0: client, proxy
-    # 1: minio, etcd, cord
-    # 2: minio, etcd, streaming
-    # 3: minio, etcd, query
-    # 4: minio, data
-
+    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM PROXY &
 
     # verify milvus is running
     TARGET="./workerOut/proxy0_running.txt"

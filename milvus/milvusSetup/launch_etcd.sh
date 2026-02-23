@@ -38,42 +38,54 @@ else
     exit 1
 fi
 
-# Default to replicated if unset
-ETCD_MODE="${ETCD_MODE:-replicated}"
+# ---- Per-rank ports to avoid collisions when colocated ----
+CLIENT_PORT=$((2379 + 100 * RANK))
+PEER_PORT=$((2380 + 100 * RANK))
 
+# ---- Discover per-rank IP ----
 python3 net_mapping.py --rank "$RANK" --name etcd
 IP_ADDR=$(jq -r '.hsn0.ipv4[0]' "etcd${RANK}.json")
-sleep $((RANK * 5))
+if [[ -z "$IP_ADDR" || "$IP_ADDR" == "null" ]]; then
+  echo "ERROR: Failed to extract IP for rank=$RANK from etcd${RANK}.json" >&2
+  cat "etcd${RANK}.json" >&2 || true
+  exit 1
+fi
+
+# slight stagger
+sleep $((RANK * 2))
 
 OUTPUT_FILE="etcd_registry.txt"
 
 # ----- Mode-dependent registry + expected size -----
 if [[ "$ETCD_MODE" == "single" ]]; then
-  # Only rank 0 participates / launches etcd
   if [[ "$RANK" -ne 0 ]]; then
     echo "ETCD_MODE=single: rank $RANK not launching etcd (rank0 only)."
     exit 0
   fi
 
-  # rank0 clears + writes its own entry
   rm -f "$OUTPUT_FILE"
-  echo "0,${IP_ADDR},2379" >> "$OUTPUT_FILE"
-
+  echo "0,${IP_ADDR},${CLIENT_PORT},${PEER_PORT}" >> "$OUTPUT_FILE"
   expected=1
+
 else
-  # replicated (current behavior): all ranks participate
+  # replicated: ranks 0..2 participate. If more ranks were launched accidentally, ignore them.
+  if (( RANK > 2 )); then
+    echo "ETCD_MODE=replicated: rank $RANK > 2 ignoring (only ranks 0..2 launch etcd)."
+    exit 0
+  fi
+
   if [[ "$RANK" -eq 0 ]]; then
     rm -f "$OUTPUT_FILE"
   fi
 
-  sleep $((RANK * 2))
-  echo "${RANK},${IP_ADDR},2379" >> "$OUTPUT_FILE"
-
+  # small stagger to reduce write races
+  sleep $((RANK * 1))
+  echo "${RANK},${IP_ADDR},${CLIENT_PORT},${PEER_PORT}" >> "$OUTPUT_FILE"
   expected=3
 fi
 
 # ----- Wait for expected entries -----
-for _ in $(seq 1 60); do
+for _ in $(seq 1 90); do
   lines=$(awk 'NF' "$OUTPUT_FILE" 2>/dev/null | wc -l || true)
   if [[ "$lines" -ge "$expected" ]]; then
     break
@@ -83,7 +95,7 @@ done
 
 lines=$(awk 'NF' "$OUTPUT_FILE" 2>/dev/null | wc -l || true)
 if [[ "$lines" -lt "$expected" ]]; then
-  echo "Error: timed out waiting for $expected etcd registry entries; saw $lines" >&2
+  echo "ERROR: timed out waiting for $expected etcd registry entries; saw $lines" >&2
   echo "Current $OUTPUT_FILE:" >&2
   cat "$OUTPUT_FILE" >&2 || true
   exit 1
@@ -91,17 +103,24 @@ fi
 
 # ----- Build INITIAL_CLUSTER depending on mode -----
 if [[ "$ETCD_MODE" == "single" ]]; then
-  INITIAL_CLUSTER="etcd-0=http://${IP_ADDR}:2380"
+  INITIAL_CLUSTER="etcd-0=http://${IP_ADDR}:${PEER_PORT}"
 else
+  # Pull rank->ip,peer_port
   IP0=$(awk -F, '$1==0{print $2}' "$OUTPUT_FILE")
+  PP0=$(awk -F, '$1==0{print $4}' "$OUTPUT_FILE")
   IP1=$(awk -F, '$1==1{print $2}' "$OUTPUT_FILE")
+  PP1=$(awk -F, '$1==1{print $4}' "$OUTPUT_FILE")
   IP2=$(awk -F, '$1==2{print $2}' "$OUTPUT_FILE")
-  if [[ -z "$IP0" || -z "$IP1" || -z "$IP2" ]]; then
-    echo "Error: missing IPs in registry: IP0='$IP0' IP1='$IP1' IP2='$IP2'" >&2
-    cat "$OUTPUT_FILE" >&2
+  PP2=$(awk -F, '$1==2{print $4}' "$OUTPUT_FILE")
+
+  if [[ -z "$IP0" || -z "$PP0" || -z "$IP1" || -z "$PP1" || -z "$IP2" || -z "$PP2" ]]; then
+    echo "ERROR: missing entries in registry:" >&2
+    echo "  r0 ip='$IP0' peer='$PP0'  r1 ip='$IP1' peer='$PP1'  r2 ip='$IP2' peer='$PP2'" >&2
+    cat "$OUTPUT_FILE" >&2 || true
     exit 1
   fi
-  INITIAL_CLUSTER="etcd-0=http://${IP0}:2380,etcd-1=http://${IP1}:2380,etcd-2=http://${IP2}:2380"
+
+  INITIAL_CLUSTER="etcd-0=http://${IP0}:${PP0},etcd-1=http://${IP1}:${PP1},etcd-2=http://${IP2}:${PP2}"
 fi
 
 # ----- Per-rank volume -----
@@ -111,22 +130,24 @@ mkdir -p "$ETCD_VOL"
 
 ETCD_NAME="etcd-${RANK}"
 
+# ---- Launch etcd ----
 apptainer exec --fakeroot \
   --writable-tmpfs \
   --env http_proxy= --env https_proxy= --env HTTP_PROXY= --env HTTPS_PROXY= \
   --env NO_PROXY= --env no_proxy= \
-  --env MILVUSCONF=/milvus/configs/ \
   --env ETCD_AUTO_COMPACTION_MODE=revision \
   --env ETCD_AUTO_COMPACTION_RETENTION=1000 \
   --env ETCD_QUOTA_BACKEND_BYTES=4294967296 \
   -B "$ETCD_VOL:/etcd" \
+  "${APPTAINER_ARGS[@]}" \
   etcd_v3.5.18.sif \
     etcd \
       --name "$ETCD_NAME" \
-      --advertise-client-urls "http://${IP_ADDR}:2379" \
-      --listen-client-urls "http://0.0.0.0:2379" \
-      --initial-advertise-peer-urls "http://${IP_ADDR}:2380" \
-      --listen-peer-urls "http://0.0.0.0:2380" \
+      --advertise-client-urls "http://${IP_ADDR}:${CLIENT_PORT}" \
+      --listen-client-urls "http://0.0.0.0:${CLIENT_PORT}" \
+      --initial-advertise-peer-urls "http://${IP_ADDR}:${PEER_PORT}" \
+      --listen-peer-urls "http://0.0.0.0:${PEER_PORT}" \
       --initial-cluster "${INITIAL_CLUSTER}" \
       --initial-cluster-state new \
-      --data-dir /etcd  > "etcd${RANK}.out" 2>&1
+      --data-dir /etcd \
+  > "etcd${RANK}.out" 2>&1

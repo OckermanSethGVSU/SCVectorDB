@@ -9,7 +9,8 @@ RANK="${PMI_RANK:-${PMIX_RANK:-${OMPI_COMM_WORLD_RANK:-}}}"
 if [[ "$STORAGE_MEDIUM" == "memory" ]]; then
     TARGET_BASE="/dev/shm/"
     
-    (( RANK == 0 )) && echo "Minio using memory for persistence"
+    # (( RANK == 0 )) && echo "Minio using memory for persistence"
+    echo "Minio ${RANK} using memory for persistence"
 
 DAOS_ARGS=()
 elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
@@ -27,6 +28,8 @@ elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
     TARGET_BASE="./milvusDir"
 
     (( RANK == 0 )) && echo "Minio using lustre for persistence"
+    echo "Minio ${RANK} using lustre for persistence"
+
 elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
     TARGET_BASE="/local/scratch/milvusDir"
 
@@ -52,23 +55,26 @@ if [[ "$MINIO_MODE" == "stripped" ]]; then
         sleep 1
     done
 
-    MY_IP_ADDR=$(jq -er '.hsn0.ipv4[0]' "minio${RANK}.json")
+    MY_IP_ADDR=$(jq -er ".hsn${RANK}.ipv4[0]" "minio${RANK}.json")
 
     sleep $((RANK * 5))
+    DATA_PORT=$((9000 + 100 * RANK))
+    CONSOLE_PORT=$((9001 + 100 * RANK))
     OUTPUT_FILE="minio_registry.txt"
-    echo "${RANK},${MY_IP_ADDR},9000" >> $OUTPUT_FILE
+    echo "${RANK},${MY_IP_ADDR},${DATA_PORT}" >> $OUTPUT_FILE
 
 
     IP_ADDR0=$(jq -er '.hsn0.ipv4[0]' minio0.json)
-    IP_ADDR1=$(jq -er '.hsn0.ipv4[0]' minio1.json)
-    IP_ADDR2=$(jq -er '.hsn0.ipv4[0]' minio2.json)
-    IP_ADDR3=$(jq -er '.hsn0.ipv4[0]' minio3.json)
+    IP_ADDR1=$(jq -er '.hsn1.ipv4[0]' minio1.json)
+    IP_ADDR2=$(jq -er '.hsn2.ipv4[0]' minio2.json)
+    IP_ADDR3=$(jq -er '.hsn3.ipv4[0]' minio3.json)
     ENDPOINTS=(
-    "http://${IP_ADDR0}:9000/data"
-    "http://${IP_ADDR1}:9000/data"
-    "http://${IP_ADDR2}:9000/data"
-    "http://${IP_ADDR3}:9000/data"
+    "http://${IP_ADDR0}:9000/data0"
+    "http://${IP_ADDR1}:9100/data1"
+    "http://${IP_ADDR2}:9200/data2"
+    "http://${IP_ADDR3}:9300/data3"
     )
+    
 
     rm -fr $TARGET_BASE/volumes/minio_volume${RANK}
     mkdir -p $TARGET_BASE/volumes/minio_volume${RANK}
@@ -78,10 +84,10 @@ if [[ "$MINIO_MODE" == "stripped" ]]; then
     --env NO_PROXY= --env no_proxy= \
     --env MINIO_ROOT_USER=minioadmin \
     --env MINIO_ROOT_PASSWORD=minioadmin \
-    -B $TARGET_BASE/volumes/minio_volume${RANK}:/data \
+    -B $TARGET_BASE/volumes/minio_volume${RANK}:/data${RANK} \
     minio.sif \
     minio server "${ENDPOINTS[@]}" \
-    --address ${MY_IP_ADDR}:9000 --console-address ${MY_IP_ADDR}:9001 > minio${RANK}.out 2>&1
+    --address ${MY_IP_ADDR}:${DATA_PORT} --console-address ${MY_IP_ADDR}:${CONSOLE_PORT} > minio${RANK}.out 2>&1
 
 elif [[ "$MINIO_MODE" == "single" ]]; then
     MY_IP_ADDR=$(jq -er '.hsn0.ipv4[0]' "minio${RANK}.json")
@@ -96,7 +102,7 @@ elif [[ "$MINIO_MODE" == "single" ]]; then
     --env NO_PROXY= --env no_proxy= \
     --env MINIO_ROOT_USER=minioadmin \
     --env MINIO_ROOT_PASSWORD=minioadmin \
-    -B $TARGET_BASE/volumes/minio_volume${RANK}:/data \
+    -B $TARGET_BASE/volumes/minio_volume${RANK}:/data$ \
     minio.sif \
     minio server /data \
     --address ${MY_IP_ADDR}:9000 --console-address ${MY_IP_ADDR}:9001 > minio${RANK}.out 2>&1

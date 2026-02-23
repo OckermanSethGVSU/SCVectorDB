@@ -9,7 +9,7 @@ fi
 
 
 ### Loop variables ###
-NODES=(1)
+NODES=(4)
 WORKERS_PER_NODE=(1)
 CORES=(112)
 
@@ -21,7 +21,7 @@ QUERY_BATCH_SIZE=(2048)
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
+queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
 
 
 ### Runtime variables ###
@@ -32,8 +32,8 @@ CORPUS_SIZE=10000000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=32
 BASE_DIR="$(pwd)" # directory you are running this script is the base for what the run dir will need to cd into
 WAL="woodpecker" # [woodpecker, default]
-MINIO_MODE="single" # [single, stripped]
-ETCD_MODE="single" # [single, replicated]
+MINIO_MODE="stripped" # [single, stripped]
+ETCD_MODE="replicated" # [single, replicated]
 
 ### Path to embeddings
 # Aurora
@@ -51,7 +51,7 @@ ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
 
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
-MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
+MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
 
 
 
@@ -68,25 +68,6 @@ do
             do 
                 for numCores in "${CORES[@]}"
                 do 
-
-
-                    if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                        # ---- MinIO constraint ----
-                        if [[ "$MINIO_MODE" == "stripped" ]]; then
-                            if [[ "$num_nodes" -lt 4 ]]; then
-                                echo "Error: MINIO_MODE=stripped requires at least 4 nodes (num_nodes=$num_nodes)." >&2
-                                exit 1
-                            fi
-                        fi
-
-                        # ---- ETCD constraint ----
-                        if [[ "$ETCD_MODE" == "replicated" ]]; then
-                            if [[ "$num_nodes" -lt 3 ]]; then
-                                echo "Error: ETCD_MODE=replicated requires at least 3 nodes (num_nodes=$num_nodes)." >&2
-                                exit 1
-                            fi
-                        fi
-                    fi
 
                     # add one to run client on
                     total_nodes=$((num_nodes + 1))
