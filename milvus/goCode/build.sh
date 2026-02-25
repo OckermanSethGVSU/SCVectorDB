@@ -32,11 +32,11 @@ echo "Output binary: $DIR/$BIN_NAME"
 if [ ! -f "go.mod" ]; then
     echo "No go.mod found. Initializing module..."
     go mod init "$BIN_NAME"
+    # Download and clean dependencies
+    echo "Tidying modules..."
+    go mod tidy
 fi
 
-# Download and clean dependencies
-echo "Tidying modules..."
-go mod tidy
 
 # Build entire module (recommended over building main.go explicitly)
 go build -o "$BIN_NAME"
