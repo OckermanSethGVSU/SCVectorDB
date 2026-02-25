@@ -1,4 +1,48 @@
 
+
+launch_role() {
+    local role="$1"                  # e.g., STREAMING, QUERY, DATA
+    local total_ranks="$2"           # e.g., $STREAMING_NODES
+    local ranks_per_node="$3"        # e.g., $STREAMING_NODES_PER_CN
+    local storage_medium="$4"        # e.g., $STORAGE_MEDIUM
+    local script="$5"                # e.g., ./launch_milvus_part.sh
+
+    if (( total_ranks <= 0 || ranks_per_node <= 0 )); then
+        echo "ERROR [$role]: ranks and ranks_per_node must be > 0" >&2
+        exit 1
+    fi
+
+    # ceil(total_ranks / ranks_per_node)
+    local nodes_needed=$(( (total_ranks + ranks_per_node - 1) / ranks_per_node ))
+
+    # NODES[0] is reserved
+    local available=$(( ${#NODES[@]} - 1 ))
+
+    if (( nodes_needed > available )); then
+        echo "ERROR [$role]: need $nodes_needed nodes but only $available available (excluding NODES[0])" >&2
+        exit 1
+    fi
+
+    # Build hostlist from NODES[1..nodes_needed]
+    local hostlist=""
+    for ((i=1; i<=nodes_needed; i++)); do
+        hostlist+="${NODES[i]},"
+    done
+    hostlist="${hostlist%,}"
+
+    echo "Launching $role:"
+    echo "  total ranks      = $total_ranks"
+    echo "  ranks per node   = $ranks_per_node"
+    echo "  nodes needed     = $nodes_needed"
+    echo "  hosts            = $hostlist"
+
+    mpirun -n "$total_ranks" \
+        --ppn "$ranks_per_node" \
+        --cpu-bind none \
+        --host "$hostlist" \
+        "$script" "$storage_medium" "$role" &
+}
+
 PYTHON_ENV_VARS=(
     NO_PROXY=""
     no_proxy=""
@@ -55,7 +99,7 @@ fi
 
 if [[ "$MODE" == "STANDALONE" ]]; then
     second_node=$(sed -n '2p' "$PBS_NODEFILE")
-    mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $USEPERF $PLATFORM STANDALONE &
+    mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $USEPERF $PLATFORM STANDALONE $WAL &
     # launch profiling on worker and client nodes
     mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node python3 profile.py worker_0 $PLATFORM &
     python3 profile.py client_node $PLATFORM & 
@@ -140,7 +184,8 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM COORDINATOR &
     
     # Launch streaming nodes
-    mpirun -n 2 --ppn 2 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM STREAMING &
+    # mpirun -n $STREAMING_NODES --ppn $STREAMING_NODES_PER_CN --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM STREAMING &
+    launch_role STREAMING "$STREAMING_NODES" "$STREAMING_NODES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
 
     # Launch query nodes
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM QUERY &
@@ -200,6 +245,6 @@ if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
     DAOS_CONT="vectorDBTesting"
     rm -r /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
-elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
+elif [[ "$STORAGE_MEDIUM" == "lustre" || "$MODE" == "DISTRIBUTED" ]]; then
     rm -r ./milvusDir/
 fi

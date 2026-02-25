@@ -86,6 +86,7 @@ if mode == "standalone":
 
     # Replace all occurrences
     text = text.replace("<HNS0>", replacement)
+    text = text.replace("<MQ>", wal)
 
     # Write back in place
     milvus_path.write_text(text)

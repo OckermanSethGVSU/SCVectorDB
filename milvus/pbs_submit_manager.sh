@@ -14,17 +14,17 @@ WORKERS_PER_NODE=(1)
 CORES=(112)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-UPLOAD_BATCH_SIZE=(512) 
+UPLOAD_BATCH_SIZE=(2048) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
+queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
 
 
-### Runtime variables ###
+### General runtime variables ###
 task="insert" # [insert]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
@@ -32,8 +32,6 @@ CORPUS_SIZE=10000000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=32
 BASE_DIR="$(pwd)" # directory you are running this script is the base for what the run dir will need to cd into
 WAL="woodpecker" # [woodpecker, default]
-MINIO_MODE="stripped" # [single, stripped]
-ETCD_MODE="replicated" # [single, replicated]
 
 ### Path to embeddings
 # Aurora
@@ -51,7 +49,13 @@ ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
 
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
-MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
+MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
+
+### Distributed Variables
+MINIO_MODE="stripped" # [single, stripped]
+ETCD_MODE="replicated" # [single, replicated]
+STREAMING_NODES=1
+STREAMING_NODES_PER_CN=1
 
 
 
@@ -103,7 +107,12 @@ do
                     
                     DATE=$(date +"%Y-%m-%d_%H_%M_%S")
                     if [[ "$task" == "insert" ]]; then
-                        dir="${task}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_C${UPLOAD_CLIENTS_PER_WORKER}_uploadBS${upload_bs}_${DATE}"
+
+                        if [[ "$MODE" == "DISTRIBUTED" ]]; then
+                            dir="${task}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_C${UPLOAD_CLIENTS_PER_WORKER}_uploadBS${upload_bs}_SN${STREAMING_NODES}_${DATE}"
+                        else
+                            dir="${task}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_C${UPLOAD_CLIENTS_PER_WORKER}_uploadBS${upload_bs}_${DATE}"
+                        fi
                     elif [[ "$task" == "aurora" ]]; then
                         echo "Running on Aurora"
                     else
@@ -125,11 +134,13 @@ do
                     echo "DATA_FILEPATH=${DATA_FILEPATH}" >> $target_file
                     echo "PLATFORM=${PLATFORM}" >> $target_file
                     echo "MODE=${MODE}" >> $target_file
+                    echo "WAL=${WAL}" >> $target_file
 
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                        echo "WAL=${WAL}" >> $target_file
                         echo "MINIO_MODE=${MINIO_MODE}" >> $target_file
                         echo "ETCD_MODE=${ETCD_MODE}" >> $target_file
+                        echo "STREAMING_NODES=${STREAMING_NODES}" >> $target_file
+                        echo "STREAMING_NODES_PER_CN=${STREAMING_NODES_PER_CN}" >> $target_file
                     fi
 
                     echo "" >> $target_file

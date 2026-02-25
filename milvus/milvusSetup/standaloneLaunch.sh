@@ -6,6 +6,7 @@ STORAGE_MEDIUM=${2:?Usage: $0 <rank> <storage_medium>}
 USEPERF=${3:?Usage: $0 <rank> <storage_medium> <perf>}
 PLATFORM=${4:?Usage: $0 <rank> <storage_medium> <perf> <platform>}
 TYPE=${5:?Usage: $0 <rank> <storage_medium> <perf> <platform> <type>}
+WAL=${6:?Usage: $0 <rank> <storage_medium> <perf> <platform> <type> <WAL>}
 
 
 ETCD_FLAG="--env ETCD_DATA_DIR=/var/lib/milvus/etcd"
@@ -75,7 +76,7 @@ auto-compaction-mode: revision
 auto-compaction-retention: '1000'
 EOF
 
-python3 replace.py --mode standalone
+python3 replace.py --mode standalone --wal $WAL
 cp -r ./configs/ $TARGET_BASE/
 #####
 
