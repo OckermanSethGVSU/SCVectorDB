@@ -140,7 +140,7 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM COORDINATOR &
     
     # Launch streaming nodes
-    mpirun -n 16 --ppn 4 --cpu-bind none --host ${NODES[1]},${NODES[2]},${NODES[3]},${NODES[4]} ./launch_milvus_part.sh $STORAGE_MEDIUM STREAMING &
+    mpirun -n 2 --ppn 2 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM STREAMING &
 
     # Launch query nodes
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM QUERY &

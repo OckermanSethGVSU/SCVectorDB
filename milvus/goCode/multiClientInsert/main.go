@@ -190,7 +190,7 @@ func clientWorker(
 	BATCH_SIZE, err := strconv.Atoi(batchSizeStr)
 
 
-	url := fmt.Sprintf("http://%s:19530", MILVUS_HOST)
+	url := fmt.Sprintf("http://%s:20001", MILVUS_HOST)
 	mclient, err := milvusclient.New(context.Background(), &milvusclient.ClientConfig{
 		Address: url,
 	})

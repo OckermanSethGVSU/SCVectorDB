@@ -32,7 +32,7 @@ MILVUS_HOST = read_ip_from_file("worker.ip")
 
 
 MILVUS_HEALTH_PORT = int(os.getenv("MILVUS_HEALTH_PORT", "9091"))
-MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "19530"))
+MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "20001"))
 MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "root:Milvus")
 
 wait_for_milvus(MILVUS_HOST, MILVUS_HEALTH_PORT)
@@ -117,13 +117,32 @@ index_params.add_index(
 #     }
 # )
 
+
+from pathlib import Path
+def get_streaming_count(filename="STREAMING_registry.txt"):
+    path = Path(filename)
+
+    if not path.exists():
+        return 1
+
+    with path.open("r") as f:
+        line_count = sum(1 for _ in f)
+
+    return line_count
+
+
+# Example usage
+streaming_value = get_streaming_count()
+
 client.create_collection(
     collection_name=collection_name,
     schema=schema,
-    index_params=index_params
+    index_params=index_params,
+    num_shards=streaming_value
 )
 
 
 print(f"Indexes for {collection_name}: ", client.list_indexes(collection_name), flush=True)
 
 print(client.describe_index(collection_name,'vector'), flush=True)
+print("Shards: ", streaming_value, flush=True)

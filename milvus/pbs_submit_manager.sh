@@ -9,7 +9,7 @@ fi
 
 
 ### Loop variables ###
-NODES=(4)
+NODES=(1)
 WORKERS_PER_NODE=(1)
 CORES=(112)
 
