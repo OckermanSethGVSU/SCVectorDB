@@ -208,6 +208,10 @@ func clientWorker(
 	globalOpt := milvusclient.NewQueryOption(collectionName).
 		WithIDs(column.NewColumnInt64("id", []int64{lastID})).
 		WithConsistencyLevel(entity.ClStrong)
+	
+	localOpt := milvusclient.NewQueryOption(collectionName).
+		WithIDs(column.NewColumnInt64("id", []int64{localLastID})).
+		WithConsistencyLevel(entity.ClStrong)
 
 	globalClientRank := workerRank*clientsPerWorker + clientID
 
@@ -263,20 +267,46 @@ func clientWorker(
 	// Wait for everyone to finish inserting
 	barrier.Wait()
 
-	localExists := waitForLocalLastIDSearchable(
-		ctx, mclient, collectionName, idField, localLastID,
-	)
-	if !localExists {
-		log.Printf("Timed out waiting for local last ID visibility worker=%d client=%d lastID=%d",
-			workerRank, clientID, localLastID)
+	// Insert a final value so we can measure when it has been processed
+	sentinelID := int64(totalRows) // unique
+	if globalClientRank == 0 {
+		vec := make([]float32, mcols)
+		_, err := mclient.Insert(
+			ctx,
+			milvusclient.NewColumnBasedInsertOption(collectionName).
+				WithInt64Column(idField, []int64{sentinelID}).
+				WithFloatVectorColumn(vectorField, mcols, [][]float32{vec}),
+		)
+		if err != nil {
+			log.Printf("sentinel insert failed: %v", err)
+		}
+
+		ok := waitForLocalLastIDSearchable(ctx, mclient, collectionName, idField, sentinelID)
+		if !ok {
+			log.Printf("Timed out waiting for sentinel visibility id=%d", sentinelID)
+		}
+		sharedTiming.MarkSearchable()
 	}
-	sharedTiming.MarkClientReady()
 
 	sharedTiming.WaitSearchable()
 	searchableAtClient := time.Now()
+
 	barrier.Wait()
 
-	// --- per-client global sanity check ---
+	// local sanity (skip if no rows)
+	localExists := true
+	if localRows > 0 {
+		localRes, localErr := mclient.Get(ctx, localOpt)
+		localExists = (localErr == nil && localRes.ResultCount == 1)
+		if localErr != nil {
+			log.Printf("Local sanity check failed worker=%d client=%d localLastID=%d: %v",
+				workerRank, clientID, localLastID, localErr)
+		}
+	} else {
+		localExists = true // or false / or treat as N/A
+	}
+
+	// global sanity (spot check)
 	globalRes, globalErr := mclient.Get(ctx, globalOpt)
 	globalExists := (globalErr == nil && globalRes.ResultCount == 1)
 	if globalErr != nil {
