@@ -24,10 +24,13 @@ elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
         --bind "/home/treewalker/daos_lib64:/opt/daos/lib64:ro"
         --env LD_LIBRARY_PATH=/opt/daos/lib64
     )
-    ETCD_FLAG="--env ETCD_DATA_DIR=$RESULT_PATH/var/lib/milvus/etcd"
+    ETCD_FLAG="--env ETCD_DATA_DIR=/dev/shm/var/lib/milvus/etcd"
+    # ETCD_FLAG="--env     ETCD_FLAG="--env ETCD_DATA_DIR=/dev/shm/var/lib/milvus/etcd"
+
 
 elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
     TARGET_BASE="./milvusDir"
+    ETCD_FLAG="--env ETCD_DATA_DIR=/dev/shm/var/lib/milvus/etcd"
     (( RANK == 0 )) && echo "Using lustre for persistence"
 elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
     TARGET_BASE="/local/scratch/milvusDir"
