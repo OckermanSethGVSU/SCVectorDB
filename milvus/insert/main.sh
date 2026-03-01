@@ -81,7 +81,6 @@ source $ENV_PATH/bin/activate
 
 
 
-TOTAL=$((NODES * WORKERS_PER_NODE))
 cat $PBS_NODEFILE > all_nodefile.txt
 
 
@@ -201,7 +200,7 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     while [ ! -e "$TARGET" ]; do
     sleep 0.1
     done
-    IP_ADDR=$(jq -r '.hsn0.ipv4[0]' PROXY0.json)
+    IP_ADDR=$(jq -r '.hsn0.ipv4[0]' PROXY/PROXY0.json)
     echo $IP_ADDR > worker.ip
     env "${PYTHON_ENV_VARS[@]}" python3 poll.py
 fi
@@ -213,8 +212,8 @@ env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
 
 export MILVUS_HOST=${IP_ADDR}
 export CORPUS_SIZE=$CORPUS_SIZE
-export UPLOAD_CLIENTS_PER_WORKER=$UPLOAD_CLIENTS_PER_WORKER
-export N_WORKERS=$TOTAL
+export NUM_PROXIES=$NUM_PROXIES
+export UPLOAD_CLIENTS_PER_PROXY=$UPLOAD_CLIENTS_PER_PROXY
 export DATA_FILEPATH=$DATA_FILEPATH
 export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
 touch ./workerOut/workflow_start.txt

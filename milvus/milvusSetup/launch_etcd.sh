@@ -45,6 +45,9 @@ PEER_PORT=$((2380 + 100 * RANK))
 # ---- Discover per-rank IP ----
 python3 net_mapping.py --rank "$RANK" --name etcd
 IP_ADDR=$(jq -r '.hsn0.ipv4[0]' "etcd${RANK}.json")
+mkdir -p etcdFiles/
+mv etcd${RANK}.json etcdFiles/
+
 if [[ -z "$IP_ADDR" || "$IP_ADDR" == "null" ]]; then
   echo "ERROR: Failed to extract IP for rank=$RANK from etcd${RANK}.json" >&2
   cat "etcd${RANK}.json" >&2 || true
@@ -127,8 +130,9 @@ fi
 ETCD_VOL="$ETCD_BASE/volumes/etcd_volume_${RANK}"
 rm -rf "$ETCD_VOL"
 mkdir -p "$ETCD_VOL"
-
 ETCD_NAME="etcd-${RANK}"
+
+
 
 # ---- Launch etcd ----
 apptainer exec --fakeroot \
@@ -150,4 +154,4 @@ apptainer exec --fakeroot \
       --initial-cluster "${INITIAL_CLUSTER}" \
       --initial-cluster-state new \
       --data-dir /etcd \
-  > "etcd${RANK}.out" 2>&1
+  > "etcdFiles/etcd${RANK}.out" 2>&1

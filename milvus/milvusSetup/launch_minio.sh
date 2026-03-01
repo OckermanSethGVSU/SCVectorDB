@@ -9,8 +9,7 @@ RANK="${PMI_RANK:-${PMIX_RANK:-${OMPI_COMM_WORLD_RANK:-}}}"
 if [[ "$STORAGE_MEDIUM" == "memory" ]]; then
     TARGET_BASE="/dev/shm/"
     
-    # (( RANK == 0 )) && echo "Minio using memory for persistence"
-    echo "Minio ${RANK} using memory for persistence"
+    (( RANK == 0 )) && echo "Minio using memory for persistence"
 
 DAOS_ARGS=()
 elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
@@ -28,7 +27,6 @@ elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
     TARGET_BASE="./milvusDir"
 
     (( RANK == 0 )) && echo "Minio using lustre for persistence"
-    echo "Minio ${RANK} using lustre for persistence"
 
 elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
     TARGET_BASE="/local/scratch/milvusDir"
@@ -42,7 +40,9 @@ fi
 
 
 python3 net_mapping.py --rank ${RANK} --name minio
+mkdir -p minioFiles/
 sleep 3
+
 
 if [[ "$MINIO_MODE" == "stripped" ]]; then
 
@@ -56,7 +56,7 @@ if [[ "$MINIO_MODE" == "stripped" ]]; then
     done
 
     MY_IP_ADDR=$(jq -er ".hsn${RANK}.ipv4[0]" "minio${RANK}.json")
-
+    
     sleep $((RANK * 5))
     DATA_PORT=$((9000 + 100 * RANK))
     CONSOLE_PORT=$((9001 + 100 * RANK))
@@ -76,6 +76,12 @@ if [[ "$MINIO_MODE" == "stripped" ]]; then
     )
     
 
+    if (( RANK == 3 )); then
+        mv minio*.json minioFiles/
+    fi
+
+
+
     rm -fr $TARGET_BASE/volumes/minio_volume${RANK}
     mkdir -p $TARGET_BASE/volumes/minio_volume${RANK}
     apptainer exec --fakeroot \
@@ -87,7 +93,7 @@ if [[ "$MINIO_MODE" == "stripped" ]]; then
     -B $TARGET_BASE/volumes/minio_volume${RANK}:/data${RANK} \
     minio.sif \
     minio server "${ENDPOINTS[@]}" \
-    --address ${MY_IP_ADDR}:${DATA_PORT} --console-address ${MY_IP_ADDR}:${CONSOLE_PORT} > minio${RANK}.out 2>&1
+    --address ${MY_IP_ADDR}:${DATA_PORT} --console-address ${MY_IP_ADDR}:${CONSOLE_PORT} > ./minioFiles/minio${RANK}.out 2>&1
 
 elif [[ "$MINIO_MODE" == "single" ]]; then
     MY_IP_ADDR=$(jq -er '.hsn0.ipv4[0]' "minio${RANK}.json")

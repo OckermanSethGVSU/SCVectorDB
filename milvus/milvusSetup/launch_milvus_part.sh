@@ -35,9 +35,11 @@ else
     exit 1
 fi
 
+mkdir -p ${TYPE}
 
 python3 net_mapping.py --rank ${RANK} --name ${TYPE}
 MY_IP_ADDR=$(jq -er '.hsn0.ipv4[0]' "${TYPE}${RANK}.json")
+mv "${TYPE}${RANK}.json" ${TYPE}/
 
 sleep $((RANK * 5))
 OUTPUT_FILE="${TYPE}_registry.txt"
@@ -63,6 +65,6 @@ apptainer exec --fakeroot \
   -B ${BASE_DIR}/cpuMilvus/:/milvus/ \
   -B $TARGET_BASE/${TYPE}${RANK}/:/var/lib/milvus \
   -B $TARGET_BASE/${TYPE}${RANK}/configs/${TYPE}${RANK}.yaml:/milvus/configs/milvus.yaml \
-  milvus.sif bash app_execute.sh FALSE $RANK > ${TYPE}${RANK}.out 2>&1
+  milvus.sif bash app_execute.sh FALSE $RANK > ${TYPE}/${TYPE}${RANK}.out 2>&1
 
 

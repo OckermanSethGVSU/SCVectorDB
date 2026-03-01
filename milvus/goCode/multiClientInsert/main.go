@@ -155,7 +155,7 @@ func clientWorker(
 
 
 	// We'll compute worker slice using splitRange(totalRows, nWorkers, workerRank)
-	nWorkersStr := os.Getenv("N_WORKERS")
+	nWorkersStr := os.Getenv("NUM_PROXIES")
 	nWorkers, err := strconv.Atoi(nWorkersStr)
 
 	RESULT_PATH := os.Getenv("RESULT_PATH")
@@ -216,7 +216,7 @@ func clientWorker(
 	globalClientRank := workerRank*clientsPerWorker + clientID
 
 	fmt.Printf(
-		"worker=%d client=%d global_client=%d assigned [%d,%d) rows=%d batch=%d\n",
+		"Proxy=%d client=%d global_client=%d assigned [%d,%d) rows=%d batch=%d\n",
 		workerRank, clientID, globalClientRank, startIdx, endIdx, localRows, BATCH_SIZE,
 	)
 
@@ -371,16 +371,16 @@ func clientWorker(
 
 
 func main() {
-	nWorkersStr := os.Getenv("N_WORKERS")
+	nWorkersStr := os.Getenv("NUM_PROXIES")
 	nWorkers, err := strconv.Atoi(nWorkersStr)
 	if err != nil || nWorkers <= 0 {
 		log.Fatalf("invalid N_WORKERS=%q", nWorkersStr)
 	}
 
-	clientsStr := os.Getenv("UPLOAD_CLIENTS_PER_WORKER")
+	clientsStr := os.Getenv("UPLOAD_CLIENTS_PER_PROXY")
 	clientsPerWorker, err := strconv.Atoi(clientsStr)
 	if err != nil || clientsPerWorker <= 0 {
-		log.Fatalf("invalid UPLOAD_CLIENTS_PER_WORKER=%q", clientsStr)
+		log.Fatalf("invalid UPLOAD_CLIENTS_PER_PROXY=%q", clientsStr)
 	}
 	CORPUS_SIZE_str := os.Getenv("CORPUS_SIZE")
 	CORPUS_SIZE, err := strconv.Atoi(CORPUS_SIZE_str)
@@ -401,7 +401,7 @@ func main() {
 	}
 	
 	totalClients := nWorkers * clientsPerWorker
-	fmt.Printf("CORPUS_SIZE=%d nWorkers=%d clientsPerWorker=%d totalClients=%d DATA_FILEPATH=%s\n",
+	fmt.Printf("CORPUS_SIZE=%d nProxies=%d clientsPerProxy=%d totalClients=%d DATA_FILEPATH=%s\n",
 		CORPUS_SIZE, nWorkers, clientsPerWorker, totalClients, DATA_PATH,
 	)
 
