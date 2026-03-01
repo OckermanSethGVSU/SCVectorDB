@@ -34,6 +34,7 @@ elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
     (( RANK == 0 )) && echo "Using lustre for persistence"
 elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
     TARGET_BASE="/local/scratch/milvusDir"
+    ETCD_FLAG="--env ETCD_DATA_DIR=/dev/shm/var/lib/milvus/etcd"
     (( RANK == 0 )) && echo "Using SSD for persistence"
 
 else
