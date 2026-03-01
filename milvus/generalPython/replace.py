@@ -5,16 +5,23 @@ from pathlib import Path
 import time
 import os
 
-def replace_port_line(text: str, old_port: int, new_port: int) -> str:
+def replace_port_line(text: str, old_port: int, new_port: int, type="NORMAL") -> str:
     """
     Replace only YAML tokens of the form:
         port: <number>
     so we don't accidentally replace other occurrences.
     Handles optional whitespace: 'port:20000' or 'port: 20000'.
     """
-    old_token_1 = f"port: {old_port}"
-    old_token_2 = f"port:{old_port}"
-    new_token   = f"port: {new_port}"
+
+    # print(old_port, new_port)
+    if type == "NORMAL": 
+        old_token_1 = f"port: {old_port}"
+        old_token_2 = f"port:{old_port}"
+        new_token   = f"port: {new_port}"
+    elif type == "INTERNAL_PROXY":
+        old_token_1 = f"internalPort: {old_port}"
+        old_token_2 = f"internalPort:{old_port}"
+        new_token   = f"internalPort: {new_port}"
 
     # Prefer matching the spaced form; then the no-space form.
     if old_token_1 in text:
@@ -63,6 +70,14 @@ def get_etcd_mode() -> str:
     mode = os.environ.get("ETCD_MODE", "replicated").strip().lower()
     return mode
 
+def get_dml_channels() -> int:
+    # Default to 16
+    mode = os.environ.get("DML_CHANNELS", "16").strip().lower()
+
+    return 16 if mode == "" else int(mode)
+    
+
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--mode", required=True, help="Required mode argument")
@@ -99,6 +114,7 @@ elif mode == "distributed":
 
     ETCD_MODE = get_etcd_mode()
     text = text.replace("<WAL>",wal)
+    text = text.replace("<WAL>",wal)
 
     if ETCD_MODE == "single":
         etcd0 = get_ip_by_rank("etcd_registry.txt",0)
@@ -114,6 +130,8 @@ elif mode == "distributed":
         text = text.replace("<ETCD1>:2379",f"{etcd1}:2479")
         text = text.replace("<ETCD2>:2379",f"{etcd2}:2579")
     
+    dml_channels = get_dml_channels()
+    text = text.replace("<DML>", dml_channels)
     dist_milvus_path.write_text(text)
 
 elif mode in ["COORDINATOR", "STREAMING","QUERY","PROXY", "DATA"]:
@@ -143,7 +161,7 @@ elif mode in ["COORDINATOR", "STREAMING","QUERY","PROXY", "DATA"]:
     if mode == "PROXY":
         old_i = base["INTERNAL_PROXY"]
         new_i = base["INTERNAL_PROXY"] + (BLOCK * rank)
-        text = replace_port_line(text, old_i, new_i)
+        text = replace_port_line(text, old_i, new_i, type="INTERNAL_PROXY")
 
     elif mode == "COORDINATOR":
         for k in ("COORDINATOR_QUERY", "COORDINATOR_DATA"):

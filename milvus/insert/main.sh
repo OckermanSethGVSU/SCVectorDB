@@ -35,6 +35,7 @@ launch_role() {
     echo "  ranks per node   = $ranks_per_node"
     echo "  nodes needed     = $nodes_needed"
     echo "  hosts            = $hostlist"
+    echo "  storage medium   = $storage_medium"
 
     mpirun -n "$total_ranks" \
         --ppn "$ranks_per_node" \
@@ -57,6 +58,8 @@ export BASE_DIR=$BASE_DIR
 export myDIR=$myDIR
 export RESULT_PATH=$BASE_DIR/$myDIR
 export ETCD_MODE=$ETCD_MODE
+export MODE=$MODE
+export DML_CHANNELS=$DML_CHANNELS
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -183,8 +186,8 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM COORDINATOR &
     
     # Launch streaming nodes
-    # mpirun -n $STREAMING_NODES --ppn $STREAMING_NODES_PER_CN --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM STREAMING &
     launch_role STREAMING "$STREAMING_NODES" "$STREAMING_NODES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
+    # mpirun -n $STREAMING_NODES --ppn $STREAMING_NODES_PER_CN --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM STREAMING &
 
     # Launch query nodes
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM QUERY &
@@ -193,10 +196,11 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM DATA &
     
     # Launch proxy
-    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM PROXY &
+    launch_role PROXY "$NUM_PROXIES" "$NUM_PROXIES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
+    # mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM PROXY &
 
     # verify milvus is running
-    TARGET="./workerOut/proxy0_running.txt"
+    TARGET="./workerOut/proxy$((NUM_PROXIES - 1))_running.txt"
     while [ ! -e "$TARGET" ]; do
     sleep 0.1
     done
@@ -210,7 +214,7 @@ fi
 env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
 
 
-export MILVUS_HOST=${IP_ADDR}
+export UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}
 export CORPUS_SIZE=$CORPUS_SIZE
 export NUM_PROXIES=$NUM_PROXIES
 export UPLOAD_CLIENTS_PER_PROXY=$UPLOAD_CLIENTS_PER_PROXY
@@ -243,7 +247,7 @@ sleep 60
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
     DAOS_CONT="vectorDBTesting"
-    rm -r /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
+    rm -fr /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
 elif [[ "$STORAGE_MEDIUM" == "lustre" || "$MODE" == "DISTRIBUTED" ]]; then
-    rm -r ./milvusDir/
+    rm -fr ./milvusDir/
 fi

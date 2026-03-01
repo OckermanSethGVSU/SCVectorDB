@@ -42,8 +42,35 @@ MY_IP_ADDR=$(jq -er '.hsn0.ipv4[0]' "${TYPE}${RANK}.json")
 mv "${TYPE}${RANK}.json" ${TYPE}/
 
 sleep $((RANK * 5))
+
+BLOCK=8
+case "$TYPE" in
+  COORDINATOR)        BASE=20000 ;;
+  PROXY)              BASE=20001 ;;
+  INTERNAL_PROXY)     BASE=20002 ;;
+  COORDINATOR_QUERY)  BASE=20003 ;;
+  QUERY)              BASE=20004 ;;
+  COORDINATOR_DATA)   BASE=20005 ;;
+  DATA)               BASE=20006 ;;
+  STREAMING)          BASE=20007 ;;
+  *)
+    echo "Unknown MODE='$MODE' (expected COORDINATOR|PROXY|INTERNAL_PROXY|COORDINATOR_QUERY|QUERY|COORDINATOR_DATA|DATA|STREAMING)" >&2
+    exit 1
+    ;;
+esac
+# Compute port = base + BLOCK*rank
+PORT=$(( BASE + BLOCK * RANK ))
+
+METRICS_BASE_BLOCK=30000
+METRICS_BASE=$(( METRICS_BASE_BLOCK + (BASE - 20000) ))
+METRICS_PORT=$(( METRICS_BASE + BLOCK * RANK ))
+if (( METRICS_PORT > 65535 )); then
+  echo "ERROR: METRICS_PORT=$METRICS_PORT out of range" >&2
+  exit 2
+fi
+
 OUTPUT_FILE="${TYPE}_registry.txt"
-echo "${RANK},${MY_IP_ADDR},9000" >> $OUTPUT_FILE
+echo "${RANK},${MY_IP_ADDR},${PORT},${METRICS_PORT}" >> $OUTPUT_FILE
 
 
 # create configuration for micro-service component (basically just set its IP in the config file)
@@ -60,6 +87,7 @@ apptainer exec --fakeroot \
   --pwd /milvus \
   --env TYPE=$TYPE \
   --env MILVUSCONF=/milvus/configs/ \
+  --env METRICS_PORT=$METRICS_PORT \
   -B ./execute.sh:/milvus/app_execute.sh \
   -B ./workerOut/:/workerOut/ \
   -B ${BASE_DIR}/cpuMilvus/:/milvus/ \

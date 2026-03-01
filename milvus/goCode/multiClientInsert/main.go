@@ -9,12 +9,65 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
+	"bufio"
+	"strings"
 	"github.com/kshedden/gonpy"
 	"github.com/milvus-io/milvus/client/v2/column"
 	"github.com/milvus-io/milvus/client/v2/entity"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 )
+
+type NodeInfo struct {
+	Rank int
+	IP   string
+	Port int
+}
+
+func getNodeByRank(filename string, targetRank int) (*NodeInfo, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		parts := strings.Split(line, ",")
+		if len(parts) != 4 {
+			continue
+		}
+
+		rank, err := strconv.Atoi(parts[0])
+		if err != nil {
+			continue
+		}
+
+		if rank == targetRank {
+			port, err := strconv.Atoi(parts[2])
+			if err != nil {
+				return nil, err
+			}
+
+			return &NodeInfo{
+				Rank: rank,
+				IP:   parts[1],
+				Port: port,
+			}, nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return nil, fmt.Errorf("rank %d not found", targetRank)
+}
 
 // Barrier represents a synchronization point for a group of goroutines.
 type Barrier struct {
@@ -184,13 +237,35 @@ func clientWorker(
 
 	mcols := len(local[0])
 
-	// ----- Milvus client -----
-	MILVUS_HOST := os.Getenv("MILVUS_HOST")
+	// ----- Target Milvus Proxy  -----
+	balance_strategy := os.Getenv("UPLOAD_BALANCE_STRATEGY")
+	if balance_strategy == "" {
+		log.Fatalf("invalid UPLOAD_BALANCE_STRATEGY=%q", balance_strategy)
+	}
+	bs := strings.ToUpper(strings.TrimSpace(balance_strategy))
+
+	var node *NodeInfo
+	var errN error
+
+	if bs == "NONE" {
+		node, errN = getNodeByRank("PROXY_registry.txt", 0)
+	} else if bs == "WORKER" {
+		node, errN = getNodeByRank("PROXY_registry.txt", workerRank)
+	} else {
+		log.Fatalf("unknown balance_strategy=%q (expected NONE or WORKER)", balance_strategy)
+	}
+
+	if errN != nil {
+		log.Fatalf("failed to get proxy node: %v", err)
+	}
+
+	MILVUS_HOST := node.IP
+	MILVUS_PORT := node.Port
+
 	batchSizeStr := os.Getenv("UPLOAD_BATCH_SIZE")
 	BATCH_SIZE, err := strconv.Atoi(batchSizeStr)
-
-
-	url := fmt.Sprintf("http://%s:20001", MILVUS_HOST)
+	
+	url := fmt.Sprintf("http://%s:%d", MILVUS_HOST,MILVUS_PORT)
 	mclient, err := milvusclient.New(context.Background(), &milvusclient.ClientConfig{
 		Address: url,
 	})
@@ -374,7 +449,7 @@ func main() {
 	nWorkersStr := os.Getenv("NUM_PROXIES")
 	nWorkers, err := strconv.Atoi(nWorkersStr)
 	if err != nil || nWorkers <= 0 {
-		log.Fatalf("invalid N_WORKERS=%q", nWorkersStr)
+		log.Fatalf("invalid NUM_PROXIES=%q", nWorkersStr)
 	}
 
 	clientsStr := os.Getenv("UPLOAD_CLIENTS_PER_PROXY")

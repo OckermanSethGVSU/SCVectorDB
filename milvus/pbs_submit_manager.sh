@@ -9,12 +9,13 @@ fi
 
 
 ### Loop variables ###
-NODES=(2)
+NODES=(1)
 CORES=(112)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 
 # Lustre todo: 8192, 256 (queued?)
+# best batch for 32 clients: 128
 UPLOAD_BATCH_SIZE=(128) 
 
 # 2 8
@@ -22,7 +23,7 @@ QUERY_BATCH_SIZE=(2048)
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
+queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
 
 
 ### General runtime variables ###
@@ -30,9 +31,10 @@ task="insert" # [insert]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
 CORPUS_SIZE=10000000 # total data to insert
-UPLOAD_CLIENTS_PER_PROXY=32
+UPLOAD_CLIENTS_PER_PROXY=3
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
+UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 
 ### Path to embeddings
 # Aurora
@@ -55,10 +57,11 @@ MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
 ### Distributed Variables
 MINIO_MODE="stripped" # [single, stripped]
 ETCD_MODE="replicated" # [single, replicated]
-STREAMING_NODES=8
-STREAMING_NODES_PER_CN=4
+STREAMING_NODES=1
+STREAMING_NODES_PER_CN=1
 NUM_PROXIES=1
 NUM_PROXIES_PER_CN=1
+DML_CHANNELS=32 # controls DML channels on startup -> defaults to 16 if not set
 
 
 for num_nodes in "${NODES[@]}"
@@ -133,6 +136,7 @@ do
                 echo "PLATFORM=${PLATFORM}" >> $target_file
                 echo "MODE=${MODE}" >> $target_file
                 echo "WAL=${WAL}" >> $target_file
+                echo "UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}" >> $target_file
 
                 if [[ "$MODE" == "DISTRIBUTED" ]]; then
                     echo "MINIO_MODE=${MINIO_MODE}" >> $target_file
@@ -141,6 +145,7 @@ do
                     echo "STREAMING_NODES_PER_CN=${STREAMING_NODES_PER_CN}" >> $target_file
                     echo "NUM_PROXIES=${NUM_PROXIES}" >> $target_file
                     echo "NUM_PROXIES_PER_CN=${NUM_PROXIES_PER_CN}" >> $target_file
+                    echo "DML_CHANNELS=${DML_CHANNELS}" >> $target_file
                 else
                     echo "NUM_PROXIES=1" >> $target_file
                     echo "NUM_PROXIES_PER_CN=1" >> $target_file
