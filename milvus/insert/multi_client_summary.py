@@ -49,8 +49,8 @@ def extract_time(rank):
 # summarize_npy("target/debug/op_times.npy")
 
 batch_size = int(os.getenv("UPLOAD_BATCH_SIZE"))
-clients = int(os.getenv("N_WORKERS"))
-cPerWorker = int(os.getenv("UPLOAD_CLIENTS_PER_WORKER"))
+clients = int(os.getenv("NUM_PROXIES"))
+cPerWorker = int(os.getenv("UPLOAD_CLIENTS_PER_PROXY"))
 
 # clients = clients * cPerWorker
 
