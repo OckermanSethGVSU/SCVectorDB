@@ -74,7 +74,7 @@ def get_dml_channels() -> int:
     # Default to 16
     mode = os.environ.get("DML_CHANNELS", "16").strip().lower()
 
-    return 16 if mode == "" else int(mode)
+    return str(16) if mode == "" else mode
     
 
 
