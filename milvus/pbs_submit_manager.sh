@@ -31,7 +31,7 @@ task="insert" # [insert]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
 CORPUS_SIZE=10000000 # total data to insert
-UPLOAD_CLIENTS_PER_PROXY=3
+UPLOAD_CLIENTS_PER_PROXY=8
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
 UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
@@ -56,12 +56,13 @@ MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
 
 ### Distributed Variables
 MINIO_MODE="stripped" # [single, stripped]
+MINIO_MEDIUM="DAOS" # [DAOS, lustre] (can be memory if running single)
 ETCD_MODE="replicated" # [single, replicated]
 STREAMING_NODES=1
 STREAMING_NODES_PER_CN=1
 NUM_PROXIES=1
 NUM_PROXIES_PER_CN=1
-DML_CHANNELS=32 # controls DML channels on startup -> defaults to 16 if not set
+DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
 
 
 for num_nodes in "${NODES[@]}"
@@ -89,7 +90,7 @@ do
                 if [[ "$PLATFORM" == "POLARIS" ]]; then
                     echo "#PBS -l filesystems=home:eagle" >> $target_file    
                 elif [[ "$PLATFORM" == "AURORA" ]]; then
-                    if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
+                    if [[ "$STORAGE_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then
                         echo "#PBS -l filesystems=home:flare:daos_user_fs" >> $target_file
                         echo "#PBS -l daos=daos_user" >> $target_file
                     else
@@ -110,9 +111,9 @@ do
                 if [[ "$task" == "insert" ]]; then
 
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                        dir="${task}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_PPC${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_SN${STREAMING_NODES}_SPCN${STREAMING_NODES_PER_CN}_${DATE}"
+                        dir="${task}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_SN${STREAMING_NODES}_SPCN${STREAMING_NODES_PER_CN}_${DATE}"
                     else
-                        dir="${task}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_PPC${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_${DATE}"
+                        dir="${task}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_${DATE}"
                     fi
                 elif [[ "$task" == "aurora" ]]; then
                     echo "Running on Aurora"
@@ -146,6 +147,7 @@ do
                     echo "NUM_PROXIES=${NUM_PROXIES}" >> $target_file
                     echo "NUM_PROXIES_PER_CN=${NUM_PROXIES_PER_CN}" >> $target_file
                     echo "DML_CHANNELS=${DML_CHANNELS}" >> $target_file
+                    echo "MINIO_MEDIUM=${MINIO_MEDIUM}" >> $target_file
                 else
                     echo "NUM_PROXIES=1" >> $target_file
                     echo "NUM_PROXIES_PER_CN=1" >> $target_file
@@ -193,7 +195,7 @@ do
                 
                 chmod -R g+w $dir
                 cd $dir
-                # qsub $target_file
+                qsub $target_file
                 sleep 1
                 cd .. 
             done

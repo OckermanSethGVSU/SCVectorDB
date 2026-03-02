@@ -88,7 +88,7 @@ cat $PBS_NODEFILE > all_nodefile.txt
 
 
 
-if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
+if [[ "$STORAGE_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then
     module use /soft/modulefiles
     module load daos
     DAOS_POOL="radix-io"
@@ -168,7 +168,7 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
         PPN=$(( (MINIO_INSTANCES + MINIO_SPREAD - 1) / MINIO_SPREAD ))
         
         mpirun -n 4 --ppn $PPN --cpu-bind none --host "$HOSTS" \
-        ./launch_minio.sh lustre & # must be lustre for erasure coding to work: TODO test DAOS
+        ./launch_minio.sh $MINIO_MEDIUM & # must be lustre or DAOS for erasure coding to work
 
     elif [[ "$MINIO_MODE" == "single" ]]; then
         # Launch 1 Minio instance
