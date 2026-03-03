@@ -167,12 +167,12 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
         done
         PPN=$(( (MINIO_INSTANCES + MINIO_SPREAD - 1) / MINIO_SPREAD ))
         
-        mpirun -n 4 --ppn $PPN --cpu-bind none --host "$HOSTS" \
-        ./launch_minio.sh $MINIO_MEDIUM & # must be lustre or DAOS for erasure coding to work
+        mpirun -n 4 --ppn $PPN --no-vni --cpu-bind none --host "$HOSTS" \
+        ./launch_minio.sh  $MINIO_MEDIUM & # must be lustre or DAOS for erasure coding to work
 
     elif [[ "$MINIO_MODE" == "single" ]]; then
         # Launch 1 Minio instance
-        mpirun -n 1 --ppn 1 --cpu-bind none --host "${NODES[1]}"  ./launch_minio.sh memory &
+        mpirun -n 1 --ppn 1 --no-vni --cpu-bind none --host "${NODES[1]}"  ./launch_minio.sh $MINIO_MEDIUM &
     fi
 
     

@@ -17,9 +17,14 @@ elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_CONT="vectorDBTesting"
     TARGET_BASE="/tmp/${DAOS_POOL}/${DAOS_CONT}/${myDIR}/milvusDir"
     (( RANK == 0 )) && echo "Minio using DAOS for persistence"
-    APPTAINER_ARGS+=(
+    DAOS_ARGS+=(
         --bind "/home/treewalker/daos_lib64:/opt/daos/lib64:ro"
-        --env LD_LIBRARY_PATH=/opt/daos/lib64
+        --bind "/run:/run"
+        --bind "/usr/lib64/libstdc++.so.6:/opt/hostlibs/libstdc++.so.6:ro"
+        --env LD_LIBRARY_PATH=/opt/hostlibs:/opt/daos/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+        --env LD_PRELOAD=/opt/daos/lib64/libpil4dfs.so${LD_PRELOAD:+:$LD_PRELOAD}
+        --env NA_PLUGIN_PATH="/opt/daos/lib64/mercury"
+        --env FI_PROVIDER_PATH="/opt/daos/lib64/libfabric"
     )
 
 
@@ -90,6 +95,7 @@ if [[ "$MINIO_MODE" == "stripped" ]]; then
     --env NO_PROXY= --env no_proxy= \
     --env MINIO_ROOT_USER=minioadmin \
     --env MINIO_ROOT_PASSWORD=minioadmin \
+    "${DAOS_ARGS[@]}" \
     -B $TARGET_BASE/volumes/minio_volume${RANK}:/data${RANK} \
     minio.sif \
     minio server "${ENDPOINTS[@]}" \
@@ -108,6 +114,7 @@ elif [[ "$MINIO_MODE" == "single" ]]; then
     --env NO_PROXY= --env no_proxy= \
     --env MINIO_ROOT_USER=minioadmin \
     --env MINIO_ROOT_PASSWORD=minioadmin \
+    "${DAOS_ARGS[@]}" \
     -B $TARGET_BASE/volumes/minio_volume${RANK}:/data$ \
     minio.sif \
     minio server /data \
