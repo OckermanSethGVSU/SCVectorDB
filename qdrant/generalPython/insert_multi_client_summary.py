@@ -57,7 +57,7 @@ clients = clients * cPerWorker
 # batch_size = 128
 # clients = 2
 
-with open(f"summary.csv", "w", newline="") as f:
+with open(f"insert_summary.csv", "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(["rank","operation",'total', 'mean', 'std', "p99","rank_op/s","rank_v/s"])
 
@@ -84,7 +84,7 @@ stacked_op = np.concatenate(all_op)
 ag_time = extract_time(0)
 
 
-with open(f"summary.csv", "a", newline="") as f:
+with open(f"insert_summary.csv", "a", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(ag_stats("all","prep",stacked_prep, ag_time, batch_size))
     writer.writerow(ag_stats("all","upload",stacked_upload, ag_time, batch_size))

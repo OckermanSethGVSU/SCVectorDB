@@ -17,8 +17,9 @@ required_paths=(
     "generalPython/mapping.py"
     "generalPython/profile.py"
     "generalPython/configureTopo.py"
-    "insert/main.sh"
-    "insert/multi_client_summary.py"
+    "generalPython/insert_multi_client_summary.py"
+    "generalPython/index.py"
+    "main.sh"
     "rustCode/multiClientUpload/multiClientUpload"
     "rustCode/multiClientUpload/src/main.rs"
 )

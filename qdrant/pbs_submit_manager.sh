@@ -17,32 +17,32 @@ WORKERS_PER_NODE=(1)
 CORES=(112)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-UPLOAD_BATCH_SIZE=(1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768) 
+UPLOAD_BATCH_SIZE=(128) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
 
 UPLOAD_CLIENTS_PER_WORKER=(1)
 # PBS Vars
-WALLTIME="02:00:00"
-queue=preemptable # [preemptable, debug, debug-scaling, prod]
+WALLTIME="01:00:00"
+queue=capacity # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
-task="insert" # [insert]
-STORAGE_MEDIUM="lustre" # [memory, DAOS, lustre, SSD]
+TASK="index" # [insert, index]
+STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
-CORPUS_SIZE=5000000 # total data to insert
+CORPUS_SIZE=10000000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=1
-UPLOAD_BALANCE_STRATEGY="NO_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
+UPLOAD_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 
 # 
 # Aurora 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
 # Polaris 10 million subset: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
 # 
-DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
+DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
 
-PLATFORM="POLARIS" # [POLARIS, AURORA]
+PLATFORM="AURORA" # [POLARIS, AURORA]
 
 for num_nodes in "${NODES[@]}"
 do
@@ -94,9 +94,10 @@ do
 
                         
                         DATE=$(date +"%Y-%m-%d_%H_%M_%S")
-                        if [[ "$task" == "insert" ]]; then
-                            dir="${task}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_C${UCPW}_uploadBS${upload_bs}_${DATE}"
-                        elif [[ "$task" == "aurora" ]]; then
+                        if [[ "$TASK" == "insert" ]]; then
+                            dir="${TASK}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_C${UCPW}_uploadBS${upload_bs}_${DATE}"
+                        elif [[ "$TASK" == "index" ]]; then
+                            dir="${TASK}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_${DATE}"
                             echo "Running on Aurora"
                         else
                             echo "Unknown task: $SYSTEM"
@@ -104,7 +105,7 @@ do
                         fi
                         
                         echo "myDIR=${dir}" >> $target_file
-
+                        echo "TASK=${TASK}" >> $target_file
                         echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}" >> $target_file
                         echo "CORPUS_SIZE=${CORPUS_SIZE}" >> $target_file
                         echo "USEPERF=${usePerf}" >> $target_file
@@ -126,8 +127,8 @@ do
                         # # echo "script=${target}" >> $target_file
                         # # echo "NClients=${NClients}" >> $target_file
                         echo "" >> $target_file
+                        cat main.sh >> $target_file
 
-                        cat $task/main.sh >> $target_file
 
 
                         mkdir -p $dir
@@ -146,17 +147,14 @@ do
                         cp -r perf/ $dir/
                 
 
-                        if [[ "$task" == "insert" ]]; then
-                            mkdir $dir/rustSrc
-                            cp ./rustCode/multiClientUpload/multiClientUpload $dir/
-                            cp ./rustCode/multiClientUpload/src/main.rs $dir/rustSrc/multiClientUpload.rs
-                            cp insert/multi_client_summary.py $dir/
-
-                        elif [[ "$task" == "aurora" ]]; then
-                            echo "Running on Aurora"
-                        else
-                            echo "Unknown task: $SYSTEM"
-                            exit
+                        # all tasks need insert code to load data
+                        mkdir $dir/rustSrc
+                        cp ./rustCode/multiClientUpload/multiClientUpload $dir/
+                        cp ./rustCode/multiClientUpload/src/main.rs $dir/rustSrc/multiClientUpload.rs
+                        cp generalPython/insert_multi_client_summary.py $dir/
+                        
+                        if [[ "$task" == "index" ]]; then
+                            cp generalPython/index.py
                         fi
 
                         
@@ -193,7 +191,7 @@ do
                         chmod -R g+w $dir
                         cd $dir
 
-                        qsub $target_file
+                        # qsub $target_file
                         sleep 5
                         cd .. 
                     done

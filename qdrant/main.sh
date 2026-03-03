@@ -100,7 +100,9 @@ while [[ ! -e "$TARGET_FILE" ]]; do
 done
 rm $TARGET_FILE
 
-touch ./perf/workflow_start.txt
+if [[ "$TASK" == "insert" ]]; then
+    touch ./perf/workflow_start.txt
+fi
 sleep 3
 
 ########## Workflow ###############
@@ -116,72 +118,36 @@ export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
 export UPLOAD_BALANCE_STRATEGY=$UPLOAD_BALANCE_STRATEGY
 NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientUpload
 
-touch ./perf/workflow_stop.txt
-
-# export QDRANT_URL="http://${ip}:${port}"
-# export CORPUS_SIZE=$CORPUS_SIZE
-# export MAX_ROWS=$CORPUS_SIZE
-# export NUM_SEGEMENTS=$NUM_SEGEMENTS
-# # export FILEPATH="/eagle/projects/argonne_tpc/sockerman/tpc_embeddings/embeddings_alone.npy"  
-# # export FILEPATH="/eagle/projects/argonne_tpc/sockerman/evalPaperResults/clientTesting/milvus/random_array.npy"  
-# export FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"  
-# export N_CLIENTS=$NClients
-# export SHARDS=$TOTAL
-# echo "Target client: ${QDRANT_URL}"
-# sleep 10
-# # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 min_collection_setup.py
-# # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 configureTopo.py
-# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 customKeyConfigureTopo.py
-# touch setup_end.event
-# # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 restore_from_snapshot.py
-
-# touch ./perf/workflow_start.txt
-# sleep 3
-# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./qRustClient
-
-# touch ./perf/workflow_stop.txt
-
-# # # mpirun -n $TOTAL --ppn $TOTAL --cpu-bind none --host localhost \
-# touch upload_end.event
-# sleep 10
-# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
-# touch index_end.event
-
-
-
-
-# touch ./perf/perf_start.txt
-# sleep 10
-# export BATCH_SIZE=$QUERY_BATCH_SIZE
-# export FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/vectorEval/qdrantEval/query/queries.npy"
-# export N_WORKERS=1
-# export N_CLIENTS=1
-# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./QueryRustClient
-# NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 snapshot_cluster.py
-
-
-# cp -r /dev/shm/qdrantDIR/snapshots/ .
-# # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 query.py
-# sleep 3
-
-# touch ./perf/perf_stop.txt
-# touch query_done.event
-# # python3 summarize.py
-# # python3 multi_client_summary.py
-# python3 qSummarize.py
-
 
 # tell the profs to close and give them time to do so
-touch flag.txt
-sleep 30
+if [[ "$TASK" == "insert" ]]; then
+    touch ./perf/workflow_stop.txt
+    touch flag.txt
+    sleep 30
+    mkdir systemStats/
+    mv *_system_*.csv systemStats/
+fi
 
-mkdir systemStats/
-mv *.csv systemStats/
-mv systemStats/times.csv . 
+python3 insert_multi_client_summary.py
+mv times.csv insert_times.csv
 
-python3 multi_client_summary.py
 mkdir -p uploadNPY
 mv *.npy uploadNPY
+
+if [[ "$TASK" == "index" ]]; then
+
+    touch ./perf/workflow_start.txt
+    sleep 5
+    # TODO: parameterize index
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
+    
+    touch ./perf/workflow_stop.txt
+    touch flag.txt
+    sleep 30
+    mkdir systemStats/
+     mv *_system_*.csv systemStats/
+fi
+
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
 
