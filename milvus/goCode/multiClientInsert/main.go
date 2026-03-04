@@ -69,28 +69,45 @@ func getNodeByRank(filename string, targetRank int) (*NodeInfo, error) {
 	return nil, fmt.Errorf("rank %d not found", targetRank)
 }
 
-// Barrier represents a synchronization point for a group of goroutines.
+// Barrier represents a reusable synchronization point for a group of goroutines.
 type Barrier struct {
-	count  int
-	mu     sync.Mutex
-	notify chan struct{}
+	n     int
+	count int
+	gen   int
+	mu    sync.Mutex
+	cond  *sync.Cond
 }
 
-func NewBarrier(count int) *Barrier {
-	return &Barrier{
-		count:  count,
-		notify: make(chan struct{}),
+func NewBarrier(n int) *Barrier {
+	if n <= 0 {
+		panic("barrier size must be > 0")
 	}
+	b := &Barrier{n: n, count: n}
+	b.cond = sync.NewCond(&b.mu)
+	return b
 }
 
+// Wait blocks until exactly N goroutines have called it for this generation.
+// Then it releases all of them and resets for the next generation.
 func (b *Barrier) Wait() {
 	b.mu.Lock()
+	g := b.gen
 	b.count--
+
 	if b.count == 0 {
-		close(b.notify)
+		// Last goroutine arrives: advance generation and reset.
+		b.gen++
+		b.count = b.n
+		b.cond.Broadcast()
+		b.mu.Unlock()
+		return
+	}
+
+	// Wait until generation advances (handles spurious wakeups).
+	for g == b.gen {
+		b.cond.Wait()
 	}
 	b.mu.Unlock()
-	<-b.notify
 }
 
 // SharedTiming records one global window:
@@ -206,6 +223,7 @@ func clientWorker(
 	_ = wStart
 	_ = wEnd
 
+	task := os.Getenv("TASK")
 
 	// We'll compute worker slice using splitRange(totalRows, nWorkers, workerRank)
 	nWorkersStr := os.Getenv("NUM_PROXIES")
@@ -270,7 +288,7 @@ func clientWorker(
 		Address: url,
 	})
 	if err != nil {
-		log.Fatalf("failed to create Milvus client: %v", err)
+		log.Fatalf("failed to create Milvus client: %v", errN)
 	}
 
 	collectionName := "standalone" // TODO
@@ -342,23 +360,26 @@ func clientWorker(
 	// Wait for everyone to finish inserting
 	barrier.Wait()
 
-	// Insert a final value so we can measure when it has been processed
+	// Insert a final value so we can measure when it has been processed - only needed if we are doing insert testing
 	sentinelID := int64(totalRows) // unique
 	if globalClientRank == 0 {
-		vec := make([]float32, mcols)
-		_, err := mclient.Insert(
-			ctx,
-			milvusclient.NewColumnBasedInsertOption(collectionName).
-				WithInt64Column(idField, []int64{sentinelID}).
-				WithFloatVectorColumn(vectorField, mcols, [][]float32{vec}),
-		)
-		if err != nil {
-			log.Printf("sentinel insert failed: %v", err)
-		}
 
-		ok := waitForLocalLastIDSearchable(ctx, mclient, collectionName, idField, sentinelID)
-		if !ok {
-			log.Printf("Timed out waiting for sentinel visibility id=%d", sentinelID)
+		if task == "insert" {
+			vec := make([]float32, mcols)
+			_, err := mclient.Insert(
+				ctx,
+				milvusclient.NewColumnBasedInsertOption(collectionName).
+					WithInt64Column(idField, []int64{sentinelID}).
+					WithFloatVectorColumn(vectorField, mcols, [][]float32{vec}),
+			)
+			if err != nil {
+				log.Printf("sentinel insert failed: %v", err)
+			}
+
+			ok := waitForLocalLastIDSearchable(ctx, mclient, collectionName, idField, sentinelID)
+			if !ok {
+				log.Printf("Timed out waiting for sentinel visibility id=%d", sentinelID)
+			}
 		}
 		sharedTiming.MarkSearchable()
 	}
@@ -369,7 +390,7 @@ func clientWorker(
 	barrier.Wait()
 
 	// local sanity (skip if no rows)
-	localExists := true
+	localExists := false
 	if localRows > 0 {
 		localRes, localErr := mclient.Get(ctx, localOpt)
 		localExists = (localErr == nil && localRes.ResultCount == 1)
@@ -378,7 +399,7 @@ func clientWorker(
 				workerRank, clientID, localLastID, localErr)
 		}
 	} else {
-		localExists = true // or false / or treat as N/A
+		localExists = false
 	}
 
 	// global sanity (spot check)
@@ -390,8 +411,6 @@ func clientWorker(
 	}
 
 	barrier.Wait()
-
-	
 
 	loopDuration := endLoop.Sub(startLoop).Seconds()
 	waitDuration := searchableAtClient.Sub(endLoop).Seconds()
