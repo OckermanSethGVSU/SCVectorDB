@@ -35,6 +35,7 @@ usePerf="false" # [true, false]
 CORPUS_SIZE=10000000 # total data to insert
 UPLOAD_CLIENTS_PER_WORKER=32
 UPLOAD_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
+GPU_INDEX=True
 
 # Aurora
     # 10 million 
@@ -122,6 +123,7 @@ do
                         echo "DATA_FILEPATH=${DATA_FILEPATH}" >> $target_file
                         echo "UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}" >> $target_file
                         echo "PLATFORM=${PLATFORM}" >> $target_file
+                        echo "GPU_INDEX=${GPU_INDEX}" >> $target_file
 
                         echo "" >> $target_file
                         cat main.sh >> $target_file

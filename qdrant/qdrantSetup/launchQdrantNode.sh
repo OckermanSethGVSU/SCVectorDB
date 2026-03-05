@@ -49,18 +49,31 @@ else
 fi
 
 
+GPU_ARGS=()
+if [[ "$GPU_INDEX" == "True" ]]; then
+    GPU_ARGS+=(
+        --env QDRANT__GPU__INDEXING=1
+        --nv
+    )
+else
+    GPU_ARGS+=(
+        --env QDRANT__GPU__INDEXING=0
+    )
+
+fi
+
 
 # === Launch Qdrant Nodes ===
 apptainer exec \
     --fakeroot \
     --writable-tmpfs \
-    --env QDRANT__GPU__INDEXING=0 \
     --pwd /qdrant \
     --bind ./perf/:/perf/ \
     --bind ./ip_registry.txt:/ip_registry.txt \
     --bind ./qdrant:/qdrant/qdrant \
     --bind ./launch.sh:/qdrant/launch.sh \
     "${APPTAINER_ARGS[@]}" \
+    "${GPU_ARGS[@]}" \
     --bind ${TARGET_BASE}/data/node$RANK:/qdrant/storage \
     --bind ${TARGET_BASE}/config/node$RANK:/qdrant/config \
     --bind ${TARGET_BASE}/snapshots/node$RANK:/qdrant/snapshots \
