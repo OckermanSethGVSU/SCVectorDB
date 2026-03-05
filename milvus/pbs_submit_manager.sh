@@ -35,6 +35,7 @@ UPLOAD_CLIENTS_PER_PROXY=32
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
 UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
+GPU_INDEX = True # [True, False]
 
 ### Path to embeddings
 # Aurora
@@ -151,6 +152,7 @@ do
                 echo "UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}" >> $target_file
                 echo "VECTOR_DIM=${VECTOR_DIM}" >> $target_file
                 echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
+                echo "GPU_INDEX=${GPU_INDEX}" >> $target_file
 
                 if [[ "$MODE" == "DISTRIBUTED" ]]; then
                     echo "MINIO_MODE=${MINIO_MODE}" >> $target_file
@@ -205,7 +207,7 @@ do
                 cp ./goCode/multiClientInsert/main.go $dir/multiClientInsert.go
 
                 if [[ "$TASK" == "index" ]]; then
-                    cp generalPython/convert_to_hnsw.py $dir/
+                    cp generalPython/index_data.py $dir/
                 fi
 
                 mv $target_file $dir

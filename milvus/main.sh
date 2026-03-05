@@ -63,6 +63,7 @@ export DML_CHANNELS=$DML_CHANNELS
 export TASK=$TASK
 export VECTOR_DIM=$VECTOR_DIM
 export DISTANCE_METRIC=$DISTANCE_METRIC
+export GPU_INDEX=$GPU_INDEX
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -246,13 +247,14 @@ mv *.npy uploadNPY
 
 if [[ "$TASK" == "index" ]]; then
     touch ./workerOut/workflow_start.txt
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 convert_to_hnsw.py
-fi
 
-if [[ "$TASK" == "index" ]]; then
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index_data.py
+    
     touch ./workerOut/workflow_end.txt
     touch flag.txt
 fi
+
+
 
 
 sleep 60

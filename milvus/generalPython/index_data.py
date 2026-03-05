@@ -66,15 +66,27 @@ match distance_metric:
     case _:
         raise ValueError(f"Unknown distance metric: {distance_metric}")
 
-index_params.add_index(
-    field_name="vector",      # your vector_field_name
-    index_type="HNSW",        # <- FLAT index
-    metric_type=metric,     # or "L2", "IP", etc.
+GPU_INDEX = os.environ["GPU_INDEX"].strip().lower() == "true"
+if GPU_INDEX:
+    index_params.add_index(
+    field_name="vector",      
+    index_type="GPU_CAGRA",        
+    metric_type=metric,
     params={
-        "M":16,
-        "efConstruction": 100
-        }                 # FLAT doesn't need extra params
-)
+        "intermediate_graph_degree": 64,
+        "graph_degree": 16,
+    }
+    )
+else: 
+    index_params.add_index(
+        field_name="vector",      # your vector_field_name
+        index_type="HNSW",        # <- FLAT index
+        metric_type=metric,     # or "L2", "IP", etc.
+        params={
+            "M":16,
+            "efConstruction": 100
+            }                 # FLAT doesn't need extra params
+    )
 
 # client.flush(collection_name)
 t1 = time.time()

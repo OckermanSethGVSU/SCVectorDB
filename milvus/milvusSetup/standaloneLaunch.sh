@@ -85,6 +85,16 @@ cp -r ./configs/ $TARGET_BASE/
 # create proxy registry for the go insert
 echo "0,${IP_ADDR},20001,30001" > PROXY_registry.txt
 
+GPU_ARGS=()
+if [[ "$GPU_INDEX" == "True" ]]; then
+
+    GPU_ARGS+=()
+else
+    GPU_ARGS+=(
+        --env CUDA_VISIBLE_DEVICES="" 
+    )
+fi
+
 apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --pwd /milvus \
     --env MILVUSCONF=/milvus/configs/ \
@@ -93,7 +103,6 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env ETCD_CONFIG_PATH=/milvus/configs/embedEtcd.yaml \
     --env COMMON_STORAGETYPE=local \
     --env DEPLOY_MODE=STANDALONE \
-    --env CUDA_VISIBLE_DEVICES="" \
     --env TYPE=$TYPE \
     -B ./execute.sh:/milvus/app_execute.sh \
     -B ${base}/cpuMilvus/:/milvus/ \
@@ -102,6 +111,7 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     -B ./workerOut/:/workerOut/ \
     -B ${TARGET_BASE}/volumes/milvus:/var/lib/milvus \
     "${POLARIS_BINDS[@]}" \
+    "${GPU_ARGS[@]}" \
     milvus.sif bash app_execute.sh 
 
 

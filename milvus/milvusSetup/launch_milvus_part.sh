@@ -82,6 +82,16 @@ cp -r ./configs/ $TARGET_BASE/${TYPE}${RANK}/
 
 mkdir -p ./workerOut/
 
+GPU_ARGS=()
+if [[ "$GPU_INDEX" == "True" ]]; then
+
+    GPU_ARGS+=()
+else
+    GPU_ARGS+=(
+        --env CUDA_VISIBLE_DEVICES="" 
+    )
+fi
+
 apptainer exec --fakeroot \
   --writable-tmpfs \
   --pwd /milvus \
@@ -93,6 +103,7 @@ apptainer exec --fakeroot \
   -B ${BASE_DIR}/cpuMilvus/:/milvus/ \
   -B $TARGET_BASE/${TYPE}${RANK}/:/var/lib/milvus \
   -B $TARGET_BASE/${TYPE}${RANK}/configs/${TYPE}${RANK}.yaml:/milvus/configs/milvus.yaml \
+  "${GPU_ARGS[@]}" \
   milvus.sif bash app_execute.sh FALSE $RANK > ${TYPE}/${TYPE}${RANK}.out 2>&1
 
 
