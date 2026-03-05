@@ -27,11 +27,11 @@ queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
 
 
 ### General runtime variables ###
-task="insert" # [insert]
+TASK="index" # [insert,index]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
 CORPUS_SIZE=10000000 # total data to insert
-UPLOAD_CLIENTS_PER_PROXY=8
+UPLOAD_CLIENTS_PER_PROXY=32
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
 UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
@@ -52,17 +52,17 @@ ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
 
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
-MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
+MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 
 ### Distributed Variables
 MINIO_MODE="stripped" # [single, stripped]
 MINIO_MEDIUM="DAOS" # [DAOS, lustre] (can be memory if running single)
 ETCD_MODE="replicated" # [single, replicated]
-STREAMING_NODES=1
-STREAMING_NODES_PER_CN=1
-NUM_PROXIES=1
-NUM_PROXIES_PER_CN=1
-DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
+STREAMING_NODES=32
+STREAMING_NODES_PER_CN=4
+NUM_PROXIES=32
+NUM_PROXIES_PER_CN=4
+DML_CHANNELS=128 # controls DML channels on startup -> defaults to 16 if not set
 
 
 for num_nodes in "${NODES[@]}"
@@ -108,23 +108,28 @@ do
                 
                 
                 DATE=$(date +"%Y-%m-%d_%H_%M_%S")
-                if [[ "$task" == "insert" ]]; then
+                if [[ "$TASK" == "insert" ]]; then
 
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                        dir="${task}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_SN${STREAMING_NODES}_SPCN${STREAMING_NODES_PER_CN}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_SN${STREAMING_NODES}_SPCN${STREAMING_NODES_PER_CN}_${DATE}"
                     else
-                        dir="${task}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_${DATE}"
                     fi
-                elif [[ "$task" == "aurora" ]]; then
-                    echo "Running on Aurora"
+                elif [[ "$TASK" == "index" ]]; then
+                    if [[ "$MODE" == "DISTRIBUTED" ]]; then
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${DATE}"
+                    else
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${DATE}"
+                    fi
                 else
-                    echo "Unknown task: $SYSTEM"
+                    echo "Unknown task: $TASK: valid options include insert, index"
                     exit
                 fi
 
                 echo "myDIR=${dir}" >> $target_file
                 echo "BASE_DIR=${BASE_DIR}" >> $target_file
                 echo "ENV_PATH=${ENV_PATH}" >> $target_file
+                echo "TASK=${TASK}" >> $target_file
 
                 echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}" >> $target_file
                 echo "CORPUS_SIZE=${CORPUS_SIZE}" >> $target_file
@@ -154,7 +159,7 @@ do
                 fi
 
                 echo "" >> $target_file
-                cat $task/main.sh >> $target_file
+                cat main.sh >> $target_file
                 mkdir -p $dir
 
                 # Copy in mode specific files
@@ -172,7 +177,7 @@ do
                     cp milvusSetup/launch_minio.sh $dir/
                     cp milvusSetup/launch_milvus_part.sh $dir/
                 else
-                    echo "Unknown task: $SYSTEM"
+                    echo "Unknown MODE: $SYSTEM"
                     exit
                 fi
 
@@ -184,11 +189,15 @@ do
                 cp generalPython/poll.py $dir/
                 cp generalPython/status.py $dir/
                 
-                if [[ "$task" == "insert" ]]; then
-                    cp ./insert/setup_collection.py $dir/
-                    cp ./insert/multi_client_summary.py $dir/
-                    cp ./goCode/multiClientInsert/multiClientInsert $dir/
-                    cp ./goCode/multiClientInsert/main.go $dir/multiClientInsert.go
+                
+                # all tasks need insert code
+                cp ./generalPython/setup_collection.py $dir/
+                cp ./generalPython/insert_multi_client_summary.py $dir/
+                cp ./goCode/multiClientInsert/multiClientInsert $dir/
+                cp ./goCode/multiClientInsert/main.go $dir/multiClientInsert.go
+
+                if [[ "$TASK" == "index" ]]; then
+                    cp generalPython/convert_to_hnsw.py $dir/
                 fi
 
                 mv $target_file $dir

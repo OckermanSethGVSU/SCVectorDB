@@ -66,7 +66,6 @@ elif [[ "$PLATFORM" == "POLARIS" ]]; then
     
 fi
 # Create and pass in modified config #####
-
 cp -r ${base}/cpuMilvus/configs/ .
 
 cat << EOF > ./configs/user.yaml
@@ -82,8 +81,9 @@ EOF
 
 python3 replace.py --mode standalone --wal $WAL
 cp -r ./configs/ $TARGET_BASE/
-#####
 
+# create proxy registry for the go insert
+echo "0,${IP_ADDR},20001,30001" > PROXY_registry.txt
 
 apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --pwd /milvus \

@@ -60,6 +60,7 @@ export RESULT_PATH=$BASE_DIR/$myDIR
 export ETCD_MODE=$ETCD_MODE
 export MODE=$MODE
 export DML_CHANNELS=$DML_CHANNELS
+export TASK=$TASK
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -220,28 +221,38 @@ export NUM_PROXIES=$NUM_PROXIES
 export UPLOAD_CLIENTS_PER_PROXY=$UPLOAD_CLIENTS_PER_PROXY
 export DATA_FILEPATH=$DATA_FILEPATH
 export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
-touch ./workerOut/workflow_start.txt
+
+if [[ "$TASK" == "insert" ]]; then
+    touch ./workerOut/workflow_start.txt
+fi
 sleep 5
 
 NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientInsert
 
 # # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 convert_to_gpu_cargra.py
-touch ./workerOut/workflow_end.txt
-touch flag.txt
-env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
+if [[ "$TASK" == "insert" ]]; then
+    touch ./workerOut/workflow_end.txt
+    touch flag.txt
+fi
 
-# sleep 5
+env "${PYTHON_ENV_VARS[@]}" python3 insert_multi_client_summary.py
 
-# # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 convert_to_hnsw.py
-# # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 drop_collection.py
+mv times.csv insert_times.txt
+mv summary.csv insert_summary.txt
+mkdir -p uploadNPY
+mv *.npy uploadNPY
 
-# # python3 
-# # python3 gen_summary.py
-# python3 uneven_last_gen_summary.py
-# # pbsdsh -v bash -lc 'echo "===== $(hostname) ====="; dmesg -T | tail -n 2000'  > dmesg.all.txt
+if [[ "$TASK" == "index" ]]; then
+    touch ./workerOut/workflow_start.txt
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 convert_to_hnsw.py
+fi
 
-# # chmod 777 ./go/temp/
-# # rm -fr ./go/temp/
+if [[ "$TASK" == "index" ]]; then
+    touch ./workerOut/workflow_end.txt
+    touch flag.txt
+fi
+
+
 sleep 60
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
