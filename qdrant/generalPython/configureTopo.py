@@ -3,6 +3,7 @@ from collections import defaultdict
 from qdrant_client.models import SearchRequest
 import time
 import json
+import os
 from pathlib import Path
 from qdrant_client.http.models import (
     ReplicateShard,
@@ -108,6 +109,19 @@ print("Target topo: ", topology, flush=True)
 
 # time.sleep(60)
 
+vector_dim = int(os.environ["VECTOR_DIM"])
+distance_metric = os.environ["DISTANCE_METRIC"].strip().lower()
+
+match distance_metric:
+    case "dot" | "ip" | "innerproduct":
+        metric = models.Distance.DOT
+    case "cosine":
+        metric = models.Distance.COSINE
+    case "euclidan" | "l2":
+        metric = models.Distance.EUCLID
+    case _:
+        raise ValueError(f"Unknown distance metric: {distance_metric}")
+
 while True:
     try:
         client = QdrantClient(
@@ -120,7 +134,7 @@ while True:
             )
         client.recreate_collection(
             collection_name=collection_name,
-            vectors_config=models.VectorParams(size=2560, distance=models.Distance.COSINE),
+            vectors_config=models.VectorParams(size=vector_dim, distance=metric),
             shard_number=len(nodes),
             optimizers_config=models.OptimizersConfigDiff(indexing_threshold=0),
             replication_factor=1,

@@ -1,5 +1,8 @@
 
 export myDIR=$myDIR
+export VECTOR_DIM=$VECTOR_DIM
+export DISTANCE_METRIC=$DISTANCE_METRIC
+
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
     ml spack-pe-base/0.8.1
@@ -17,9 +20,6 @@ elif [[ "$PLATFORM" == "AURORA" ]]; then
     source /lus/flare/projects/radix-io/sockerman/qdrant/qEnv/bin/activate
     cd /lus/flare/projects/radix-io/sockerman/temp/qdrant/$myDIR
 fi
-
-
-
 
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then

@@ -25,7 +25,7 @@ QUERY_BATCH_SIZE=(2048)
 UPLOAD_CLIENTS_PER_WORKER=(1)
 # PBS Vars
 WALLTIME="01:00:00"
-queue=capacity # [preemptable, debug, debug-scaling, prod, capacity]
+queue=debug # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
@@ -33,14 +33,19 @@ TASK="index" # [insert, index]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
 CORPUS_SIZE=10000000 # total data to insert
-UPLOAD_CLIENTS_PER_WORKER=1
+UPLOAD_CLIENTS_PER_WORKER=32
 UPLOAD_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 
-# 
-# Aurora 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
-# Polaris 10 million subset: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
-# 
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
+# Aurora
+    # 10 million 
+    #    HPC-Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
+    #    Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy
+# Polaris 
+    # 10 million 
+    #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
+DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
+VECTOR_DIM=200
+DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
@@ -97,8 +102,7 @@ do
                         if [[ "$TASK" == "insert" ]]; then
                             dir="${TASK}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_C${UCPW}_uploadBS${upload_bs}_${DATE}"
                         elif [[ "$TASK" == "index" ]]; then
-                            dir="${TASK}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_${DATE}"
-                            echo "Running on Aurora"
+                            dir="${TASK}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_CS${CORPUS_SIZE}_${DATE}"
                         else
                             echo "Unknown task: $SYSTEM"
                             exit
@@ -106,6 +110,8 @@ do
                         
                         echo "myDIR=${dir}" >> $target_file
                         echo "TASK=${TASK}" >> $target_file
+                        echo "VECTOR_DIM=${VECTOR_DIM}" >> $target_file
+                        echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
                         echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}" >> $target_file
                         echo "CORPUS_SIZE=${CORPUS_SIZE}" >> $target_file
                         echo "USEPERF=${usePerf}" >> $target_file
@@ -116,16 +122,7 @@ do
                         echo "DATA_FILEPATH=${DATA_FILEPATH}" >> $target_file
                         echo "UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}" >> $target_file
                         echo "PLATFORM=${PLATFORM}" >> $target_file
-                        
-                        # # echo "NUM_SEGEMENTS=${NUM_SEGEMENTS}" >> $target_file
-                        # # echo "TARGET_SEGEMENTS=${TARGET_SEGEMENTS}" >> $target_file
-                        # # echo "HNSW_M=${HNSW_M}" >> $target_file
-                        # # echo "EF_CONSTRUCT=${EF_CONSTRUCT}" >> $target_file
-                
-                        # # # echo "NUMBER_SEGEMENTS=${NUMBER_SEGEMENTS}" >> $target_file
-                        # # echo "backupDir=''" >> $target_file
-                        # # echo "script=${target}" >> $target_file
-                        # # echo "NClients=${NClients}" >> $target_file
+
                         echo "" >> $target_file
                         cat main.sh >> $target_file
 
@@ -153,8 +150,8 @@ do
                         cp ./rustCode/multiClientUpload/src/main.rs $dir/rustSrc/multiClientUpload.rs
                         cp generalPython/insert_multi_client_summary.py $dir/
                         
-                        if [[ "$task" == "index" ]]; then
-                            cp generalPython/index.py
+                        if [[ "$TASK" == "index" ]]; then
+                            cp generalPython/index.py $dir/
                         fi
 
                         
@@ -191,7 +188,7 @@ do
                         chmod -R g+w $dir
                         cd $dir
 
-                        # qsub $target_file
+                        qsub $target_file
                         sleep 5
                         cd .. 
                     done
