@@ -48,6 +48,8 @@ UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 # DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
 DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 VECTOR_DIM=200
+DISTANCE_METRIC="IP" # [IP, COSINE, L2]
+
 
 # Path to Python env
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
@@ -121,9 +123,9 @@ do
                     fi
                 elif [[ "$TASK" == "index" ]]; then
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${CORPUS_SIZE}_${DATE}"
                     else
-                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${CORPUS_SIZE}_${DATE}"
                     fi
                 else
                     echo "Unknown task: $TASK: valid options include insert, index"
@@ -148,6 +150,7 @@ do
                 echo "WAL=${WAL}" >> $target_file
                 echo "UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}" >> $target_file
                 echo "VECTOR_DIM=${VECTOR_DIM}" >> $target_file
+                echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
 
                 if [[ "$MODE" == "DISTRIBUTED" ]]; then
                     echo "MINIO_MODE=${MINIO_MODE}" >> $target_file

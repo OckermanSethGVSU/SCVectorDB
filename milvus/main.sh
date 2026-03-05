@@ -62,6 +62,7 @@ export MODE=$MODE
 export DML_CHANNELS=$DML_CHANNELS
 export TASK=$TASK
 export VECTOR_DIM=$VECTOR_DIM
+export DISTANCE_METRIC=$DISTANCE_METRIC
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
