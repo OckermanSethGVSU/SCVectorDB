@@ -41,61 +41,28 @@ vector_field = FieldSchema(
     dtype=DataType.FLOAT_VECTOR,
     dim=VECTOR_DIM
 )
+schema = CollectionSchema(fields=[id_field, vector_field])
 
-# index_params = {
-#     "metric_type": "IP",
-#     "index_type": "FLAT",
-#     "params": {}   # FLAT doesn't need params
-# }
-
-index_params = {
-    "metric_type": "COSINE",
-    "index_type": "FLAT",
-    "params": {}   # FLAT doesn't need params
-}
-schema = CollectionSchema(
-    fields=[id_field, vector_field],
-    description="collection with flat index",
-    
-)
+distance_metric = os.environ["DISTANCE_METRIC"].strip().lower()
+match distance_metric:
+    case "dot" | "ip" | "innerproduct":
+        metric = "IP"
+    case "cosine":
+        metric = "COSINE"
+    case "euclidan" | "l2":
+        metric = "L2"
+    case _:
+        raise ValueError(f"Unknown distance metric: {distance_metric}")
 
 
 index_params = client.prepare_index_params()
 
-# Step 2: add a FLAT index definition for your vector field
-# index_params.add_index(
-#     field_name="vector",      # your vector_field_name
-#     index_type="FLAT",        # <- FLAT index
-#     metric_type="IP",     # or "L2", "IP", etc.
-#     params={}                 # FLAT doesn't need extra params
-# )
 index_params.add_index(
     field_name="vector",      # your vector_field_name
     index_type="FLAT",        # <- FLAT index
-    metric_type="COSINE",     # or "L2", "IP", etc.
+    metric_type=metric,     # or "L2", "IP", etc.
     params={}                 # FLAT doesn't need extra params
 )
-# index_params.add_index(
-#     field_name="vector",      # your vector_field_name
-#     index_type="GPU_IVF_PQ",        # <- FLAT index
-#     metric_type="IP",     # or "L2", "IP", etc.
-#     params={}                 # FLAT doesn't need extra params
-# )
-
-# index_params.add_index(
-#     field_name="vector",
-#     index_type="GPU_CAGRA",
-#     metric_type="IP",
-#     params={
-#         "intermediate_graph_degree": 64,   # keep >= graph_degree
-#         "graph_degree": 32,
-#         # strongly recommended to be explicit:
-#         "build_algo": "IVF_PQ",            # or whatever is supported in your version
-#         "cache_dataset_on_device": "false",# start with false to avoid GPU memory stalls
-#         "adapt_for_cpu": "false",
-#     }
-# )
-
 
 from pathlib import Path
 def get_streaming_count(filename="STREAMING_registry.txt"):
