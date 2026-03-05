@@ -38,12 +38,16 @@ UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 
 ### Path to embeddings
 # Aurora
-    # 10 million subset: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
+    # 10 million 
+    #    HPC-Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
+    #    Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy
 # Polaris 
-    # 10 million subset: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
+    # 10 million 
+    #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
 
 # DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
+DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
+VECTOR_DIM=200
 
 # Path to Python env
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
@@ -143,6 +147,7 @@ do
                 echo "MODE=${MODE}" >> $target_file
                 echo "WAL=${WAL}" >> $target_file
                 echo "UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}" >> $target_file
+                echo "VECTOR_DIM=${VECTOR_DIM}" >> $target_file
 
                 if [[ "$MODE" == "DISTRIBUTED" ]]; then
                     echo "MINIO_MODE=${MINIO_MODE}" >> $target_file

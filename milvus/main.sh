@@ -61,6 +61,7 @@ export ETCD_MODE=$ETCD_MODE
 export MODE=$MODE
 export DML_CHANNELS=$DML_CHANNELS
 export TASK=$TASK
+export VECTOR_DIM=$VECTOR_DIM
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles

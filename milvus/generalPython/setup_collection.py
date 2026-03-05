@@ -35,10 +35,11 @@ id_field = FieldSchema(
     auto_id=False,
 )
 
+VECTOR_DIM = int(os.getenv("VECTOR_DIM", "2560"))
 vector_field = FieldSchema(
     name="vector",
     dtype=DataType.FLOAT_VECTOR,
-    dim=2560
+    dim=VECTOR_DIM
 )
 
 # index_params = {
