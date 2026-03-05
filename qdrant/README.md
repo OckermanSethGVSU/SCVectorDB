@@ -1,81 +1,109 @@
 # Qdrant workflow
 
-This folder contains the Qdrant ingest benchmark workflow. The main entry point is:
+This workflow launches a distributed Qdrant cluster on PBS systems, performs multi-client vector upload, and can optionally run index construction.
+
+Main entrypoint:
 
 - `pbs_submit_manager.sh`
 
-It generates per-run folders, writes a PBS `submit.sh`, stages required files, and submits via `qsub`.
+## What is currently supported
 
-## `pbs_submit_manager.sh` variables
+- Task modes: `insert`, `index` (controlled by `TASK`)
+- Platforms: `POLARIS`, `AURORA` (`PLATFORM`)
+- Storage medium flags: `memory`, `DAOS`, `lustre`, `SSD` (`STORAGE_MEDIUM`)
+- Upload balancing strategies:
+  - `NO_BALANCE`
+  - `WORKER_BALANCE`
+- Vector parameters:
+  - `VECTOR_DIM`
+  - `DISTANCE_METRIC` (`IP`, `COSINE`, `L2`)
 
-### Parameter sweep variables
+## Workflow files
 
-- `NODES=(...)`: Number of worker nodes (plus one client node is requested in PBS).
-- `WORKERS_PER_NODE=(...)`: Qdrant worker processes per worker node.
-- `CORES=(...)`: CPU depth for launched worker processes.
-- `UPLOAD_BATCH_SIZE=(...)`: Upload batch sizes to sweep.
-- `QUERY_BATCH_SIZE=(...)`: Query batch size values (currently not used in active upload path, but exported).
-- `UPLOAD_CLIENTS_PER_WORKER=(...)`: Number of upload clients per worker used in loop (`UCPW`).
+- `pbs_submit_manager.sh`: parameter sweep + PBS script generation + staging + submission
+- `main.sh`: runtime orchestration (cluster bring-up, upload, optional index pass)
+- `check_dependencies.sh`: validates required files before submission
+- `qdrantSetup/*.sh`: node/bootstrap launch scripts
+- `generalPython/*.py`: profiling, topology setup, summaries, and index step
+- `rustCode/multiClientUpload/`: Rust multi-client upload program
 
-### PBS/job variables
+## Important submit variables (`pbs_submit_manager.sh`)
 
-- `WALLTIME="..."`: PBS walltime.
-- `queue=...`: PBS queue.
+### Sweep variables
+
+- `NODES=(...)`
+- `WORKERS_PER_NODE=(...)`
+- `CORES=(...)`
+- `UPLOAD_BATCH_SIZE=(...)`
+- `QUERY_BATCH_SIZE=(...)`
+- `UPLOAD_CLIENTS_PER_WORKER=(...)`
 
 ### Runtime variables
 
-- `task="insert"`: Selects `insert/main.sh` workflow.
-- `STORAGE_MEDIUM="..."`: Storage backend (`memory`, `DAOS`, `lustre`, `SSD`).
-- `usePerf="..."`: Enables/disables performance instrumentation consumed as `USEPERF`.
-- `CORPUS_SIZE=...`: Number of vectors to ingest.
-- `UPLOAD_BALANCE_STRATEGY="..."`: Strategy passed to uploader (`NO_BALANCE`, `WORKER_BALANCE`).
-- `DATA_FILEPATH="..."`: Absolute path to embeddings `.npy` file.
-- `PLATFORM="..."`: Platform-specific PBS/filesystem/module behavior (`POLARIS` or `AURORA`).
+- `TASK`
+- `STORAGE_MEDIUM`
+- `usePerf` (exported as `USEPERF`)
+- `CORPUS_SIZE`
+- `UPLOAD_BALANCE_STRATEGY`
+- `DATA_FILEPATH`
+- `VECTOR_DIM`
+- `DISTANCE_METRIC`
+- `PLATFORM`
 
-### Variables written into `submit.sh`
+### Scheduler variables
 
-The manager writes/exports these for `insert/main.sh`:
+- `WALLTIME`
+- `queue`
 
-- `NODES`, `WORKERS_PER_NODE`, `myDIR`
-- `STORAGE_MEDIUM`, `CORPUS_SIZE`, `USEPERF`, `CORES`
-- `QUERY_BATCH_SIZE`, `UPLOAD_BATCH_SIZE`
-- `UPLOAD_CLIENTS_PER_WORKER`, `DATA_FILEPATH`
-- `UPLOAD_BALANCE_STRATEGY`, `PLATFORM`
+## Runtime flow (`main.sh`)
 
-## Overall flow
+1. Loads platform modules/env and activates Python env.
+2. Optionally mounts DAOS via `launch-dfuse.sh`.
+3. Uses MPI to generate per-rank directories and launch Qdrant worker processes.
+4. Starts profiling on client and worker nodes.
+5. Waits for Qdrant readiness, then runs `configureTopo.py` until ready.
+6. Runs Rust uploader (`./multiClientUpload`) for data ingest.
+7. Writes summary/timing outputs.
+8. If `TASK=index`, runs `generalPython/index.py` after upload.
 
-1. **Generate PBS script**
-   - Builds `submit.sh` with queue/walltime/select/filesystem directives.
-2. **Encode run metadata**
-   - Constructs run dir name like `insert_<storage>_N..._uploadBS..._<timestamp>`.
-   - Writes runtime variables into `submit.sh`.
-3. **Append main workflow**
-   - Concatenates `insert/main.sh` into `submit.sh`.
-4. **Stage run directory**
-   - Creates run dir and copies images, binaries, launch scripts, helper Python, perf folder, and summary script.
-5. **Submit job**
-   - Moves `submit.sh` into run dir and runs `qsub submit.sh`.
+## Dependency check
 
-## Files assumed but not in this repo
+Run manually:
 
-The script references several artifacts that are expected to exist locally in `qdrant/` but are not committed:
+```bash
+./check_dependencies.sh
+```
 
-- `qdrant.sif` (Apptainer image)
-- `qdrant` (Qdrant binary)
-- `perf/` directory
-- `rustCode/multiClientUpload/multiClientUpload` (prebuilt Rust uploader binary)
+The submit manager runs the missing-only check automatically:
 
-Runtime scripts also assume platform-specific paths and environments not in the repo, for example:
+```bash
+./check_dependencies.sh --missing-only
+```
 
-- Python env activation paths under `/eagle/...` or `/lus/flare/...`
-- Dataset file path from `DATA_FILEPATH`
-- PBS/MPI/module/DAOS utilities available on target HPC system
+## Build notes
 
-## Expected run outputs
+Build the Rust uploader with:
 
-Per-run directories typically contain:
+```bash
+cd rustCode
+./compile.sh multiClientUpload
+```
 
-- Worker/profile logs
-- Timing and perf CSVs (`systemStats`, `times.csv`)
-- Upload timing `.npy` files (`uploadNPY/`)
-- Aggregate summary from `multi_client_summary.py`
+This emits `multiClientUpload` into the current directory and should then be placed where `pbs_submit_manager.sh` expects it (`rustCode/multiClientUpload/multiClientUpload`).
+
+## Required local artifacts (not committed)
+
+- `qdrant.sif`
+- `qdrant` server binary
+- `perf/perf`
+- Built uploader: `rustCode/multiClientUpload/multiClientUpload`
+
+## Typical run outputs
+
+Per run directory:
+
+- `workflow.out`, `output.log`
+- `insert_times.csv`
+- `uploadNPY/*.npy`
+- `systemStats/*.csv`
+- cluster/setup status files and worker logs

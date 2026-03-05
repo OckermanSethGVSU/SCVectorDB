@@ -1,20 +1,11 @@
 # SCVectorDB
 
-SCVectorDB is a set of **HPC orchestration scripts** for distributed vector database ingest benchmarking on PBS-based systems (for example, Polaris/Aurora style environments).
+SCVectorDB is a set of **PBS-based HPC orchestration workflows** for distributed vector database ingest and indexing experiments.
 
-This repo contains two workflows:
+The repository currently supports:
 
-- `qdrant/` for Qdrant ingest experiments.
-- `milvus/` for Milvus ingest experiments.
-
-Both workflows use a `pbs_submit_manager.sh` script to:
-
-1. Sweep one or more parameter combinations.
-2. Generate a per-run `submit.sh` PBS job script.
-3. Stage required runtime files into a run directory.
-4. Submit (or prepare) the run.
-
----
+- `qdrant/`: Qdrant cluster launch + multi-client upload + optional index build.
+- `milvus/`: Milvus standalone/distributed launch + multi-client upload + optional index conversion.
 
 ## Repository layout
 
@@ -24,56 +15,56 @@ Both workflows use a `pbs_submit_manager.sh` script to:
 ├── qdrant/
 │   ├── README.md
 │   ├── pbs_submit_manager.sh
-│   ├── insert/main.sh
+│   ├── main.sh
+│   ├── check_dependencies.sh
 │   ├── qdrantSetup/
 │   ├── generalPython/
 │   └── rustCode/
 └── milvus/
     ├── README.md
     ├── pbs_submit_manager.sh
-    ├── insert/main.sh
+    ├── main.sh
+    ├── check_dependencies.sh
     ├── milvusSetup/
     ├── generalPython/
+    ├── cpuMilvus/
     └── goCode/
 ```
 
----
-
 ## Common execution model
 
-At a high level, both submit managers follow this pattern:
+Both workflows use a two-stage launch:
 
-- Define loop variables (`NODES`, batch sizes, etc.).
-- Define runtime/platform variables (`STORAGE_MEDIUM`, `PLATFORM`, dataset paths).
-- For each parameter combination:
-  - Build PBS directives into `submit.sh`.
-  - Export variables consumed by `insert/main.sh`.
-  - Append the selected task script (`insert/main.sh`) to `submit.sh`.
-  - Create a run directory and copy required runtime assets.
-  - Move `submit.sh` into that run directory.
-  - Submit (`qsub`) or stage for manual submission.
+1. `pbs_submit_manager.sh` validates required local artifacts with `check_dependencies.sh`.
+2. It sweeps parameter combinations and generates a per-run `submit.sh`.
+3. It exports run configuration variables into `submit.sh`.
+4. It appends the workflow runtime script (`main.sh`) to `submit.sh`.
+5. It stages all required binaries/scripts into a run directory.
+6. It submits with `qsub`.
 
-See database-specific details in:
+## Environment expectations
+
+These workflows are designed for systems with:
+
+- PBS Pro (`qsub`, `$PBS_NODEFILE`)
+- MPI runtime (`mpirun`)
+- Apptainer
+- Python 3 + required Python packages
+- `jq`
+- Site module system (`module` / `ml`)
+- Optional DAOS utilities for DAOS-backed runs
+
+Most runs also rely on site-specific absolute paths for:
+
+- Container images
+- Prebuilt client binaries
+- Python environments
+- Dataset `.npy` embedding files
+
+See database-specific setup details in:
 
 - `qdrant/README.md`
 - `milvus/README.md`
-
----
-
-## Prerequisites
-
-These scripts assume an HPC environment with:
-
-- PBS Pro (`qsub`, `$PBS_NODEFILE`)
-- `mpirun`
-- Apptainer
-- Python 3 and required packages used by helper scripts
-- `jq` (used in runtime scripts)
-- Site modules (`module`/`ml`) and site-specific allocations/queues
-
-In addition, each workflow assumes extra artifacts that are **not committed in this repo** (container images, prebuilt binaries, and site-specific paths). Those assumptions are documented in each workflow README.
-
----
 
 ## Quick start
 
@@ -91,4 +82,4 @@ cd milvus
 bash pbs_submit_manager.sh
 ```
 
-Before running, review and update platform-specific variables in each `pbs_submit_manager.sh`.
+Before submitting jobs, update site-specific values in each `pbs_submit_manager.sh` (queue, account/filesystem settings, platform, dataset path, env path, etc.).

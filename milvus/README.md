@@ -1,93 +1,121 @@
 # Milvus workflow
 
-This folder contains the Milvus ingest benchmark workflow. The main entry point is:
+This workflow launches Milvus on PBS systems (standalone or distributed), runs multi-client ingest, and can optionally trigger index conversion.
+
+Main entrypoint:
 
 - `pbs_submit_manager.sh`
 
-It generates per-run folders, writes a PBS `submit.sh`, stages required files, and (currently) leaves submission commented out for manual control.
+## What is currently supported
 
-## `pbs_submit_manager.sh` variables
+- Task modes: `insert`, `index` (`TASK`)
+- Deployment modes: `STANDALONE`, `DISTRIBUTED` (`MODE`)
+- Platforms: `POLARIS`, `AURORA` (`PLATFORM`)
+- Storage options (`STORAGE_MEDIUM`): `memory`, `DAOS`, `lustre`, `SSD`
+- WAL configuration (`WAL`): `woodpecker`, `default`
+- Upload balancing (`UPLOAD_BALANCE_STRATEGY`): `NONE`, `WORKER`
+- Distributed controls:
+  - `MINIO_MODE`: `single`, `stripped`
+  - `MINIO_MEDIUM`: `DAOS`, `lustre`
+  - `ETCD_MODE`: `single`, `replicated`
+  - `STREAMING_NODES`, `STREAMING_NODES_PER_CN`
+  - `NUM_PROXIES`, `NUM_PROXIES_PER_CN`
+  - `DML_CHANNELS`
 
-### Parameter sweep variables
+## Workflow files
 
-- `NODES=(...)`: Number of worker nodes (plus one client node is requested in PBS).
-- `WORKERS_PER_NODE=(...)`: Workers per node used in rank calculations.
-- `CORES=(...)`: Core count/depth parameter propagated to runtime.
-- `UPLOAD_BATCH_SIZE=(...)`: Upload batch size sweep.
-- `QUERY_BATCH_SIZE=(...)`: Query batch values exported with job config.
+- `pbs_submit_manager.sh`: configuration sweep + PBS generation + staging + `qsub`
+- `main.sh`: runtime orchestration for standalone/distributed paths
+- `check_dependencies.sh`: validates required files before submission
+- `milvusSetup/*.sh`: component launch scripts (standalone, etcd, minio, role launches)
+- `generalPython/*.py`: status/polling/profiling/collection setup/summary/index conversion
+- `goCode/multiClientInsert/`: Go ingest client
+- `cpuMilvus/configs/`: base Milvus config templates used at runtime
 
-### PBS/job variables
+## Important submit variables (`pbs_submit_manager.sh`)
 
-- `WALLTIME="..."`: PBS walltime.
-- `queue=...`: PBS queue.
+### Sweep variables
+
+- `NODES=(...)`
+- `CORES=(...)`
+- `UPLOAD_BATCH_SIZE=(...)`
+- `QUERY_BATCH_SIZE=(...)`
 
 ### Runtime variables
 
-- `task="insert"`: Appends `insert/main.sh` to generated `submit.sh`.
-- `STORAGE_MEDIUM="..."`: Storage backend (`memory`, `DAOS`, `lustre`, `SSD`).
-- `usePerf="..."`: Runtime perf toggle passed as `USEPERF`.
-- `CORPUS_SIZE=...`: Number of vectors to ingest.
-- `UPLOAD_CLIENTS_PER_WORKER=...`: Number of uploader clients per worker.
-- `BASE_DIR="$(pwd)"`: Base directory used by runtime script for `cd` and result paths.
-- `DATA_FILEPATH="..."`: Absolute path to embeddings `.npy` file.
-- `ENV_PATH=...`: Path to Python environment activated in `insert/main.sh`.
-- `PLATFORM="..."`: `POLARIS` or `AURORA` behavior (modules/filesystems).
-- `MODE="..."`: `STANDALONE` or `DISTRIBUTED` Milvus launch mode.
+- `TASK`
+- `STORAGE_MEDIUM`
+- `usePerf` (exported as `USEPERF`)
+- `CORPUS_SIZE`
+- `UPLOAD_CLIENTS_PER_PROXY`
+- `UPLOAD_BALANCE_STRATEGY`
+- `BASE_DIR`
+- `WAL`
+- `DATA_FILEPATH`
+- `VECTOR_DIM`
+- `ENV_PATH`
+- `PLATFORM`
+- `MODE`
+- Distributed-only variables listed above
 
-### Variables written into `submit.sh`
+### Scheduler variables
 
-The manager writes/exports these for `insert/main.sh`:
+- `WALLTIME`
+- `queue`
 
-- `NODES`, `WORKERS_PER_NODE`, `myDIR`
-- `BASE_DIR`, `ENV_PATH`
-- `STORAGE_MEDIUM`, `CORPUS_SIZE`, `USEPERF`, `CORES`
-- `QUERY_BATCH_SIZE`, `UPLOAD_BATCH_SIZE`
-- `UPLOAD_CLIENTS_PER_WORKER`, `DATA_FILEPATH`
-- `PLATFORM`, `MODE`
+## Runtime flow (`main.sh`)
 
-## Overall flow
+1. Sets environment, loads platform modules, and activates Python env.
+2. Optionally mounts DAOS (`launch-dfuse.sh`) for Milvus and/or MinIO storage.
+3. Launches Milvus:
+   - `STANDALONE`: one server process + profiling.
+   - `DISTRIBUTED`: etcd/minio + coordinator/streaming/query/data/proxy components.
+4. Waits for service readiness and configures collection (`setup_collection.py`).
+5. Runs Go ingest client (`./multiClientInsert`).
+6. Produces summary/timing outputs.
+7. If `TASK=index`, runs `convert_to_hnsw.py`.
 
-1. **Generate PBS script**
-   - Writes scheduler directives (`select`, queue, walltime, filesystems, account).
-2. **Create run identity**
-   - Builds run dir name such as `insert_<mode>_<storage>_N..._uploadBS..._<timestamp>`.
-3. **Append runtime script**
-   - Concatenates `insert/main.sh` into `submit.sh`.
-4. **Stage mode-specific artifacts**
-   - `STANDALONE`: copies Milvus image + standalone launcher scripts.
-   - `DISTRIBUTED`: copies Milvus, etcd, and minio images + launchers.
-5. **Stage common utilities**
-   - Copies helper Python scripts and ingest/summary files.
-   - Copies Go uploader binary and source snapshot.
-6. **Finalize run dir**
-   - Moves `submit.sh` into run dir.
-   - `qsub` is currently commented out in this script.
+## Dependency check
 
-## Files assumed but not in this repo
+Run manually:
 
-The script expects several artifacts that are not committed:
+```bash
+./check_dependencies.sh
+```
+
+The submit manager runs the missing-only check automatically:
+
+```bash
+./check_dependencies.sh --missing-only
+```
+
+`check_dependencies.sh` always checks for required images/scripts/binaries and has additional `perfDir/perf` warning behavior unless `USE_PERF=true`.
+
+## Build notes
+
+Build the Go uploader with:
+
+```bash
+cd goCode
+./build.sh multiClientInsert
+```
+
+This produces `goCode/multiClientInsert/multiClientInsert`.
+
+## Required local artifacts (not committed)
 
 - `milvus.sif`
-- (for distributed mode) `etcd_v3.5.18.sif`, `minio.sif`
-- `goCode/multiClientInsert/multiClientInsert` prebuilt uploader binary
-- A valid `cpuMilvus/` directory containing the required prebuilt Milvus CPU binaries for your target deployment
+- `etcd_v3.5.18.sif`
+- `minio.sif`
+- Built Go client: `goCode/multiClientInsert/multiClientInsert`
+- `perfDir/` (and optionally `perfDir/perf` for profiling)
 
-Runtime also assumes external/site resources:
+## Typical run outputs
 
-- Valid Python env at `ENV_PATH` with required dependencies
-- Dataset file at `DATA_FILEPATH`
-- For `PLATFORM="POLARIS"`, accessible CUDA bind paths used by `milvusSetup/standaloneLaunch.sh`, specifically:
-  - `/eagle/projects/argonne_tpc/sockerman/buildingFromSource/gpuMilvus/cuda-merged` (bound to `/usr/local/cuda`)
-  - `/opt/nvidia/hpc_sdk` (bound read-only into container)
-  - These are required because `milvusSetup/execute.sh` exports CUDA toolkit env vars from `/usr/local/cuda` on Polaris.
-- HPC tools/modules: PBS, MPI, Apptainer, `jq`, DAOS utilities (when applicable)
-- Writable paths and permissions expected by launch scripts
+Per run directory:
 
-## Expected run outputs
-
-Per-run directories typically contain:
-
-- Worker logs in `workerOut/`
-- Workflow timing marker files
-- Summary generated by `multi_client_summary.py`
-- Any uploader/client outputs emitted during run
+- `workflow.out`, `output.log`
+- `insert_times.txt`
+- `insert_summary.txt`
+- `uploadNPY/*.npy`
+- `workerOut/*` logs and readiness markers
