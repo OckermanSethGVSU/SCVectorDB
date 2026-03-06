@@ -178,14 +178,14 @@ do
 
                 # Copy in mode specific files
                 if [[ "$MODE" == "STANDALONE" ]]; then
-                    cp milvus.sif $dir/
+                    cp sifs/milvus.sif $dir/
                     cp milvusSetup/standaloneLaunch.sh $dir/
                     cp milvusSetup/execute.sh $dir/
 
                 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
-                    cp milvus.sif $dir/
-                    cp etcd_v3.5.18.sif $dir/
-                    cp minio.sif $dir/
+                    cp sifs/milvus.sif $dir/
+                    cp sifs/etcd_v3.5.18.sif $dir/
+                    cp sifs/minio.sif $dir/
                     cp milvusSetup/execute.sh $dir/
                     cp milvusSetup/launch_etcd.sh $dir/
                     cp milvusSetup/launch_minio.sh $dir/

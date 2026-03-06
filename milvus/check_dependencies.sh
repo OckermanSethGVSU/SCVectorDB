@@ -10,9 +10,9 @@ if [[ "${1:-}" == "--missing-only" ]]; then
 fi
 
 required_paths=(
-    "milvus.sif"
-    "etcd_v3.5.18.sif"
-    "minio.sif"
+    "sifs/milvus.sif"
+    "sifs/etcd_v3.5.18.sif"
+    "sifs/minio.sif"
     "cpuMilvus"
     "milvusSetup/execute.sh"
     "milvusSetup/launch_etcd.sh"
