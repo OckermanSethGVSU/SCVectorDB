@@ -35,7 +35,7 @@ UPLOAD_CLIENTS_PER_PROXY=32
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
 UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
-GPU_INDEX = True # [True, False]
+GPU_INDEX="True" # [True, False]
 
 ### Path to embeddings
 # Aurora
@@ -56,6 +56,9 @@ DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
 # Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
 ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
+
+# Name of the directory with your build
+MILVUS_BUILD_DIR="traceMilvus"
 
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
@@ -153,6 +156,7 @@ do
                 echo "VECTOR_DIM=${VECTOR_DIM}" >> $target_file
                 echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
                 echo "GPU_INDEX=${GPU_INDEX}" >> $target_file
+                echo "MILVUS_BUILD_DIR=${MILVUS_BUILD_DIR}" >> $target_file
 
                 if [[ "$MODE" == "DISTRIBUTED" ]]; then
                     echo "MINIO_MODE=${MINIO_MODE}" >> $target_file
@@ -214,7 +218,7 @@ do
                 
                 chmod -R g+w $dir
                 cd $dir
-                qsub $target_file
+                # qsub $target_file
                 sleep 1
                 cd .. 
             done

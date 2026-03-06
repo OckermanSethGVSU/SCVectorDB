@@ -100,7 +100,7 @@ apptainer exec --fakeroot \
   --env METRICS_PORT=$METRICS_PORT \
   -B ./execute.sh:/milvus/app_execute.sh \
   -B ./workerOut/:/workerOut/ \
-  -B ${BASE_DIR}/cpuMilvus/:/milvus/ \
+  -B ${BASE_DIR}/${MILVUS_BUILD_DIR}/:/milvus/ \
   -B $TARGET_BASE/${TYPE}${RANK}/:/var/lib/milvus \
   -B $TARGET_BASE/${TYPE}${RANK}/configs/${TYPE}${RANK}.yaml:/milvus/configs/milvus.yaml \
   "${GPU_ARGS[@]}" \

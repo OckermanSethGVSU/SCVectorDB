@@ -66,7 +66,7 @@ elif [[ "$PLATFORM" == "POLARIS" ]]; then
     
 fi
 # Create and pass in modified config #####
-cp -r ${base}/cpuMilvus/configs/ .
+cp -r ${base}/${MILVUS_BUILD_DIR}/configs/ .
 
 cat << EOF > ./configs/user.yaml
 # Extra config to override default milvus.yaml
@@ -105,7 +105,7 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env DEPLOY_MODE=STANDALONE \
     --env TYPE=$TYPE \
     -B ./execute.sh:/milvus/app_execute.sh \
-    -B ${base}/cpuMilvus/:/milvus/ \
+    -B ${base}/${MILVUS_BUILD_DIR}/:/milvus/ \
     -B ${TARGET_BASE}/configs/:/milvus/configs/ \
     -B ${base}/perfDir/:/perfDir/ \
     -B ./workerOut/:/workerOut/ \

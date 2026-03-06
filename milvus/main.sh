@@ -64,6 +64,7 @@ export TASK=$TASK
 export VECTOR_DIM=$VECTOR_DIM
 export DISTANCE_METRIC=$DISTANCE_METRIC
 export GPU_INDEX=$GPU_INDEX
+export MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
