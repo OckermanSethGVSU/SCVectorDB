@@ -1,29 +1,3 @@
-// go_client/insert_sweep.go
-//
-// Batch-size sweep for a SINGLE client process targeting ONE Weaviate worker.
-// For each batch size:
-//   1) Reset schema (dynamic index for flat behavior)
-//   2) Insert MEASURE_VECS vectors starting at START_ROW
-//   3) Measure SEND time  = first RPC start -> last successful RPC end
-//   4) Measure END-TO-END = first RPC start -> queue drained (queue==0 AND indexing==0 stably)
-//
-// Env required:
-//   WORKER_IP REST_PORT GRPC_PORT DATA_FILE VEC_DIM MEASURE_VECS START_ROW
-//
-// Optional:
-//   DYNAMIC_THRESHOLD (default 10001000)
-//
-// Flags:
-//   -out bs_sweep.json
-//   -minpow 2 -maxpow 15
-//   -class PES2O
-//   -wait 180
-//   -overall_sec 20000
-//   -rpc_sec 1800
-//   -queue_timeout_sec 20000
-//   -queue_poll_ms 500
-//   -queue_stable_polls 3
-
 package main
 
 import (
