@@ -82,8 +82,15 @@ for dir in dirs:
 node_dir = f"{targetBase}/config/node{rank}"
 os.makedirs(node_dir, exist_ok=True)
 
+exe = os.environ.get("QDRANT_EXECUTABLE")
+if exe == "qdrantInsertTracing":
+    log_level = "ERROR,qdrant::insert_path=debug" 
+else:
+    log_level = "ERROR" 
+
+
 config = {
-    "log_level": "ERROR",
+    "log_level": log_level,
     "service": {
         "http_port": base_ports["http"] + rank * 100,
         "grpc_port": base_ports["grpc"] + rank * 100,

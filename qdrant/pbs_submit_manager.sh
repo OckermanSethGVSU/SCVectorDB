@@ -17,7 +17,7 @@ WORKERS_PER_NODE=(1)
 CORES=(112)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-UPLOAD_BATCH_SIZE=(128) 
+UPLOAD_BATCH_SIZE=(512) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
@@ -29,13 +29,13 @@ queue=debug # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
-TASK="index" # [insert, index]
+TASK="insert" # [insert, index]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
-CORPUS_SIZE=10000000 # total data to insert
-UPLOAD_CLIENTS_PER_WORKER=32
+CORPUS_SIZE=1000000 # total data to insert
+UPLOAD_CLIENTS_PER_WORKER=1
 UPLOAD_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
-GPU_INDEX=True
+GPU_INDEX=False
 
 # Aurora
     # 10 million 
@@ -44,11 +44,14 @@ GPU_INDEX=True
 # Polaris 
     # 10 million 
     #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
-VECTOR_DIM=200
-DISTANCE_METRIC="IP" # [IP, COSINE, L2]
+DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
+VECTOR_DIM=2560
+DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 
-PLATFORM="AURORA" # [POLARIS, AURORA]
+PLATFORM="POLARIS" # [POLARIS, AURORA]
+
+
+QDRANT_EXECUTABLE="qdrantInsertTracing" # [qdrant, qdrantInsertTracing]
 
 for num_nodes in "${NODES[@]}"
 do
@@ -124,6 +127,7 @@ do
                         echo "UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}" >> $target_file
                         echo "PLATFORM=${PLATFORM}" >> $target_file
                         echo "GPU_INDEX=${GPU_INDEX}" >> $target_file
+                        echo "QDRANT_EXECUTABLE=${QDRANT_EXECUTABLE}" >> $target_file
 
                         echo "" >> $target_file
                         cat main.sh >> $target_file
@@ -134,10 +138,12 @@ do
 
                         # copy in Qdrant files
                         cp qdrant.sif $dir/
-                        cp qdrant $dir/
                         cp qdrantSetup/launchQdrantNode.sh $dir/
                         cp qdrantSetup/launch.sh $dir/
 
+                        if [[ "$QDRANT_EXECUTABLE" != "" ]]; then
+                            cp qdrantBuilds/${QDRANT_EXECUTABLE} $dir/qdrant
+                        fi
                         # copy in general Python files
                         cp generalPython/gen_dirs.py $dir/
                         cp generalPython/mapping.py $dir/

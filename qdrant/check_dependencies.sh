@@ -9,7 +9,6 @@ fi
 
 required_paths=(
     "qdrant.sif"
-    "qdrant"
     "perf/perf"
     "qdrantSetup/launchQdrantNode.sh"
     "qdrantSetup/launch.sh"

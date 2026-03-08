@@ -3,6 +3,7 @@ export myDIR=$myDIR
 export VECTOR_DIM=$VECTOR_DIM
 export DISTANCE_METRIC=$DISTANCE_METRIC
 export GPU_INDEX=$GPU_INDEX
+export QDRANT_EXECUTABLE=$QDRANT_EXECUTABLE
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
