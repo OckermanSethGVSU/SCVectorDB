@@ -101,29 +101,31 @@ if [[ "$STORAGE_MEDIUM" == "DAOS" || ( "$MODE" == "DISTRIBUTED" && "$MINIO_MEDIU
 fi
 
 if [[ "$TRACING" == "True" ]]; then
-
+    ready=0
     bash launch_otel.sh &
     python3 net_mapping.py --rank 0 --name otel
     IP_ADDR=$(jq -r '.hsn0.ipv4[0]' "otel0.json")
     echo $IP_ADDR > otel.ip
     rm otel0.json
     for i in $(seq 1 90); do
-        if env "${PYTHON_ENV_VARS[@]}" nc -z "${IP_ADDR}" 4317 >/dev/null 2>&1; then
-        ready=1
-        echo "Collector is ready."
-        break
+        if env "${PYTHON_ENV_VARS[@]}" curl -fsS "http://${IP_ADDR}:13133/" >/dev/null 2>&1; then
+            ready=1
+            export OTLP_GRPC_ENDPOINT="${IP_ADDR}:4317"
+            sleep 10 # buffer 
+            echo "Collector is ready."
+            break
         fi
+
         if [ $((i % 10)) -eq 0 ]; then
-        echo "  still waiting (${i}s elapsed)..."
+            echo "  still waiting (${i}s elapsed)..."
         fi
         sleep 1
     done
+    
     if [ "${ready}" = "0" ]; then
         echo "Collector did not become healthy within 90s."
         exit 1
     fi
-    export OTLP_GRPC_ENDPOINT="${IP_ADDR}:4317"
-    sleep 10 # buffer 
 fi
 
 
@@ -280,9 +282,11 @@ fi
 
 
 
-
 sleep 60
 
+if [[ "$TRACING" == "True" ]]; then
+    python3 analyze_traces.py > analysis.txt
+fi
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
     DAOS_CONT="vectorDBTesting"

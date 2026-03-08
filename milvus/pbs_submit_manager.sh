@@ -16,7 +16,7 @@ CORES=(112)
 
 # Lustre todo: 8192, 256 (queued?)
 # best batch for 32 clients: 128
-UPLOAD_BATCH_SIZE=(8192) 
+UPLOAD_BATCH_SIZE=(512) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
@@ -33,9 +33,9 @@ queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
 # Path to Python env
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
 # Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
-ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
+ENV_PATH=/eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
 MILVUS_BUILD_DIR="traceMilvus" # Name of the directory with your build
-PLATFORM="AURORA" # [POLARIS, AURORA]
+PLATFORM="POLARIS" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
@@ -60,7 +60,7 @@ TRACING="True"
 
 # DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
 # DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy" # Path to embeddings
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
+DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
 # VECTOR_DIM=200
 VECTOR_DIM=2560
 DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
@@ -205,6 +205,7 @@ do
                     cp sifs/otel-collector.sif $dir/
                     cp utils/launch_otel.sh $dir/
                     cp utils/otel_config.yaml $dir/
+                    cp utils/analyze_traces.py $dir/
                 fi
                 # Copy in basic python utils
                 cp generalPython/net_mapping.py $dir/
