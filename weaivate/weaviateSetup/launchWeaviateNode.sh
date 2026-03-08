@@ -1,0 +1,226 @@
+#!/bin/bash
+
+# Usage:
+#   ./launchWeaviateNode.sh <storage_medium> <useperf> <total>
+
+STORAGE_MEDIUM=${1:?Usage: $0 <storage_medium> <useperf> <total>}
+USEPERF=${2:?Usage: $0 <storage_medium> <useperf> <total>}
+TOTAL=${3:-${PMI_SIZE:-${OMPI_COMM_WORLD_SIZE:-${MV2_COMM_WORLD_SIZE:-${PMIX_SIZE:-}}}}}
+RANK="${PMI_RANK:-${PMIX_RANK:-${OMPI_COMM_WORLD_RANK:-${MV2_COMM_WORLD_RANK:-${SLURM_PROCID:-}}}}}"
+
+if [[ -z "${RANK}" ]]; then
+    echo "Error: MPI rank not found in environment" >&2
+    exit 1
+fi
+
+if [[ -z "${TOTAL}" ]]; then
+    echo "Error: total ranks not provided and MPI size not found" >&2
+    exit 1
+fi
+
+RANK=$((RANK))
+TOTAL=$((TOTAL))
+mkdir -p ./perf
+
+# ------------------------------------------------------------
+# Discover LOCAL IP only
+# ------------------------------------------------------------
+python3 mapping.py --rank "$RANK"
+
+IP_JSON="interfaces${RANK}.json"
+if [[ ! -f "$IP_JSON" ]]; then
+    echo "Error: expected IP mapping file '$IP_JSON' not found" >&2
+    exit 1
+fi
+
+IP_ADDR=$(jq -r '.hsn0.ipv4[0] // empty' "$IP_JSON")
+if [[ -z "${IP_ADDR}" ]]; then
+    echo "Error: could not read .hsn0.ipv4[0] from '$IP_JSON'" >&2
+    cat "$IP_JSON" >&2
+    exit 1
+fi
+
+# ------------------------------------------------------------
+# Per-rank ports
+# ------------------------------------------------------------
+HTTP_PORT=$((8080 + RANK * 100))
+GO_PROFILING_PORT=$((HTTP_PORT + 1))
+GRPC_PORT=$((HTTP_PORT + 2))
+CLUSTER_GOSSIP_BIND_PORT=$((HTTP_PORT + 3))
+CLUSTER_DATA_BIND_PORT=$((HTTP_PORT + 4))
+RAFT_PORT=$((HTTP_PORT + 5))
+RAFT_INTERNAL_RPC_PORT=$((HTTP_PORT + 6))
+
+RAFT_JOIN=$(
+    for r in $(seq 0 $((TOTAL - 1))); do
+        this_http=$((8080 + r * 100))
+        this_raft=$((this_http + 5))
+        printf "node%d:%d," "$r" "$this_raft"
+    done
+)
+RAFT_JOIN=${RAFT_JOIN%,}
+
+# ------------------------------------------------------------
+# Shared registry
+# ------------------------------------------------------------
+OUTPUT_FILE="ip_registry.txt"
+touch "$OUTPUT_FILE"
+
+if [[ $RANK -eq 0 ]]; then
+    : > "$OUTPUT_FILE"
+fi
+
+sleep 1
+
+
+# rank,ip,http,gossip,data,raft,raft_internal
+echo "${RANK},${IP_ADDR},${HTTP_PORT},${CLUSTER_GOSSIP_BIND_PORT},${CLUSTER_DATA_BIND_PORT},${RAFT_PORT},${RAFT_INTERNAL_RPC_PORT}" >> "$OUTPUT_FILE"
+
+while true; do
+    REG_COUNT=$(awk -F, 'NF >= 7 {seen[$1]=1} END {print length(seen)}' "$OUTPUT_FILE")
+    if [[ "${REG_COUNT}" -ge "${TOTAL}" ]]; then
+        break
+    fi
+    sleep 0.1
+done
+
+BOOTSTRAP_IP=$(awk -F, '$1 == 0 {print $2; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_HTTP_PORT=$(awk -F, '$1 == 0 {print $3; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_GOSSIP_PORT=$(awk -F, '$1 == 0 {print $4; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_DATA_PORT=$(awk -F, '$1 == 0 {print $5; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_RAFT_PORT=$(awk -F, '$1 == 0 {print $6; exit}' "$OUTPUT_FILE")
+
+if [[ -z "${BOOTSTRAP_IP}" || -z "${BOOTSTRAP_GOSSIP_PORT}" || -z "${BOOTSTRAP_RAFT_PORT}" ]]; then
+    echo "Error: failed to read rank 0 bootstrap info from '$OUTPUT_FILE'" >&2
+    cat "$OUTPUT_FILE" >&2
+    exit 1
+fi
+
+# ------------------------------------------------------------
+# Storage selection
+# ------------------------------------------------------------
+APPTAINER_ARGS=()
+
+if [[ "$STORAGE_MEDIUM" == "memory" ]]; then
+    TARGET_BASE="/dev/shm/WeaviateDir"
+    (( RANK == 0 )) && echo "Using memory for persistence"
+
+elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
+    DAOS_POOL="radix-io"
+    DAOS_CONT="vectorDBTesting"
+    TARGET_BASE="/tmp/${DAOS_POOL}/${DAOS_CONT}/${myDIR:-default}/WeaviateDir"
+    (( RANK == 0 )) && echo "Using DAOS for persistence at ${TARGET_BASE}"
+    APPTAINER_ARGS+=(
+        --bind "/home/treewalker/daos_lib64:/opt/daos/lib64:ro"
+        --env LD_LIBRARY_PATH=/opt/daos/lib64
+    )
+
+elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
+    TARGET_BASE="./WeaviateDir"
+    (( RANK == 0 )) && echo "Using lustre for persistence"
+
+elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
+    TARGET_BASE="/local/scratch/WeaviateDir"
+    (( RANK == 0 )) && echo "Using SSD for persistence"
+
+else
+    echo "Error: unknown STORAGE_MEDIUM '$STORAGE_MEDIUM'" >&2
+    exit 1
+fi
+
+rm -rf "${TARGET_BASE}/node${RANK}"
+mkdir -p "${TARGET_BASE}/node${RANK}"
+
+# echo "============================================================"
+# echo "Rank                    : ${RANK}/${TOTAL}"
+# echo "IP_ADDR                 : ${IP_ADDR}"
+# echo "HTTP_PORT               : ${HTTP_PORT}"
+# echo "GO_PROFILING_PORT       : ${GO_PROFILING_PORT}"
+# echo "GRPC_PORT               : ${GRPC_PORT}"
+# echo "GOSSIP_PORT             : ${CLUSTER_GOSSIP_BIND_PORT}"
+# echo "DATA_PORT               : ${CLUSTER_DATA_BIND_PORT}"
+# echo "RAFT_PORT               : ${RAFT_PORT}"
+# echo "RAFT_INTERNAL_RPC_PORT  : ${RAFT_INTERNAL_RPC_PORT}"
+# echo "RAFT_JOIN               : ${RAFT_JOIN}"
+# echo "BOOTSTRAP_IP            : ${BOOTSTRAP_IP}"
+# echo "BOOTSTRAP_GOSSIP_PORT   : ${BOOTSTRAP_GOSSIP_PORT}"
+# echo "BOOTSTRAP_RAFT_PORT     : ${BOOTSTRAP_RAFT_PORT}"
+# echo "DATA_DIR                : ${TARGET_BASE}/node${RANK}"
+# echo "REGISTRY                : $(tr '\n' '; ' < "$OUTPUT_FILE")"
+# echo "============================================================"
+
+IMAGE="docker://semitechnologies/weaviate:1.36.2"
+
+COMMON_ARGS=(
+    --fakeroot
+    --writable-tmpfs
+    -B "${TARGET_BASE}/node${RANK}:/var/lib/weaviate"
+
+    --env AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
+    --env PERSISTENCE_DATA_PATH=/var/lib/weaviate
+
+    --env GO_PROFILING_PORT="${GO_PROFILING_PORT}"
+    --env GRPC_PORT="${GRPC_PORT}"
+
+    --env CLUSTER_HOSTNAME="node${RANK}"
+    --env CLUSTER_ADVERTISE_ADDR="${IP_ADDR}"
+    --env CLUSTER_GOSSIP_BIND_PORT="${CLUSTER_GOSSIP_BIND_PORT}"
+    --env CLUSTER_DATA_BIND_PORT="${CLUSTER_DATA_BIND_PORT}"
+
+    --env RAFT_PORT="${RAFT_PORT}"
+    --env RAFT_INTERNAL_RPC_PORT="${RAFT_INTERNAL_RPC_PORT}"
+    --env RAFT_JOIN="${RAFT_JOIN}"
+    --env RAFT_BOOTSTRAP_EXPECT="${TOTAL}"
+    --env RAFT_BOOTSTRAP_TIMEOUT=180
+    --env NO_PROXY="" 
+    --env no_proxy="" 
+    --env http_proxy="" 
+    --env https_proxy="" 
+    --env HTTP_PROXY="" 
+    --env HTTPS_PROXY=""
+)
+
+WEAVIATE_CMD=(
+    weaviate
+    --host ${IP_ADDR}
+    --port "${HTTP_PORT}"
+    --scheme http
+    --raft-port "${RAFT_PORT}"
+    --raft-internal-rpc-port "${RAFT_INTERNAL_RPC_PORT}"
+)
+
+if [[ $RANK -eq 0 ]]; then
+    echo "Launching founding node"
+
+    apptainer exec \
+        "${COMMON_ARGS[@]}" \
+        "${APPTAINER_ARGS[@]}" \
+        "${IMAGE}" \
+        "${WEAVIATE_CMD[@]}" \
+        > "rank${RANK}.out" 2>&1 &
+else
+    until bash -c "exec 3<>/dev/tcp/${BOOTSTRAP_IP}/${BOOTSTRAP_GOSSIP_PORT}" 2>/dev/null; do
+        sleep 0.2
+    done
+
+    until bash -c "exec 3<>/dev/tcp/${BOOTSTRAP_IP}/${BOOTSTRAP_RAFT_PORT}" 2>/dev/null; do
+        sleep 0.2
+    done
+
+    sleep 3
+
+    echo "Launching follower node"
+
+    apptainer exec \
+        "${COMMON_ARGS[@]}" \
+        "${APPTAINER_ARGS[@]}" \
+        --env CLUSTER_JOIN="${BOOTSTRAP_IP}:${BOOTSTRAP_GOSSIP_PORT}" \
+        "${IMAGE}" \
+        "${WEAVIATE_CMD[@]}" \
+        > "rank${RANK}.out" 2>&1 &
+fi
+
+sleep 5
+touch "./perf/weaviate_running${RANK}.txt"
+
+wait
