@@ -15,7 +15,44 @@ import (
 	"github.com/milvus-io/milvus/client/v2/column"
 	"github.com/milvus-io/milvus/client/v2/entity"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"google.golang.org/grpc"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/attribute"
 )
+
+func initTracer(ctx context.Context) (func(context.Context) error, error) {
+	endpoint := os.Getenv("OTLP_GRPC_ENDPOINT")
+	if endpoint == "" {
+		log.Fatal("OTLP_GRPC_ENDPOINT must be set")
+	}
+
+	exporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithEndpoint(endpoint),
+		otlptracegrpc.WithInsecure(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("milvus-client"),
+		)),
+	)
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	return tp.Shutdown, nil
+}
 
 type NodeInfo struct {
 	Rank int
@@ -215,8 +252,19 @@ func clientWorker(
 	matrix [][]float32,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
+	
+	tracing := os.Getenv("TRACING")
+	tracingEnabled := strings.ToLower(tracing) == "true"
+	var dialOpts []grpc.DialOption
+	var span trace.Span
+	if tracingEnabled {
+		dialOpts = append(dialOpts,grpc.WithStatsHandler(otelgrpc.NewClientHandler()),)
+	}
+	
 	defer wg.Done()
 	defer cancel()
+
+	globalClientRank := workerRank*clientsPerWorker + clientID
 
 	// ----- slice assignment: worker slice, then client slice within worker -----
 	wStart, wEnd := splitRange(totalRows, workerRank+1, workerRank)
@@ -274,7 +322,7 @@ func clientWorker(
 	}
 
 	if errN != nil {
-		log.Fatalf("failed to get proxy node: %v", err)
+		log.Fatalf("failed to get proxy node: %v", errN)
 	}
 
 	MILVUS_HOST := node.IP
@@ -284,8 +332,9 @@ func clientWorker(
 	BATCH_SIZE, err := strconv.Atoi(batchSizeStr)
 	
 	url := fmt.Sprintf("http://%s:%d", MILVUS_HOST,MILVUS_PORT)
-	mclient, err := milvusclient.New(context.Background(), &milvusclient.ClientConfig{
+	mclient, err := milvusclient.New(ctx, &milvusclient.ClientConfig{
 		Address: url,
+		DialOptions: dialOpts,
 	})
 	if err != nil {
 		log.Fatalf("failed to create Milvus client: %v", errN)
@@ -306,22 +355,36 @@ func clientWorker(
 		WithIDs(column.NewColumnInt64("id", []int64{localLastID})).
 		WithConsistencyLevel(entity.ClStrong)
 
-	globalClientRank := workerRank*clientsPerWorker + clientID
+	
 
 	fmt.Printf(
 		"Proxy=%d client=%d global_client=%d assigned [%d,%d) rows=%d batch=%d\n",
 		workerRank, clientID, globalClientRank, startIdx, endIdx, localRows, BATCH_SIZE,
 	)
 
-	// Barrier before inserting
-	barrier.Wait()
-
+	
 	var (
 		totalDurations   []float64
 		convertDurations []float64
 		uploadDurations  []float64
 	)
-
+	
+	if tracingEnabled {
+		tracer := otel.Tracer("milvus-client")
+		ctx, span = tracer.Start(ctx, fmt.Sprintf("MilvusClient-rank-%d", globalClientRank))
+		span.SetAttributes(attribute.Int("client.rank", globalClientRank))
+		
+		if globalClientRank == 0 {
+			sc := span.SpanContext()
+			log.Printf("client span started: trace_id=%s span_id=%s recording=%v",
+				sc.TraceID().String(),
+				sc.SpanID().String(),
+				span.IsRecording(),
+			)
+		}
+	}
+	// Barrier before inserting
+	barrier.Wait()
 	sharedTiming.MarkLoopStart()
 	startLoop := time.Now()
 	for i := 0; i < localRows; i += BATCH_SIZE {
@@ -360,6 +423,9 @@ func clientWorker(
 	// Wait for everyone to finish inserting
 	barrier.Wait()
 
+	if tracingEnabled {
+		span.End()
+	}
 	// Insert a final value so we can measure when it has been processed - only needed if we are doing insert testing
 	sentinelID := int64(totalRows) // unique
 	if globalClientRank == 0 {
@@ -387,6 +453,9 @@ func clientWorker(
 	sharedTiming.WaitSearchable()
 	searchableAtClient := time.Now()
 
+	if strings.ToLower(tracing) == "true" {
+		span.End()
+	}
 	barrier.Wait()
 
 	// local sanity (skip if no rows)
@@ -499,6 +568,24 @@ func main() {
 		CORPUS_SIZE, nWorkers, clientsPerWorker, totalClients, DATA_PATH,
 	)
 
+	tracing := os.Getenv("TRACING")
+	if tracing == "" {
+		log.Fatal("TRACING environment variable must be set")
+	}
+
+	var shutdown func(context.Context) error
+	if strings.ToLower(tracing) == "true" {
+		var err error
+		shutdown, err = initTracer(context.Background())
+		if err != nil {
+			log.Fatalf("failed to init tracer: %v", err)
+		}
+		defer func() {
+			if err := shutdown(context.Background()); err != nil {
+				log.Printf("tracer shutdown failed: %v", err)
+			}
+		}()
+	}
 
 	r, err := gonpy.NewFileReader(DATA_PATH)
 	if err != nil {

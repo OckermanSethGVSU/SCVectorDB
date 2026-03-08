@@ -16,7 +16,7 @@ CORES=(112)
 
 # Lustre todo: 8192, 256 (queued?)
 # best batch for 32 clients: 128
-UPLOAD_BATCH_SIZE=(128) 
+UPLOAD_BATCH_SIZE=(8192) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
@@ -26,18 +26,30 @@ WALLTIME="01:00:00"
 queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
 
 
+
+
+
+### Platform/DIR Specific Variables ###
+# Path to Python env
+# Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
+# Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
+ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
+MILVUS_BUILD_DIR="traceMilvus" # Name of the directory with your build
+PLATFORM="AURORA" # [POLARIS, AURORA]
+
 ### General runtime variables ###
-TASK="index" # [insert,index]
+MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
+TASK="insert" # [insert,index]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
 CORPUS_SIZE=10000000 # total data to insert
-UPLOAD_CLIENTS_PER_PROXY=32
+UPLOAD_CLIENTS_PER_PROXY=1
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
 UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
-GPU_INDEX="True" # [True, False]
+GPU_INDEX="False" # [True, False]
+TRACING="True" 
 
-### Path to embeddings
 # Aurora
     # 10 million 
     #    HPC-Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
@@ -47,24 +59,13 @@ GPU_INDEX="True" # [True, False]
     #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
 
 # DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
-VECTOR_DIM=200
-DISTANCE_METRIC="IP" # [IP, COSINE, L2]
+# DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy" # Path to embeddings
+DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
+# VECTOR_DIM=200
+VECTOR_DIM=2560
+DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 
-
-# Path to Python env
-# Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
-# Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
-ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
-
-# Name of the directory with your build
-MILVUS_BUILD_DIR="traceMilvus"
-
-PLATFORM="AURORA" # [POLARIS, AURORA]
-
-MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
-
-### Distributed Variables
+### Distributed Variables ###
 MINIO_MODE="stripped" # [single, stripped]
 MINIO_MEDIUM="DAOS" # [DAOS, lustre] (can be memory if running single)
 ETCD_MODE="replicated" # [single, replicated]
@@ -100,7 +101,7 @@ do
                 if [[ "$PLATFORM" == "POLARIS" ]]; then
                     echo "#PBS -l filesystems=home:eagle" >> $target_file    
                 elif [[ "$PLATFORM" == "AURORA" ]]; then
-                    if [[ "$STORAGE_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then
+                    if [[ "$STORAGE_MEDIUM" == "DAOS" || ( "$MODE" == "DISTRIBUTED" && "$MINIO_MEDIUM" == "DAOS" ) ]]; then
                         echo "#PBS -l filesystems=home:flare:daos_user_fs" >> $target_file
                         echo "#PBS -l daos=daos_user" >> $target_file
                     else
@@ -157,6 +158,10 @@ do
                 echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
                 echo "GPU_INDEX=${GPU_INDEX}" >> $target_file
                 echo "MILVUS_BUILD_DIR=${MILVUS_BUILD_DIR}" >> $target_file
+                echo "TRACING=${TRACING}" >> $target_file
+                
+                
+
 
                 if [[ "$MODE" == "DISTRIBUTED" ]]; then
                     echo "MINIO_MODE=${MINIO_MODE}" >> $target_file
@@ -196,6 +201,11 @@ do
                 fi
 
 
+                if [[ "$TRACING" == "True" ]]; then
+                    cp sifs/otel-collector.sif $dir/
+                    cp utils/launch_otel.sh $dir/
+                    cp utils/otel_config.yaml $dir/
+                fi
                 # Copy in basic python utils
                 cp generalPython/net_mapping.py $dir/
                 cp generalPython/replace.py $dir/
@@ -218,7 +228,7 @@ do
                 
                 chmod -R g+w $dir
                 cd $dir
-                # qsub $target_file
+                qsub $target_file
                 sleep 1
                 cd .. 
             done

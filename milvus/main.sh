@@ -65,6 +65,7 @@ export VECTOR_DIM=$VECTOR_DIM
 export DISTANCE_METRIC=$DISTANCE_METRIC
 export GPU_INDEX=$GPU_INDEX
 export MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR
+export TRACING=$TRACING
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -85,15 +86,11 @@ fi
 
 # Activate Python env
 source $ENV_PATH/bin/activate
-
-
-
-
 cat $PBS_NODEFILE > all_nodefile.txt
 
 
 
-if [[ "$STORAGE_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then
+if [[ "$STORAGE_MEDIUM" == "DAOS" || ( "$MODE" == "DISTRIBUTED" && "$MINIO_MEDIUM" == "DAOS" ) ]]; then
     module use /soft/modulefiles
     module load daos
     DAOS_POOL="radix-io"
@@ -101,6 +98,32 @@ if [[ "$STORAGE_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then
 
     launch-dfuse.sh ${DAOS_POOL}:${DAOS_CONT}
     mkdir -p /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
+fi
+
+if [[ "$TRACING" == "True" ]]; then
+
+    bash launch_otel.sh &
+    python3 net_mapping.py --rank 0 --name otel
+    IP_ADDR=$(jq -r '.hsn0.ipv4[0]' "otel0.json")
+    echo $IP_ADDR > otel.ip
+    rm otel0.json
+    for i in $(seq 1 90); do
+        if env "${PYTHON_ENV_VARS[@]}" nc -z "${IP_ADDR}" 4317 >/dev/null 2>&1; then
+        ready=1
+        echo "Collector is ready."
+        break
+        fi
+        if [ $((i % 10)) -eq 0 ]; then
+        echo "  still waiting (${i}s elapsed)..."
+        fi
+        sleep 1
+    done
+    if [ "${ready}" = "0" ]; then
+        echo "Collector did not become healthy within 90s."
+        exit 1
+    fi
+    export OTLP_GRPC_ENDPOINT="${IP_ADDR}:4317"
+    sleep 10 # buffer 
 fi
 
 

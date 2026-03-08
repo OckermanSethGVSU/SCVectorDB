@@ -103,6 +103,19 @@ if mode == "standalone":
     text = text.replace("<HNS0>", replacement)
     text = text.replace("<MQ>", wal)
 
+    # Set tracing values
+    tracing = os.environ.get("TRACING", "false").strip().lower() == "true"
+
+    if tracing:
+        worker_ip_path = Path("otel.ip")
+        trace_ip = worker_ip_path.read_text().strip()
+        text = text.replace("<TRACE_FRACTION>", str(1))
+        text = text.replace("<OLTP_HTTP>", trace_ip)
+    else:
+        text = text.replace("<TRACE_FRACTION>", str(0))
+        text = text.replace("<OLTP_HTTP>:4317", "")
+
+
     # Write back in place
     milvus_path.write_text(text)
 elif mode == "distributed":
