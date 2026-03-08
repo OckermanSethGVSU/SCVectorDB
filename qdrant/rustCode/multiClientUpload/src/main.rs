@@ -364,9 +364,7 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
     let total = searchable.duration_since(start_loop).as_secs_f64().to_string();
     
     // this is dumb but it lets me order the writes without more work
-    barrier.wait().await;
-    sleep(Duration::from_millis(3000 * (rank) as u64)).await;
-    
+        
     // safely write overall times to file
     {
 
