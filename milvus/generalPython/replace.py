@@ -116,6 +116,11 @@ if mode == "standalone":
         text = text.replace("<TRACE_FRACTION>", str(0))
         text = text.replace("<OLTP_HTTP>:4317", "")
 
+    GPU = os.environ.get("GPU_INDEX", "false").strip().lower() == "true"
+
+    if not GPU:
+        text = text.replace("initMemSize: 0", "initMemSize: 2048")
+        text = text.replace("maxMemSize: 0", "maxMemSize: 4096")
 
     # Write back in place
     milvus_path.write_text(text)
@@ -146,6 +151,12 @@ elif mode == "distributed":
     
     dml_channels = get_dml_channels()
     text = text.replace("<DML>", dml_channels)
+    
+    GPU = os.environ.get("GPU_INDEX", "false").strip().lower() == "true"
+    if not GPU:
+        text = text.replace("initMemSize: 0", "initMemSize: 2048")
+        text = text.replace("maxMemSize: 0", "maxMemSize: 4096")
+    
     dist_milvus_path.write_text(text)
 
 elif mode in ["COORDINATOR", "STREAMING","QUERY","PROXY", "DATA"]:
