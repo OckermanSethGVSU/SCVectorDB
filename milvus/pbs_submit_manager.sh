@@ -16,14 +16,14 @@ CORES=(112)
 
 # Lustre todo: 8192, 256 (queued?)
 # best batch for 32 clients: 128
-UPLOAD_BATCH_SIZE=(512) 
+UPLOAD_BATCH_SIZE=(32768) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
+queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
 
 
 
@@ -33,22 +33,22 @@ queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
 # Path to Python env
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
 # Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
-ENV_PATH=/eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
-MILVUS_BUILD_DIR="traceMilvus" # Name of the directory with your build
-PLATFORM="POLARIS" # [POLARIS, AURORA]
+ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
+MILVUS_BUILD_DIR="cpuMilvus" # Name of the directory with your build: traceMilvus, cpuMilvus
+PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
-TASK="insert" # [insert,index]
-STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
+TASK="index" # [insert,index]
+STORAGE_MEDIUM="lustre" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
-CORPUS_SIZE=10000000 # total data to insert
+CORPUS_SIZE=1000000 # total data to insert
 UPLOAD_CLIENTS_PER_PROXY=1
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
 UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 GPU_INDEX="False" # [True, False]
-TRACING="True" 
+TRACING="False" 
 
 # Aurora
     # 10 million 
@@ -60,7 +60,7 @@ TRACING="True"
 
 # DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
 # DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy" # Path to embeddings
-DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
+DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
 # VECTOR_DIM=200
 VECTOR_DIM=2560
 DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]

@@ -112,6 +112,7 @@ if mode == "standalone":
         text = text.replace("<TRACE_FRACTION>", str(1))
         text = text.replace("<OLTP_HTTP>", trace_ip)
     else:
+        text = text.replace("exporter: otlp", "exporter: noop")
         text = text.replace("<TRACE_FRACTION>", str(0))
         text = text.replace("<OLTP_HTTP>:4317", "")
 

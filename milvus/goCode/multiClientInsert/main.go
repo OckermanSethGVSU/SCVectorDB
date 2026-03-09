@@ -404,12 +404,16 @@ func clientWorker(
 		}
 
 		startUpload := time.Now()
+		
+		// make sure RPC does not time out
+		insertCtx, insertCancel := context.WithTimeout(ctx, 30*time.Minute)
 		_, err := mclient.Insert(
-			ctx,
+			insertCtx,
 			milvusclient.NewColumnBasedInsertOption(collectionName).
 				WithInt64Column(idField, ids).
 				WithFloatVectorColumn(vectorField, mcols, batch),
 		)
+		insertCancel()
 		if err != nil {
 			log.Fatalf("insert failed worker=%d client=%d absRowStart=%d: %v", workerRank, clientID, startIdx+i, err)
 		}
