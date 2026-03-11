@@ -188,6 +188,9 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
     // let qdrant_url = env::var("QDRANT_URL").unwrap_or_else(|_| "http://localhost:6334".to_string());
     let balance_strategy = env::var("QUERY_BALANCE_STRATEGY")
         .expect("Environment variable QUERY_BALANCE_STRATEGY is missing");
+    let debug_results = env::var("QUERY_DEBUG_RESULTS")
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "True" | "yes" | "YES"))
+        .unwrap_or(false);
 
 
 
@@ -214,14 +217,7 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
 
     
 
-    println!(
-        "rank {} slice [{}, {}) len={}",
-        rank,
-        start_slice,
-        end_slice,
-        end_slice - start_slice,
-    );
-
+    
 
 
     let (rows, dim) = view.dim();
@@ -257,6 +253,7 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
     let start_loop = Instant::now();
 
     let mut cycle_start = Instant::now();
+    let mut printed_debug_results = false;
     for chunk in view.axis_chunks_iter(Axis(0), batch_size) {
 
         
@@ -264,8 +261,21 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
         if batch_size == 1 {
             let query = QueryPointsBuilder::new(collection_name).query(Query::new_nearest(chunk.row(0).to_vec())).limit(10);
             start_upload = Instant::now();
-            client.query(query).await?;
+            let response = client.query(query).await?;
             end_upload = Instant::now();
+
+            if debug_results && rank == 0 && !printed_debug_results {
+                println!("DEBUG rank {rank}: single query returned {} points", response.result.len());
+                for (idx, point) in response.result.iter().take(3).enumerate() {
+                    println!(
+                        "DEBUG rank {rank}: result[{idx}] id={:?} score={:?} payload={:?}",
+                        point.id,
+                        point.score,
+                        point.payload
+                    );
+                }
+                printed_debug_results = true;
+            }
 
         } else {
             
@@ -283,8 +293,27 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
             
             let batchQuery = QueryBatchPointsBuilder::new(collection_name, queries).timeout(999).build();
             start_upload = Instant::now();
-            client.query_batch(batchQuery).await?;
+            let response = client.query_batch(batchQuery).await?;
             end_upload = Instant::now();
+
+            if debug_results && rank == 0 && !printed_debug_results {
+                println!("DEBUG rank {rank}: batch query returned {} result sets", response.result.len());
+                if let Some(first_query) = response.result.first() {
+                    println!(
+                        "DEBUG rank {rank}: first query returned {} points",
+                        first_query.result.len()
+                    );
+                    for (idx, point) in first_query.result.iter().take(3).enumerate() {
+                        println!(
+                            "DEBUG rank {rank}: first_query.result[{idx}] id={:?} score={:?} payload={:?}",
+                            point.id,
+                            point.score,
+                            point.payload
+                        );
+                    }
+                }
+                printed_debug_results = true;
+            }
         
         }
         
