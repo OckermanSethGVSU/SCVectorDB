@@ -129,7 +129,7 @@ async fn main() -> anyhow::Result<()> {
     
     
     let npy_path = env::var("DATA_FILEPATH")
-        .expect("Environment variable FILEPATH is missing");
+        .expect("Environment variable DATA_FILEPATH is missing");
     
    
     // Shared async barrier and lock
