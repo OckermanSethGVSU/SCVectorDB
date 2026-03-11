@@ -7,6 +7,39 @@ if ! "$SCRIPT_DIR/check_dependencies.sh" --missing-only; then
 fi
 
 
+print_config_summary() {
+    echo
+    echo "                Experiment Configuration"
+    echo "======================================================"
+
+    echo "Platform:                 $PLATFORM"
+    echo "Mode:                     $MODE"
+    echo "Storage Medium:           $STORAGE_MEDIUM"
+    echo "Perf:             $usePerf"
+    echo "Tracing:          $TRACING"
+    echo "Corpus Size:              $CORPUS_SIZE"
+    echo "Vector Dim:               $VECTOR_DIM"
+    echo "Distance Metric:          $DISTANCE_METRIC"
+    echo "GPU Index:                $GPU_INDEX"
+    echo "Data File:                $DATA_FILEPATH"
+    echo "Env Path:                 $ENV_PATH"
+    echo "Milvus Build Dir:         $MILVUS_BUILD_DIR"
+    echo "WAL Mode:                 $WAL"
+    if [[ "$MODE" == "DISTRIBUTED" ]]; then
+        echo "MinIO Mode:               $MINIO_MODE"
+        echo "MinIO Medium:             $MINIO_MEDIUM"
+        echo "ETCD Mode:                $ETCD_MODE"
+        echo "Streaming Nodes:          $STREAMING_NODES"
+        echo "Streaming/Compute Node:   $STREAMING_NODES_PER_CN"
+        echo "Proxies:                  $NUM_PROXIES"
+        echo "Proxies/Compute Node:     $NUM_PROXIES_PER_CN"
+        echo "DML Channels:             $DML_CHANNELS"
+    fi
+
+    echo "======================================================"
+    echo
+}
+
 
 ### Loop variables ###
 NODES=(1)
@@ -16,14 +49,14 @@ CORES=(112)
 
 # Lustre todo: 8192, 256 (queued?)
 # best batch for 32 clients: 128
-UPLOAD_BATCH_SIZE=(32768) 
+UPLOAD_BATCH_SIZE=(2048) 
 
 # 2 8
 QUERY_BATCH_SIZE=(2048)
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
+queue=capacity # [preemptable, debug, debug-scaling, prod,capacity]
 
 
 
@@ -40,9 +73,9 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 ### General runtime variables ###
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 TASK="index" # [insert,index]
-STORAGE_MEDIUM="lustre" # [memory, DAOS, lustre, SSD]
+STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
-CORPUS_SIZE=1000000 # total data to insert
+CORPUS_SIZE=5000000 # total data to insert
 UPLOAD_CLIENTS_PER_PROXY=1
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
@@ -60,10 +93,10 @@ TRACING="False"
 
 # DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
 # DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy" # Path to embeddings
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
+DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy" # Path to embeddings
 # VECTOR_DIM=200
-VECTOR_DIM=2560
-DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
+VECTOR_DIM=200
+DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 
 ### Distributed Variables ###
 MINIO_MODE="stripped" # [single, stripped]
@@ -75,6 +108,9 @@ NUM_PROXIES=32
 NUM_PROXIES_PER_CN=4
 DML_CHANNELS=128 # controls DML channels on startup -> defaults to 16 if not set
 
+
+print_config_summary
+exit
 
 for num_nodes in "${NODES[@]}"
 do
