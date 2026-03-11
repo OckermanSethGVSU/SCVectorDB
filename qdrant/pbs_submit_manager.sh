@@ -1,5 +1,21 @@
 #!/bin/bash
 
+print_config_summary() {
+    echo "            Experiment Configuration"
+    echo "================================================="
+    echo "Platform:                 $PLATFORM"
+    echo "Task:                     $TASK"
+    echo "Storage Medium:           $STORAGE_MEDIUM"
+    echo "Perf:                     $usePerf"
+    echo "Corpus Size:              $CORPUS_SIZE"
+    echo "Vector Dim:               $VECTOR_DIM"
+    echo "Distance Metric:          $DISTANCE_METRIC"
+    echo "GPU Index:                $GPU_INDEX"
+    echo "Data File:                $DATA_FILEPATH"
+    echo "Qdrant Executable:        $QDRANT_EXECUTABLE"
+
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if ! "$SCRIPT_DIR/check_dependencies.sh" --missing-only; then
@@ -29,11 +45,11 @@ queue=debug # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
-TASK="insert" # [insert, index]
+TASK="index" # [insert, index]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
 CORPUS_SIZE=1000000 # total data to insert
-UPLOAD_CLIENTS_PER_WORKER=1
+UPLOAD_CLIENTS_PER_WORKER=32
 UPLOAD_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 GPU_INDEX=False
 
@@ -44,14 +60,16 @@ GPU_INDEX=False
 # Polaris 
     # 10 million 
     #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
-DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
+DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
 VECTOR_DIM=2560
 DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 
-PLATFORM="POLARIS" # [POLARIS, AURORA]
+PLATFORM="AURORA" # [POLARIS, AURORA]
 
 
-QDRANT_EXECUTABLE="qdrantInsertTracing" # [qdrant, qdrantInsertTracing]
+QDRANT_EXECUTABLE="qdrant" # [qdrant, qdrantInsertTracing]
+
+print_config_summary
 
 for num_nodes in "${NODES[@]}"
 do

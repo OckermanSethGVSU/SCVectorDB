@@ -19,7 +19,7 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
 elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
     module load frameworks
-    source /lus/flare/projects/radix-io/sockerman/qdrant/qEnv/bin/activate
+    source /lus/flare/projects/radix-io/sockerman/temp/qdrant/newEnv/bin/activate
     cd /lus/flare/projects/radix-io/sockerman/temp/qdrant/$myDIR
 fi
 
