@@ -54,6 +54,7 @@ PYTHON_ENV_VARS=(
 )
 
 cd $BASE_DIR/$myDIR
+export CORES=$CORES
 export BASE_DIR=$BASE_DIR
 export myDIR=$myDIR
 export RESULT_PATH=$BASE_DIR/$myDIR
@@ -131,7 +132,16 @@ fi
 
 if [[ "$MODE" == "STANDALONE" ]]; then
     second_node=$(sed -n '2p' "$PBS_NODEFILE")
-    mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $USEPERF $PLATFORM STANDALONE $WAL &
+
+    if [[ "$CORES" -eq 112 ]]; then
+        echo "Launching standalone: unrestricted cores"
+
+        mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $USEPERF $PLATFORM STANDALONE $WAL &
+    else
+        echo "Launching standalone: ${CORES} cores"
+        mpirun -n 1 --ppn 1 -d $CORES --cpu-bind depth  --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $USEPERF $PLATFORM STANDALONE $WAL &
+    fi
+
     # launch profiling on worker and client nodes
     mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node python3 profile.py worker_0 $PLATFORM &
     python3 profile.py client_node $PLATFORM & 

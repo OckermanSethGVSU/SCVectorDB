@@ -43,7 +43,7 @@ print_config_summary() {
 
 ### Loop variables ###
 NODES=(1)
-CORES=(112)
+CORES=(1 1 1 2 2 2)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 
@@ -55,8 +55,8 @@ UPLOAD_BATCH_SIZE=(2048)
 QUERY_BATCH_SIZE=(2048)
 
 # PBS Vars
-WALLTIME="01:00:00"
-queue=capacity # [preemptable, debug, debug-scaling, prod,capacity]
+WALLTIME="02:00:00"
+queue=preemptable # [preemptable, debug, debug-scaling, prod,capacity]
 
 
 
@@ -66,16 +66,16 @@ queue=capacity # [preemptable, debug, debug-scaling, prod,capacity]
 # Path to Python env
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
 # Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
-ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
+ENV_PATH=/eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
 MILVUS_BUILD_DIR="cpuMilvus" # Name of the directory with your build: traceMilvus, cpuMilvus
-PLATFORM="AURORA" # [POLARIS, AURORA]
+PLATFORM="POLARIS" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 TASK="index" # [insert,index]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
-CORPUS_SIZE=5000000 # total data to insert
+CORPUS_SIZE=10000000 # total data to insert
 UPLOAD_CLIENTS_PER_PROXY=1
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
@@ -95,7 +95,7 @@ TRACING="False"
 
 # DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
 # DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy" # Path to embeddings
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy" # Path to embeddings
+DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy" # Path to embeddings
 # VECTOR_DIM=200
 VECTOR_DIM=200
 DISTANCE_METRIC="IP" # [IP, COSINE, L2]
@@ -112,7 +112,7 @@ DML_CHANNELS=128 # controls DML channels on startup -> defaults to 16 if not set
 
 
 print_config_summary
-exit
+
 
 for num_nodes in "${NODES[@]}"
 do
@@ -168,7 +168,7 @@ do
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${CORPUS_SIZE}_${DATE}"
                     else
-                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${CORPUS_SIZE}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${CORPUS_SIZE}_${DATE}"
                     fi
                 else
                     echo "Unknown task: $TASK: valid options include insert, index"

@@ -95,6 +95,16 @@ else
     )
 fi
 
+CPU_ARGS=()
+if [[ "$CORES" -eq 112 ]]; then                 
+    CPU_ARGS+=()
+else
+    CPU_ARGS+=(
+        --env GOMAXPROCS=$CORES
+    )
+fi
+
+
 apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --pwd /milvus \
     --env MILVUSCONF=/milvus/configs/ \
@@ -112,6 +122,7 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     -B ${TARGET_BASE}/volumes/milvus:/var/lib/milvus \
     "${POLARIS_BINDS[@]}" \
     "${GPU_ARGS[@]}" \
+    "${CPU_ARGS[@]}" \
     milvus.sif bash app_execute.sh 
 
 
