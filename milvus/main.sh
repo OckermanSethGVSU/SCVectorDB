@@ -136,10 +136,10 @@ if [[ "$MODE" == "STANDALONE" ]]; then
     if [[ "$CORES" -eq 112 ]]; then
         echo "Launching standalone: unrestricted cores"
 
-        mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $USEPERF $PLATFORM STANDALONE $WAL &
+        mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $PLATFORM STANDALONE $WAL &
     else
         echo "Launching standalone: ${CORES} cores"
-        mpirun -n 1 --ppn 1 -d $CORES --cpu-bind depth  --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $USEPERF $PLATFORM STANDALONE $WAL &
+        mpirun -n 1 --ppn 1 -d $CORES --cpu-bind depth  --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $PLATFORM STANDALONE $WAL &
     fi
 
     # launch profiling on worker and client nodes
@@ -260,6 +260,7 @@ export NUM_PROXIES=$NUM_PROXIES
 export UPLOAD_CLIENTS_PER_PROXY=$UPLOAD_CLIENTS_PER_PROXY
 export DATA_FILEPATH=$DATA_FILEPATH
 export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
+export PERF=$PERF
 
 if [[ "$TASK" == "insert" ]]; then
     touch ./workerOut/workflow_start.txt

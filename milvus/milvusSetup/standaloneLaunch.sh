@@ -3,10 +3,9 @@
 RANK=${1:?Usage: $0 <rank>}
 RANK=$((RANK))
 STORAGE_MEDIUM=${2:?Usage: $0 <rank> <storage_medium>}
-USEPERF=${3:?Usage: $0 <rank> <storage_medium> <perf>}
-PLATFORM=${4:?Usage: $0 <rank> <storage_medium> <perf> <platform>}
-TYPE=${5:?Usage: $0 <rank> <storage_medium> <perf> <platform> <type>}
-WAL=${6:?Usage: $0 <rank> <storage_medium> <perf> <platform> <type> <WAL>}
+PLATFORM=${3:?Usage: $0 <rank> <storage_medium> <platform>}
+TYPE=${4:?Usage: $0 <rank> <storage_medium> <platform> <type>}
+WAL=${5:?Usage: $0 <rank> <storage_medium> <platform> <type> <WAL>}
 
 
 ETCD_FLAG="--env ETCD_DATA_DIR=/var/lib/milvus/etcd"
@@ -114,6 +113,7 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env COMMON_STORAGETYPE=local \
     --env DEPLOY_MODE=STANDALONE \
     --env TYPE=$TYPE \
+    --env PERF=$PERF \
     -B ./execute.sh:/milvus/app_execute.sh \
     -B ${base}/${MILVUS_BUILD_DIR}/:/milvus/ \
     -B ${TARGET_BASE}/configs/:/milvus/configs/ \

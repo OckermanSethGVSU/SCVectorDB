@@ -98,6 +98,7 @@ apptainer exec --fakeroot \
   --env TYPE=$TYPE \
   --env MILVUSCONF=/milvus/configs/ \
   --env METRICS_PORT=$METRICS_PORT \
+  --env PERF=$PERF \
   -B ./execute.sh:/milvus/app_execute.sh \
   -B ./workerOut/:/workerOut/ \
   -B ${BASE_DIR}/${MILVUS_BUILD_DIR}/:/milvus/ \

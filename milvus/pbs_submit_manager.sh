@@ -55,8 +55,8 @@ UPLOAD_BATCH_SIZE=(2048)
 QUERY_BATCH_SIZE=(2048)
 
 # PBS Vars
-WALLTIME="02:00:00"
-queue=preemptable # [preemptable, debug, debug-scaling, prod,capacity]
+WALLTIME="01:00:00"
+queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
 
 
 
@@ -74,8 +74,8 @@ PLATFORM="POLARIS" # [POLARIS, AURORA]
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 TASK="index" # [insert,index]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
-usePerf="false" # [true, false]
-CORPUS_SIZE=10000000 # total data to insert
+PERF="NONE" # [NONE, STAT, RECORD]
+CORPUS_SIZE=1000000 # total data to insert
 UPLOAD_CLIENTS_PER_PROXY=1
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
@@ -182,7 +182,7 @@ do
 
                 echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}" >> $target_file
                 echo "CORPUS_SIZE=${CORPUS_SIZE}" >> $target_file
-                echo "USEPERF=${usePerf}" >> $target_file
+                echo "PERF=${PERF}" >> $target_file
                 echo "CORES=${numCores}" >> $target_file
                 echo "QUERY_BATCH_SIZE=${query_bs}" >> $target_file
                 echo "UPLOAD_BATCH_SIZE=${upload_bs}" >> $target_file

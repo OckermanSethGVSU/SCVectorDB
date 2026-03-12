@@ -30,7 +30,7 @@ fi
 ### Loop variables ###
 NODES=(1)
 WORKERS_PER_NODE=(1)
-CORES=(112)
+CORES=(8 8 8)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 UPLOAD_BATCH_SIZE=(512) 
@@ -40,16 +40,15 @@ QUERY_BATCH_SIZE=(2048)
 
 UPLOAD_CLIENTS_PER_WORKER=(1)
 # PBS Vars
-WALLTIME="01:00:00"
-queue=debug # [preemptable, debug, debug-scaling, prod, capacity]
+WALLTIME="04:00:00"
+queue=capacity # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
 TASK="index" # [insert, index]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 usePerf="false" # [true, false]
-CORPUS_SIZE=1000000 # total data to insert
-UPLOAD_CLIENTS_PER_WORKER=32
+CORPUS_SIZE=10000000 # total data to insert
 UPLOAD_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 GPU_INDEX=False
 
@@ -61,9 +60,9 @@ GPU_INDEX=False
     # 10 million 
     #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
     #     Yandex: /eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
-VECTOR_DIM=200
-DISTANCE_METRIC="IP" # [IP, COSINE, L2]
+DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
+VECTOR_DIM=2560
+DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
@@ -125,7 +124,7 @@ do
                         if [[ "$TASK" == "insert" ]]; then
                             dir="${TASK}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_C${UCPW}_uploadBS${upload_bs}_${DATE}"
                         elif [[ "$TASK" == "index" ]]; then
-                            dir="${TASK}_${STORAGE_MEDIUM}_N${num_nodes}_NP${workers}_CS${CORPUS_SIZE}_${DATE}"
+                            dir="${TASK}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_NP${workers}_CS${CORPUS_SIZE}_${DATE}"
                         else
                             echo "Unknown task: $SYSTEM"
                             exit
