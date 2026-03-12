@@ -6,7 +6,7 @@ print_config_summary() {
     echo "Platform:                 $PLATFORM"
     echo "Task:                     $TASK"
     echo "Storage Medium:           $STORAGE_MEDIUM"
-    echo "Perf:                     $usePerf"
+    echo "Perf:                     $PERF"
     echo "Corpus Size:              $CORPUS_SIZE"
     echo "Vector Dim:               $VECTOR_DIM"
     echo "Distance Metric:          $DISTANCE_METRIC"
@@ -30,7 +30,7 @@ fi
 ### Loop variables ###
 NODES=(1)
 WORKERS_PER_NODE=(1)
-CORES=(8 8 8)
+CORES=(112)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 UPLOAD_BATCH_SIZE=(512) 
@@ -40,14 +40,14 @@ QUERY_BATCH_SIZE=(2048)
 
 UPLOAD_CLIENTS_PER_WORKER=(1)
 # PBS Vars
-WALLTIME="04:00:00"
-queue=capacity # [preemptable, debug, debug-scaling, prod, capacity]
+WALLTIME="01:00:00"
+queue=debug # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
-TASK="index" # [insert, index]
+TASK="insert" # [insert, index]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
-usePerf="false" # [true, false]
+PERF="STAT" # [NONE, STAT, TRACE]
 CORPUS_SIZE=10000000 # total data to insert
 UPLOAD_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 GPU_INDEX=False
@@ -67,7 +67,7 @@ DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 
-QDRANT_EXECUTABLE="qdrant" # [qdrant, qdrantInsertTracing]
+QDRANT_EXECUTABLE="" # [qdrant, qdrantInsertTracing]
 
 print_config_summary
 
@@ -136,7 +136,7 @@ do
                         echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
                         echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}" >> $target_file
                         echo "CORPUS_SIZE=${CORPUS_SIZE}" >> $target_file
-                        echo "USEPERF=${usePerf}" >> $target_file
+                        echo "PERF=${PERF}" >> $target_file
                         echo "CORES=${numCores}" >> $target_file
                         echo "QUERY_BATCH_SIZE=${query_bs}" >> $target_file
                         echo "UPLOAD_BATCH_SIZE=${upload_bs}" >> $target_file

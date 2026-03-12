@@ -4,6 +4,7 @@ export VECTOR_DIM=$VECTOR_DIM
 export DISTANCE_METRIC=$DISTANCE_METRIC
 export GPU_INDEX=$GPU_INDEX
 export QDRANT_EXECUTABLE=$QDRANT_EXECUTABLE
+export PERF=$PERF
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -56,9 +57,9 @@ for ((i=0; i<NODES; i++)); do
 
         # don't use binding if we are using all cores, else set it
         if [[ "$CORES" -eq 112 ]]; then            
-            mpirun -n 1 --ppn 1 --cpu-bind none --host $entry ./launchQdrantNode.sh $index $STORAGE_MEDIUM $USEPERF &
+            mpirun -n 1 --ppn 1 --cpu-bind none --host $entry ./launchQdrantNode.sh $index $STORAGE_MEDIUM &
         else
-            mpirun -n 1 --ppn 1 -d $CORES --cpu-bind depth --host $entry ./launchQdrantNode.sh $index $STORAGE_MEDIUM $USEPERF &
+            mpirun -n 1 --ppn 1 -d $CORES --cpu-bind depth --host $entry ./launchQdrantNode.sh $index $STORAGE_MEDIUM &
         fi
         sleep 3
     done
@@ -92,7 +93,7 @@ while [ ! -e "$TARGET" ]; do
   sleep 0.1
 done
 echo "Qdrant Cluster setup"
-sleep 120
+sleep 30
 
 # Setup the cluster 
 TARGET_FILE="ready.flag"
@@ -101,10 +102,6 @@ while [[ ! -e "$TARGET_FILE" ]]; do
     sleep 30
 done
 rm $TARGET_FILE
-
-if [[ "$TASK" == "insert" ]]; then
-    touch ./perf/workflow_start.txt
-fi
 sleep 3
 
 ########## Workflow ###############
@@ -123,8 +120,8 @@ NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="
 
 # tell the profs to close and give them time to do so
 if [[ "$TASK" == "insert" ]]; then
-    touch ./perf/workflow_stop.txt
     touch flag.txt
+    touch ./perf/flag.txt
     sleep 30
     mkdir systemStats/
     mv *_system_*.csv systemStats/
@@ -138,6 +135,7 @@ mv *.npy uploadNPY
 
 if [[ "$TASK" == "index" ]]; then
 
+    # TODO - move this logic to the python so perf is more exact
     touch ./perf/workflow_start.txt
     sleep 5
     # TODO: parameterize index
@@ -145,6 +143,7 @@ if [[ "$TASK" == "index" ]]; then
     
     touch ./perf/workflow_stop.txt
     touch flag.txt
+    touch ./perf/flag.txt
     sleep 30
     mkdir systemStats/
      mv *_system_*.csv systemStats/

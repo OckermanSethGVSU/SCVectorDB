@@ -274,8 +274,14 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
     let offset = start_slice;
     println!("Rank {} connecting to Qdrant at {} with offset {}-{}, worker target {}, and batch size {}", rank, qdrant_url, offset, end_slice, target, batch_size);
 
+    // signal perf to start recording
+    if rank == 0 {
+        File::create("./perf/workflow_start.txt")?;
+        sleep(Duration::from_secs(3)).await;
+    }
     // wait for everyone to load in data 
     barrier.wait().await;
+
 
     let mut start_upload: Instant;
     let mut end_upload: Instant;
@@ -352,18 +358,20 @@ async fn worker(rank: usize, nClients: usize, world_size: usize, data_slice: Arc
     let searchable = Instant::now();
     let global_end = Utc::now();
     
+    // signal perf to stop recording
+    if rank == 0 {
+        File::create("./perf/workflow_stop.txt")?;
+        sleep(Duration::from_secs(3)).await;
+    }
+
     let localExpected =  (end_slice) as u64;
     let resp = client.get_points(GetPointsBuilder::new(collection_name,vec![(localExpected - 1).into()])).await?.result;
     let exists = !resp.is_empty();
     let sanity_check = exists.to_string();
     
-    // println!("{resp:?}");
-    // println!("exists = {}", exists);
     let loop_duration = end_loop.duration_since(start_loop).as_secs_f64().to_string();
     let wait_period = searchable.duration_since(end_loop).as_secs_f64().to_string();
     let total = searchable.duration_since(start_loop).as_secs_f64().to_string();
-    
-    // this is dumb but it lets me order the writes without more work
         
     // safely write overall times to file
     {

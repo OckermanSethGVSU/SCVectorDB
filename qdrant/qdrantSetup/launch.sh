@@ -89,12 +89,17 @@ while [ ! -e "$TARGET" ]; do
   sleep 0.1
 done
 
-if [[ "$USEPERF" == "true" ]]; then
-    echo "Rank ${RANK} Launching perf"
-    perf record -F 99 --call-graph fp -g --proc-map-timeout 5000 -o /perf/perf${RANK}.data  -p "$QDRANT_PID" &
+
+if [[ "$PERF" == "RECORD" ]]; then
+    echo "Rank ${RANK} Launching perf record"
+    /perf/perf record -F 99 --call-graph fp -g --proc-map-timeout 5000 -o /perf/perf${RANK}.data  -p "$QDRANT_PID" &
+    PERF_PID=$!
+
+elif [[ "$PERF" == "STAT" ]]; then
+    echo "Rank ${RANK} Launching perf stat"
+    /perf/perf stat  -e cycles,instructions,branches,branch-misses,cache-misses -o /perf/perf${RANK}.data  -p "$QDRANT_PID" &
     PERF_PID=$!
 fi
-
 
 
 # wait until the file exists
@@ -104,29 +109,18 @@ while [ ! -e "$TARGET" ]; do
 done
 
 # stop perf cleanly (same as Ctrl-C)
-if [[ "$USEPERF" == "true" ]]; then
+if [[ "$PERF" == "RECORD" || "$PERF" == "STAT" ]]; then
     echo "Rank ${RANK} stopping perf"
     kill -INT "$PERF_PID"
     wait "$PERF_PID"
 fi
 
-#
-echo "Rank ${RANK} done"
 
-# while true; do
-#   if [ -f "/perf/stop.txt" ]; then
-#     echo "stop.txt detected, sending SIGTERM to $QDRANT_PID"
-#     pkill -INT -P "$QDRANT_PID"
-#     break
-#   fi
+# wait until our main script signals it is safe to close
+TARGET="/perf/flag.txt"
+while [ ! -e "$TARGET" ]; do
+  sleep 0.1
+done
 
-#   # Also break if the process already exited
-#   if ! kill -0 "$QDRANT_PID" 2>/dev/null; then
-#     echo "Process $PID exited on its own"
-#     break
-#   fi
+echo "Rank ${RANK} closing"
 
-#   sleep 1
-# done
-
-# wait
