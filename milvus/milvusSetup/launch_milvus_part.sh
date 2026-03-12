@@ -105,6 +105,6 @@ apptainer exec --fakeroot \
   -B $TARGET_BASE/${TYPE}${RANK}/:/var/lib/milvus \
   -B $TARGET_BASE/${TYPE}${RANK}/configs/${TYPE}${RANK}.yaml:/milvus/configs/milvus.yaml \
   "${GPU_ARGS[@]}" \
-  milvus.sif bash app_execute.sh FALSE $RANK > ${TYPE}/${TYPE}${RANK}.out 2>&1
+  milvus.sif bash app_execute.sh $RANK > ${TYPE}/${TYPE}${RANK}.out 2>&1
 
 

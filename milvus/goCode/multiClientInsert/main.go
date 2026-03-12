@@ -385,6 +385,21 @@ func clientWorker(
 	}
 	// Barrier before inserting
 	barrier.Wait()
+
+
+	// let perf know that it should start tracking
+	if task == "insert" && globalClientRank == 0 {
+		file, err := os.Create("./workerOut/workflow_start.txt")
+		if err != nil {
+			log.Fatalf("failed to create file: %v", err)
+		}
+		file.Close()
+		
+		time.Sleep(2 * time.Second) // give perf a momement to attach
+	}
+
+	barrier.Wait()
+
 	sharedTiming.MarkLoopStart()
 	startLoop := time.Now()
 	for i := 0; i < localRows; i += BATCH_SIZE {
@@ -457,8 +472,18 @@ func clientWorker(
 	sharedTiming.WaitSearchable()
 	searchableAtClient := time.Now()
 
+	// end tracing
 	if strings.ToLower(tracing) == "true" {
 		span.End()
+	}
+
+	// tell perf to stop tracking
+	if task == "insert" && globalClientRank == 0 {
+		file, err := os.Create("./workerOut/workflow_end.txt")
+		if err != nil {
+			log.Fatalf("failed to create file: %v", err)
+		}
+		file.Close()		
 	}
 	barrier.Wait()
 

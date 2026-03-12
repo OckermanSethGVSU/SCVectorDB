@@ -72,12 +72,12 @@ done
 
 if [[ "$PERF" == "RECORD" ]]; then
     echo "Rank ${RANK} Launching perf record"
-    perf record -F 99 --call-graph fp -g --proc-map-timeout 5000 -o /perf/perf${RANK}.data  -p "$MILVUS_PID" &
+    /perfDir/perf record -F 99 --call-graph fp -g --proc-map-timeout 5000 -o /workerOut/perf${RANK}.data  -p "$MILVUS_PID" &
     PERF_PID=$!
 
 elif [[ "$PERF" == "STAT" ]]; then
     echo "Rank ${RANK} Launching perf stat"
-    perf stat  -e cycles,instructions,branches,branch-misses,cache-misses -o /perf/perf${RANK}.data  -p "$MILVUS_PID" &
+    /perfDir/perf stat  -e cycles,instructions,branches,branch-misses,cache-misses -o /workerOut/perf${RANK}.data  -p "$MILVUS_PID" &
     PERF_PID=$!
 fi
 
@@ -90,7 +90,7 @@ while [ ! -e "$TARGET" ]; do
 done
 
 # stop perf cleanly (same as Ctrl-C)
-if [[ "$USEPERF" == "true" ]]; then
+if [[ "$PERF" == "RECORD" || "$PERF" == "STAT" ]]; then
     echo "Rank ${RANK} stopping perf"
     kill -INT "$PERF_PID"
     wait "$PERF_PID"
