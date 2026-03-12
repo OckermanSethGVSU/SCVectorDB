@@ -67,6 +67,8 @@ export DISTANCE_METRIC=$DISTANCE_METRIC
 export GPU_INDEX=$GPU_INDEX
 export MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR
 export TRACING=$TRACING
+export PERF=$PERF
+export MILVUS_CONFIG_DIR=$MILVUS_CONFIG_DIR
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -260,18 +262,11 @@ export NUM_PROXIES=$NUM_PROXIES
 export UPLOAD_CLIENTS_PER_PROXY=$UPLOAD_CLIENTS_PER_PROXY
 export DATA_FILEPATH=$DATA_FILEPATH
 export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
-export PERF=$PERF
 
-if [[ "$TASK" == "insert" ]]; then
-    touch ./workerOut/workflow_start.txt
-fi
-sleep 5
 
 NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientInsert
 
-# # NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 convert_to_gpu_cargra.py
 if [[ "$TASK" == "insert" ]]; then
-    touch ./workerOut/workflow_end.txt
     touch flag.txt
 fi
 

@@ -4,10 +4,13 @@ USEPERF=$1
 RANK=$2
 
 # LD_PRELOADS
-export LD_PRELOAD=""
-LIBDIR=/milvus/internal/core/output/lib && \
-export LD_LIBRARY_PATH="$LIBDIR:${LD_LIBRARY_PATH}" && \
-export LD_PRELOAD="/milvus/internal/core/output/lib/libjemalloc.so"
+
+if [ -n "$MILVUS_BUILD_DIR" ]; then
+  export LD_PRELOAD=""
+  LIBDIR=/milvus/internal/core/output/lib && \
+  export LD_LIBRARY_PATH="$LIBDIR:${LD_LIBRARY_PATH}" && \
+  export LD_PRELOAD="/milvus/internal/core/output/lib/libjemalloc.so"   
+fi 
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
   export CUDAToolkit_ROOT=/usr/local/cuda

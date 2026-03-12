@@ -65,7 +65,7 @@ elif [[ "$PLATFORM" == "POLARIS" ]]; then
     
 fi
 # Create and pass in modified config #####
-cp -r ${base}/${MILVUS_BUILD_DIR}/configs/ .
+cp -r ${base}/${MILVUS_CONFIG_DIR}/configs/ .
 
 cat << EOF > ./configs/user.yaml
 # Extra config to override default milvus.yaml
@@ -103,6 +103,13 @@ else
     )
 fi
 
+BUILD_ARGS=()
+if [ -n "$MILVUS_BUILD_DIR" ]; then
+    BUILD_ARGS+=(
+        -B ${base}/${MILVUS_BUILD_DIR}/:/milvus/
+    )
+fi 
+
 
 apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --pwd /milvus \
@@ -114,12 +121,13 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env DEPLOY_MODE=STANDALONE \
     --env TYPE=$TYPE \
     --env PERF=$PERF \
+    --env MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR \
     -B ./execute.sh:/milvus/app_execute.sh \
-    -B ${base}/${MILVUS_BUILD_DIR}/:/milvus/ \
     -B ${TARGET_BASE}/configs/:/milvus/configs/ \
     -B ${base}/perfDir/:/perfDir/ \
     -B ./workerOut/:/workerOut/ \
     -B ${TARGET_BASE}/volumes/milvus:/var/lib/milvus \
+    "${BUILD_ARGS[@]}" \
     "${POLARIS_BINDS[@]}" \
     "${GPU_ARGS[@]}" \
     "${CPU_ARGS[@]}" \

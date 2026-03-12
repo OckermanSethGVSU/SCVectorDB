@@ -67,7 +67,8 @@ queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
 # Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
 ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
-MILVUS_BUILD_DIR="cpuMilvus" # Name of the directory with your build: traceMilvus, cpuMilvus
+MILVUS_BUILD_DIR="" # Name of the directory with your build: traceMilvus, cpuMilvus
+MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the base dir
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
@@ -196,6 +197,7 @@ do
                 echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
                 echo "GPU_INDEX=${GPU_INDEX}" >> $target_file
                 echo "MILVUS_BUILD_DIR=${MILVUS_BUILD_DIR}" >> $target_file
+                echo "MILVUS_CONFIG_DIR=${MILVUS_CONFIG_DIR}" >> $target_file
                 echo "TRACING=${TRACING}" >> $target_file
                 
                 
@@ -267,7 +269,7 @@ do
                 
                 chmod -R g+w $dir
                 cd $dir
-                qsub $target_file
+                # qsub $target_file
                 sleep 1
                 cd .. 
             done
