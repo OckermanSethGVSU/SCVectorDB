@@ -22,9 +22,9 @@ collection_name = "standalone"
 
 if client.has_collection(collection_name):
     client.drop_collection(collection_name)
-    print(f"Dropped existing collection '{collection_name}' to avoid schema conflict.")
+    print(f"Dropped existing collection '{collection_name}' to avoid schema conflict.", flush=True)
 else:
-    print(f"No existing collection named '{collection_name}' found.")
+    print(f"No existing collection named '{collection_name}' found.", flush=True)
 
 
 # Define fields
