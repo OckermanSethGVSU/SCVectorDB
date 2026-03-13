@@ -1,30 +1,31 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/csv"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
-	"bufio"
-	"strings"
+
 	"github.com/kshedden/gonpy"
 	"github.com/milvus-io/milvus/client/v2/column"
 	"github.com/milvus-io/milvus/client/v2/entity"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
-	"google.golang.org/grpc"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/grpc"
 )
 
 func initTracer(ctx context.Context) (func(context.Context) error, error) {
@@ -241,6 +242,37 @@ func splitRange(n, parts, idx int) (start, end int) {
 	return start, end
 }
 
+func envEnabled(name string) bool {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return false
+	}
+
+	switch strings.ToLower(value) {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
+}
+
+func crossedInsertMilestones(batchStart, batchEnd, interval int) []int {
+	if interval <= 0 || batchEnd <= batchStart {
+		return nil
+	}
+
+	first := ((batchStart / interval) + 1) * interval
+	if first > batchEnd {
+		return nil
+	}
+
+	milestones := make([]int, 0, 1+(batchEnd-first)/interval)
+	for milestone := first; milestone <= batchEnd; milestone += interval {
+		milestones = append(milestones, milestone)
+	}
+	return milestones
+}
+
 func clientWorker(
 	wg *sync.WaitGroup,
 	barrier *Barrier,
@@ -252,19 +284,20 @@ func clientWorker(
 	matrix [][]float32,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	tracing := os.Getenv("TRACING")
 	tracingEnabled := strings.ToLower(tracing) == "true"
 	var dialOpts []grpc.DialOption
 	var span trace.Span
 	if tracingEnabled {
-		dialOpts = append(dialOpts,grpc.WithStatsHandler(otelgrpc.NewClientHandler()),)
+		dialOpts = append(dialOpts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	}
-	
+
 	defer wg.Done()
 	defer cancel()
 
 	globalClientRank := workerRank*clientsPerWorker + clientID
+	ldebugfEnabled := envEnabled("DEBUG")
 
 	// ----- slice assignment: worker slice, then client slice within worker -----
 	wStart, wEnd := splitRange(totalRows, workerRank+1, workerRank)
@@ -330,10 +363,10 @@ func clientWorker(
 
 	batchSizeStr := os.Getenv("UPLOAD_BATCH_SIZE")
 	BATCH_SIZE, err := strconv.Atoi(batchSizeStr)
-	
-	url := fmt.Sprintf("http://%s:%d", MILVUS_HOST,MILVUS_PORT)
+
+	url := fmt.Sprintf("http://%s:%d", MILVUS_HOST, MILVUS_PORT)
 	mclient, err := milvusclient.New(ctx, &milvusclient.ClientConfig{
-		Address: url,
+		Address:     url,
 		DialOptions: dialOpts,
 	})
 	if err != nil {
@@ -350,30 +383,27 @@ func clientWorker(
 	globalOpt := milvusclient.NewQueryOption(collectionName).
 		WithIDs(column.NewColumnInt64("id", []int64{lastID})).
 		WithConsistencyLevel(entity.ClStrong)
-	
+
 	localOpt := milvusclient.NewQueryOption(collectionName).
 		WithIDs(column.NewColumnInt64("id", []int64{localLastID})).
 		WithConsistencyLevel(entity.ClStrong)
-
-	
 
 	fmt.Printf(
 		"Proxy=%d client=%d global_client=%d assigned [%d,%d) rows=%d batch=%d\n",
 		workerRank, clientID, globalClientRank, startIdx, endIdx, localRows, BATCH_SIZE,
 	)
 
-	
 	var (
 		totalDurations   []float64
 		convertDurations []float64
 		uploadDurations  []float64
 	)
-	
+
 	if tracingEnabled {
 		tracer := otel.Tracer("milvus-client")
 		ctx, span = tracer.Start(ctx, fmt.Sprintf("MilvusClient-rank-%d", globalClientRank))
 		span.SetAttributes(attribute.Int("client.rank", globalClientRank))
-		
+
 		if globalClientRank == 0 {
 			sc := span.SpanContext()
 			log.Printf("client span started: trace_id=%s span_id=%s recording=%v",
@@ -386,7 +416,6 @@ func clientWorker(
 	// Barrier before inserting
 	barrier.Wait()
 
-
 	// let perf know that it should start tracking
 	if task == "insert" && globalClientRank == 0 {
 		file, err := os.Create("./workerOut/workflow_start.txt")
@@ -394,7 +423,7 @@ func clientWorker(
 			log.Fatalf("failed to create file: %v", err)
 		}
 		file.Close()
-		
+
 		time.Sleep(2 * time.Second) // give perf a momement to attach
 	}
 
@@ -419,7 +448,20 @@ func clientWorker(
 		}
 
 		startUpload := time.Now()
-		
+		var milestones []int
+		if ldebugfEnabled {
+			if i == 0 {
+				milestones = append(milestones, 0)
+			}
+			milestones = append(milestones, crossedInsertMilestones(i, end, 1000)...)
+			for _, milestone := range milestones {
+				log.Printf(
+					"LDEBUGF before insert worker=%d client=%d global_client=%d local_inserted=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
+					workerRank, clientID, globalClientRank, milestone, startIdx+i, len(batch), i, end,
+				)
+			}
+		}
+
 		// make sure RPC does not time out
 		insertCtx, insertCancel := context.WithTimeout(ctx, 30*time.Minute)
 		_, err := mclient.Insert(
@@ -431,6 +473,14 @@ func clientWorker(
 		insertCancel()
 		if err != nil {
 			log.Fatalf("insert failed worker=%d client=%d absRowStart=%d: %v", workerRank, clientID, startIdx+i, err)
+		}
+		if ldebugfEnabled {
+			for _, milestone := range milestones {
+				log.Printf(
+					"LDEBUGF insert succeeded worker=%d client=%d global_client=%d local_inserted=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
+					workerRank, clientID, globalClientRank, milestone, startIdx+i, len(batch), i, end,
+				)
+			}
 		}
 		endUpload := time.Now()
 
@@ -483,7 +533,7 @@ func clientWorker(
 		if err != nil {
 			log.Fatalf("failed to create file: %v", err)
 		}
-		file.Close()		
+		file.Close()
 	}
 	barrier.Wait()
 
@@ -518,7 +568,7 @@ func clientWorker(
 	// stagger file writes a bit
 	time.Sleep(time.Second * time.Duration(globalClientRank*2))
 
-	file, err := os.OpenFile(RESULT_PATH + "/times.csv", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(RESULT_PATH+"/times.csv", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -550,17 +600,15 @@ func clientWorker(
 		strconv.FormatFloat(sharedWindow, 'g', -1, 64),
 	})
 
-	w1, _ := gonpy.NewFileWriter(fmt.Sprintf(RESULT_PATH + "/batch_construction_times_w%d_c%d.npy", workerRank, clientID))
+	w1, _ := gonpy.NewFileWriter(fmt.Sprintf(RESULT_PATH+"/batch_construction_times_w%d_c%d.npy", workerRank, clientID))
 	_ = w1.WriteFloat64(convertDurations)
 
-	w2, _ := gonpy.NewFileWriter(fmt.Sprintf(RESULT_PATH + "/upload_times_w%d_c%d.npy", workerRank, clientID))
+	w2, _ := gonpy.NewFileWriter(fmt.Sprintf(RESULT_PATH+"/upload_times_w%d_c%d.npy", workerRank, clientID))
 	_ = w2.WriteFloat64(uploadDurations)
 
-	w3, _ := gonpy.NewFileWriter(fmt.Sprintf(RESULT_PATH + "/op_times_w%d_c%d.npy", workerRank, clientID))
+	w3, _ := gonpy.NewFileWriter(fmt.Sprintf(RESULT_PATH+"/op_times_w%d_c%d.npy", workerRank, clientID))
 	_ = w3.WriteFloat64(totalDurations)
 }
-
-
 
 func main() {
 	nWorkersStr := os.Getenv("NUM_PROXIES")
@@ -579,19 +627,18 @@ func main() {
 	if err != nil || CORPUS_SIZE <= 0 {
 		log.Fatalf("invalid CORPUS_SIZE=%q", CORPUS_SIZE_str)
 	}
-	
+
 	DATA_PATH := os.Getenv("DATA_FILEPATH")
 	if DATA_PATH == "" {
 		log.Fatalf("invalid DATA_FILEPATH=%q", DATA_PATH)
 	}
-	
 
 	batchSizeStr := os.Getenv("UPLOAD_BATCH_SIZE")
 	BATCH_SIZE, err := strconv.Atoi(batchSizeStr)
 	if err != nil || BATCH_SIZE <= 0 {
 		log.Fatalf("invalid UPLOAD_BATCH_SIZE=%q", batchSizeStr)
 	}
-	
+
 	totalClients := nWorkers * clientsPerWorker
 	fmt.Printf("CORPUS_SIZE=%d nProxies=%d clientsPerProxy=%d totalClients=%d DATA_FILEPATH=%s\n",
 		CORPUS_SIZE, nWorkers, clientsPerWorker, totalClients, DATA_PATH,
@@ -628,8 +675,6 @@ func main() {
 		panic(err)
 	}
 
-	
-
 	// Build [][]float32 without copying
 	matrix := make([][]float32, CORPUS_SIZE)
 	for i := 0; i < CORPUS_SIZE; i++ {
@@ -637,7 +682,6 @@ func main() {
 		end := start + cols
 		matrix[i] = data[start:end]
 	}
-
 
 	var wg sync.WaitGroup
 	barrier := NewBarrier(totalClients)
