@@ -92,19 +92,41 @@ else
     )
 fi
 
+base=${BASE_DIR}
+
+POLARIS_BINDS=()
+if [[ "$PLATFORM" == "POLARIS" ]]; then
+    POLARIS_BINDS+=(
+        -B "/eagle/projects/argonne_tpc/sockerman/buildingFromSource/gpuMilvus/cuda-merged:/usr/local/cuda:ro"
+        -B "/opt/nvidia/hpc_sdk:/opt/nvidia/hpc_sdk:ro"
+        --env PLATFORM=POLARIS
+    )
+ 
+fi
+
+BUILD_ARGS=()
+if [ -n "$MILVUS_BUILD_DIR" ]; then
+    BUILD_ARGS+=(
+        -B ${base}/${MILVUS_BUILD_DIR}/:/milvus/
+        -B /usr/lib64/libatomic.so.1:/usr/lib64/libatomic.so.1
+    )
+fi 
+
+
 apptainer exec --fakeroot \
   --writable-tmpfs \
   --pwd /milvus \
   --env TYPE=$TYPE \
   --env MILVUSCONF=/milvus/configs/ \
   --env METRICS_PORT=$METRICS_PORT \
+  --env MILVUS_HEALTH_HOST=$MY_IP_ADDR \
+  --env MILVUS_HEALTH_PORT=$METRICS_PORT \
   --env PERF=$PERF \
   -B ./execute.sh:/milvus/app_execute.sh \
   -B ./workerOut/:/workerOut/ \
-  -B ${BASE_DIR}/${MILVUS_BUILD_DIR}/:/milvus/ \
   -B $TARGET_BASE/${TYPE}${RANK}/:/var/lib/milvus \
   -B $TARGET_BASE/${TYPE}${RANK}/configs/${TYPE}${RANK}.yaml:/milvus/configs/milvus.yaml \
+   "${BUILD_ARGS[@]}" \
+   "${POLARIS_BINDS[@]}" \
   "${GPU_ARGS[@]}" \
   milvus.sif bash app_execute.sh $RANK > ${TYPE}/${TYPE}${RANK}.out 2>&1
-
-

@@ -81,8 +81,11 @@ EOF
 python3 replace.py --mode standalone --wal $WAL
 cp -r ./configs/ $TARGET_BASE/
 
+PROXY_PORT=20001
+METRICS_PORT=9091
+
 # create proxy registry for the go insert
-echo "0,${IP_ADDR},20001,30001" > PROXY_registry.txt
+echo "0,${IP_ADDR},${PROXY_PORT},${METRICS_PORT}" > PROXY_registry.txt
 
 GPU_ARGS=()
 if [[ "$GPU_INDEX" == "True" ]]; then
@@ -107,6 +110,7 @@ BUILD_ARGS=()
 if [ -n "$MILVUS_BUILD_DIR" ]; then
     BUILD_ARGS+=(
         -B ${base}/${MILVUS_BUILD_DIR}/:/milvus/
+        -B /usr/lib64/libatomic.so.1:/usr/lib64/libatomic.so.1
     )
 fi 
 
@@ -122,6 +126,9 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env TYPE=$TYPE \
     --env PERF=$PERF \
     --env MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR \
+    --env WORKER_IP=$IP_ADDR \
+    --env MILVUS_HEALTH_HOST=$IP_ADDR \
+    --env MILVUS_HEALTH_PORT=$METRICS_PORT \
     -B ./execute.sh:/milvus/app_execute.sh \
     -B ${TARGET_BASE}/configs/:/milvus/configs/ \
     -B ${base}/perfDir/:/perfDir/ \
@@ -131,7 +138,22 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     "${POLARIS_BINDS[@]}" \
     "${GPU_ARGS[@]}" \
     "${CPU_ARGS[@]}" \
-    milvus.sif bash app_execute.sh 
+    milvus.sif bash app_execute.sh standalone > standalone.out 2>&1
+
+# apptainer shell --no-home --fakeroot --writable-tmpfs --nv \
+#     --pwd /milvus \
+#     --env MILVUSCONF=/milvus/configs/ \
+#     --env ETCD_USE_EMBED=true \
+#     --env ETCD_CONFIG_PATH=/milvus/configs/embedEtcd.yaml \
+#     --env COMMON_STORAGETYPE=local \
+#     --env DEPLOY_MODE=STANDALONE \
+#     --env MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR \
+#     -B ./execute.sh:/milvus/app_execute.sh \
+#     -B ./configs/:/milvus/configs/ \
+#     -B /lus/flare/projects/radix-io/sockerman/temp/milvus/cpuMilvus/:/milvus/ \
+#     -B /usr/lib64/libatomic.so.1:/usr/lib64/libatomic.so.1 \
+#     milvus.sif
+
 
 
 

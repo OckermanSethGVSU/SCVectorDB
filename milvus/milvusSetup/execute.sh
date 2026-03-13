@@ -1,7 +1,6 @@
 #!/bin/bash
 
-USEPERF=$1
-RANK=$2
+RANK=$1
 
 # LD_PRELOADS
 
@@ -9,7 +8,8 @@ if [ -n "$MILVUS_BUILD_DIR" ]; then
   export LD_PRELOAD=""
   LIBDIR=/milvus/internal/core/output/lib && \
   export LD_LIBRARY_PATH="$LIBDIR:${LD_LIBRARY_PATH}" && \
-  export LD_PRELOAD="/milvus/internal/core/output/lib/libjemalloc.so"   
+  export LD_PRELOAD="/usr/lib64/libatomic.so.1 /milvus/internal/core/output/lib/libjemalloc.so"
+   
 fi 
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
@@ -20,50 +20,162 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
   export PATH="/usr/local/cuda/bin:$PATH"
 fi
 
-apt-get update && apt-get install -y libatomic1 libelf-dev libdw-dev libslang2-dev libperl-dev python3-dev libnuma-dev libtraceevent-dev
-echo "Install Complete"
-sleep 3
+
+MAX_HEALTH_RETRIES="${MAX_HEALTH_RETRIES:-5}"
+HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-90}"
+HEALTH_CHECK_INTERVAL_SECONDS="${HEALTH_CHECK_INTERVAL_SECONDS:-10}"
+HEALTH_HOST="${MILVUS_HEALTH_HOST:-127.0.0.1}"
+HEALTH_PORT="${MILVUS_HEALTH_PORT:-${METRICS_PORT:-9091}}"
+APT_RETRIES="${APT_RETRIES:-5}"
+APT_RETRY_DELAY_SECONDS="${APT_RETRY_DELAY_SECONDS:-10}"
+
+retry_command() {
+  local attempts="$1"
+  local delay="$2"
+  shift 2
+
+  local attempt
+  for attempt in $(seq 1 "$attempts"); do
+    if "$@"; then
+      return 0
+    fi
+
+    if [[ "$attempt" -lt "$attempts" ]]; then
+      echo "Command failed on attempt ${attempt}/${attempts}: $*"
+      sleep "$delay"
+    fi
+  done
+
+  return 1
+}
+
+is_milvus_healthy() {
+  local url="http://${HEALTH_HOST}:${HEALTH_PORT}/healthz"
+  local response=""
+
+  if command -v curl >/dev/null 2>&1; then
+    response=$(
+      NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+      curl --silent --show-error --fail --max-time "$HEALTH_TIMEOUT_SECONDS" "$url" 2>/dev/null
+    ) || return 1
+  elif command -v wget >/dev/null 2>&1; then
+    response=$(
+      NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+      wget -q -T "$HEALTH_TIMEOUT_SECONDS" -O - "$url" 2>/dev/null
+    ) || return 1
+  else
+    echo "Neither curl nor wget is available for Milvus health checks" >&2
+    return 1
+  fi
+
+  [[ "${response,,}" == *ok* ]]
+}
+
+wait_for_milvus_health() {
+  local attempt=1
+  while (( attempt <= MAX_HEALTH_RETRIES )); do
+    if ! kill -0 "$MILVUS_PID" 2>/dev/null; then
+      echo "Milvus process exited before becoming healthy"
+      return 1
+    fi
+
+    if is_milvus_healthy; then
+      echo "Milvus healthy at http://${HEALTH_HOST}:${HEALTH_PORT}/healthz"
+      return 0
+    fi
+
+    echo "Waiting for Milvus health (${attempt}/${MAX_HEALTH_RETRIES}): http://${HEALTH_HOST}:${HEALTH_PORT}/healthz"
+    sleep "$HEALTH_CHECK_INTERVAL_SECONDS"
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
+stop_milvus() {
+  if kill -0 "$MILVUS_PID" 2>/dev/null; then
+    kill "$MILVUS_PID" 2>/dev/null || true
+    wait "$MILVUS_PID" 2>/dev/null || true
+  fi
+}
+
+launch_milvus_with_retry() {
+  local launch_attempt
+  for launch_attempt in $(seq 1 "$MAX_HEALTH_RETRIES"); do
+    echo "Launching Milvus (attempt ${launch_attempt}/${MAX_HEALTH_RETRIES})"
+    launch_milvus
+
+    if wait_for_milvus_health; then
+      return 0
+    fi
+
+    echo "Milvus failed health check on launch attempt ${launch_attempt}/${MAX_HEALTH_RETRIES}"
+    stop_milvus
+  done
+
+  return 1
+}
+
+install_perf_dependencies() {
+  retry_command "$APT_RETRIES" "$APT_RETRY_DELAY_SECONDS" apt-get update || return 1
+  retry_command "$APT_RETRIES" "$APT_RETRY_DELAY_SECONDS" \
+    apt-get install -y libelf-dev libdw-dev libslang2-dev libperl-dev python3-dev libnuma-dev libtraceevent-dev
+}
+
+
+
+if [[ "$PERF" == "RECORD" || "$PERF" == "STAT" ]]; then
+  install_perf_dependencies || exit 1
+  echo "Runtime and perf dependencies installed; launching Milvus"
+else
+  echo "Launching Milvus"
+fi
+
+launch_milvus() {
+  if [[ "$TYPE" == "STANDALONE" ]]; then
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+    ./bin/milvus run standalone &
+      MILVUS_PID=$!
+      SIGNAL_FILE="milvus_running.txt"
+
+  elif [[ "$TYPE" == "COORDINATOR" ]]; then
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+    ./bin/milvus run mixcoord &
+      MILVUS_PID=$!
+      SIGNAL_FILE="cord${RANK}_running.txt"
+
+  elif [[ "$TYPE" == "PROXY" ]]; then
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+    ./bin/milvus run proxy &
+      MILVUS_PID=$!
+      SIGNAL_FILE="proxy${RANK}_running.txt"
+
+  elif [[ "$TYPE" == "DATA" ]]; then
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+    ./bin/milvus run datanode &
+      MILVUS_PID=$!
+      SIGNAL_FILE="data${RANK}_running.txt"
+
+  elif [[ "$TYPE" == "QUERY" ]]; then
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+    ./bin/milvus run querynode &
+      MILVUS_PID=$!
+      SIGNAL_FILE="query${RANK}_running.txt"
+
+  elif [[ "$TYPE" == "STREAMING" ]]; then
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+    ./bin/milvus run streamingnode &
+      MILVUS_PID=$!
+      SIGNAL_FILE="streaming${RANK}_running.txt"
+  else
+    echo "Unknown TYPE '$TYPE'" >&2
+    exit 1
+  fi
+}
 
 cd /milvus
 
-if [[ "$TYPE" == "STANDALONE" ]]; then
-  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-  ./bin/milvus run standalone > /workerOut/standalone.txt 2>&1 &
-    MILVUS_PID=$!
-    SIGNAL_FILE="milvus_running.txt"
-
-elif [[ "$TYPE" == "COORDINATOR" ]]; then
-  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-  ./bin/milvus run mixcoord &
-    MILVUS_PID=$!
-    SIGNAL_FILE="cord${RANK}_running.txt"
-
-elif [[ "$TYPE" == "PROXY" ]]; then
-  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-  ./bin/milvus run proxy &
-    MILVUS_PID=$!
-    SIGNAL_FILE="proxy${RANK}_running.txt"
-
-elif [[ "$TYPE" == "DATA" ]]; then
-  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-  ./bin/milvus run datanode &
-    MILVUS_PID=$!
-    SIGNAL_FILE="data${RANK}_running.txt"
-
-elif [[ "$TYPE" == "QUERY" ]]; then
-  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-  ./bin/milvus run querynode &
-    MILVUS_PID=$!
-    SIGNAL_FILE="query${RANK}_running.txt"
-
-elif [[ "$TYPE" == "STREAMING" ]]; then
-  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-  ./bin/milvus run streamingnode &
-    MILVUS_PID=$!
-    SIGNAL_FILE="streaming${RANK}_running.txt"
-fi
-
-sleep 10
+launch_milvus_with_retry || exit 1
 
 touch /workerOut/$SIGNAL_FILE
 
@@ -83,8 +195,6 @@ elif [[ "$PERF" == "STAT" ]]; then
     /perfDir/perf stat  -e cycles,instructions,branches,branch-misses,cache-misses -o /workerOut/perf${RANK}.data  -p "$MILVUS_PID" &
     PERF_PID=$!
 fi
-
-
 
 # wait until the stop file exists
 TARGET="/workerOut/workflow_end.txt"
