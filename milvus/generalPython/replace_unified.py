@@ -229,11 +229,11 @@ def main() -> None:
     wal = os.environ.get("WAL", "default").strip()
 
     if mode == "standalone":
-        Path("configs/milvus_unified.yaml").write_text(build_standalone_config(wal))
+        Path("configs/milvus.yaml").write_text(build_standalone_config(wal))
     elif mode == "distributed":
-        Path("configs/distributed_milvus_unified.yaml").write_text(build_distributed_base_config(wal))
+        Path("configs/distributed_milvus.yaml").write_text(build_distributed_base_config(wal))
     elif mode in ["COORDINATOR", "STREAMING", "QUERY", "PROXY", "DATA"]:
-        Path(f"configs/{mode}{rank}_unified.yaml").write_text(build_component_config(mode, rank))
+        Path(f"configs/{mode}{rank}.yaml").write_text(build_component_config(mode, rank))
     else:
         print("Unknown MODE env var passed in", flush=True)
 
