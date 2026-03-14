@@ -77,7 +77,7 @@ echo "${RANK},${MY_IP_ADDR},${PORT},${METRICS_PORT}" >> $OUTPUT_FILE
 rm -fr $TARGET_BASE/${TYPE}${RANK}/
 mkdir -p $TARGET_BASE/${TYPE}${RANK}/
 
-python3 replace.py --mode ${TYPE} --rank $RANK
+python3 replace_unified.py --mode ${TYPE} --rank $RANK
 cp -r ./configs/ $TARGET_BASE/${TYPE}${RANK}/
 
 mkdir -p ./workerOut/

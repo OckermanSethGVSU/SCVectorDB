@@ -78,7 +78,7 @@ auto-compaction-mode: revision
 auto-compaction-retention: '1000'
 EOF
 
-python3 replace.py --mode standalone --wal $WAL
+python3 replace_unified.py --mode standalone
 cp -r ./configs/ $TARGET_BASE/
 
 PROXY_PORT=20001

@@ -89,6 +89,9 @@ mode = args.mode
 rank = int(args.rank)
 wal = args.wal
 
+DEBUG = os.environ.get("DEBUG", "false").strip().lower() in ["true", "t", "1", "yes"]
+
+
 if mode == "standalone":
     milvus_path = Path("configs/milvus.yaml")
     worker_ip_path = Path("worker.ip")

@@ -363,7 +363,11 @@ func clientWorker(
 
 	batchSizeStr := os.Getenv("UPLOAD_BATCH_SIZE")
 	BATCH_SIZE, err := strconv.Atoi(batchSizeStr)
+	if err != nil || BATCH_SIZE <= 0 {
+		log.Fatalf("invalid UPLOAD_BATCH_SIZE=%q", batchSizeStr)
+	}
 
+	
 	url := fmt.Sprintf("http://%s:%d", MILVUS_HOST, MILVUS_PORT)
 	mclient, err := milvusclient.New(ctx, &milvusclient.ClientConfig{
 		Address:     url,
@@ -429,6 +433,7 @@ func clientWorker(
 
 	barrier.Wait()
 
+	
 	sharedTiming.MarkLoopStart()
 	startLoop := time.Now()
 	for i := 0; i < localRows; i += BATCH_SIZE {
@@ -440,7 +445,6 @@ func clientWorker(
 		startTotal := time.Now()
 		batch := local[i:end]
 
-		// IDs: absolute row indices
 		ids := make([]int64, len(batch))
 		for j := range ids {
 			absIdx := startIdx + i + j
@@ -456,13 +460,13 @@ func clientWorker(
 			milestones = append(milestones, crossedInsertMilestones(i, end, 1000)...)
 			for _, milestone := range milestones {
 				log.Printf(
-					"LDEBUGF before insert worker=%d client=%d global_client=%d local_inserted=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
-					workerRank, clientID, globalClientRank, milestone, startIdx+i, len(batch), i, end,
+					"DEBUG: before insert worker=%d client=%d global_client=%d target_proxy=%s:%d local_inserted=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
+					workerRank, clientID, globalClientRank, MILVUS_HOST, MILVUS_PORT, milestone, startIdx+i, len(batch), i, end,
 				)
 			}
 		}
 
-		// make sure RPC does not time out
+		// make sure RPC does not time out under load
 		insertCtx, insertCancel := context.WithTimeout(ctx, 30*time.Minute)
 		_, err := mclient.Insert(
 			insertCtx,
@@ -477,8 +481,8 @@ func clientWorker(
 		if ldebugfEnabled {
 			for _, milestone := range milestones {
 				log.Printf(
-					"LDEBUGF insert succeeded worker=%d client=%d global_client=%d local_inserted=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
-					workerRank, clientID, globalClientRank, milestone, startIdx+i, len(batch), i, end,
+					"DEBUG insert succeeded worker=%d client=%d global_client=%d target_proxy=%s:%d local_inserted=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
+					workerRank, clientID, globalClientRank, MILVUS_HOST, MILVUS_PORT, milestone, startIdx+i, len(batch), i, end,
 				)
 			}
 		}
@@ -495,7 +499,7 @@ func clientWorker(
 	if tracingEnabled {
 		span.End()
 	}
-	// Insert a final value so we can measure when it has been processed - only needed if we are doing insert testing
+	// Insert a final value so we can measure when it has been processed
 	sentinelID := int64(totalRows) // unique
 	if globalClientRank == 0 {
 

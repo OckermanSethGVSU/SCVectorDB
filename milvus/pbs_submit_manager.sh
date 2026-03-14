@@ -43,7 +43,7 @@ print_config_summary() {
 
 ### Loop variables ###
 NODES=(1)
-CORES=(112)
+CORES=(64)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 
@@ -67,22 +67,23 @@ queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
 # Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
 ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
-MILVUS_BUILD_DIR="" # Name of the directory with your build: traceMilvus, cpuMilvus
+MILVUS_BUILD_DIR="cpuMilvus" # Name of the directory with your build: traceMilvus, cpuMilvus
 MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the base dir
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
-TASK="insert" # [insert,index]
+TASK="index" # [insert,index]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
-PERF="STAT" # [NONE, STAT, RECORD]
+PERF="NONE" # [NONE, STAT, RECORD]
 CORPUS_SIZE=10000000 # total data to insert
-UPLOAD_CLIENTS_PER_PROXY=1
+UPLOAD_CLIENTS_PER_PROXY=4
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
 UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 GPU_INDEX="False" # [True, False]
 TRACING="False" 
+DEBUG="False" # [True, False]
 
 # Aurora
     # 10 million 
@@ -95,21 +96,22 @@ TRACING="False"
 
 
 # DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
-# DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy" # Path to embeddings
 DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
+# DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
+# DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy" # Path to embeddings
 # VECTOR_DIM=200
 VECTOR_DIM=2560
 DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 
 ### Distributed Variables ###
 MINIO_MODE="stripped" # [single, stripped]
-MINIO_MEDIUM="DAOS" # [DAOS, lustre] (can be memory if running single)
+MINIO_MEDIUM="lustre" # [lustre] (can be memory if running single) - DAOS is broken
 ETCD_MODE="replicated" # [single, replicated]
-STREAMING_NODES=32
+STREAMING_NODES=8
 STREAMING_NODES_PER_CN=4
-NUM_PROXIES=32
+NUM_PROXIES=8
 NUM_PROXIES_PER_CN=4
-DML_CHANNELS=128 # controls DML channels on startup -> defaults to 16 if not set
+DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
 
 
 print_config_summary
@@ -199,6 +201,7 @@ do
                 echo "MILVUS_BUILD_DIR=${MILVUS_BUILD_DIR}" >> $target_file
                 echo "MILVUS_CONFIG_DIR=${MILVUS_CONFIG_DIR}" >> $target_file
                 echo "TRACING=${TRACING}" >> $target_file
+                echo "DEBUG=${DEBUG}" >> $target_file
                 
                 
 
@@ -249,7 +252,7 @@ do
                 fi
                 # Copy in basic python utils
                 cp generalPython/net_mapping.py $dir/
-                cp generalPython/replace.py $dir/
+                cp generalPython/replace_unified.py $dir/
                 cp generalPython/profile.py $dir/
                 cp generalPython/poll.py $dir/
                 cp generalPython/status.py $dir/
@@ -269,7 +272,7 @@ do
                 
                 chmod -R g+w $dir
                 cd $dir
-                # qsub $target_file
+                qsub $target_file
                 sleep 1
                 cd .. 
             done

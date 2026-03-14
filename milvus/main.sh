@@ -44,6 +44,24 @@ launch_role() {
         "$script" "$storage_medium" "$role" &
 }
 
+wait_for_signal_files() {
+    local missing=1
+
+    while (( missing )); do
+        missing=0
+        for signal_file in "$@"; do
+            if [[ ! -e "$signal_file" ]]; then
+                missing=1
+                break
+            fi
+        done
+
+        if (( missing )); then
+            sleep 0.1
+        fi
+    done
+}
+
 PYTHON_ENV_VARS=(
     NO_PROXY=""
     no_proxy=""
@@ -61,6 +79,7 @@ export myDIR=$myDIR
 export RESULT_PATH=$BASE_DIR/$myDIR
 export ETCD_MODE=$ETCD_MODE
 export MODE=$MODE
+export WAL=$WAL
 export DML_CHANNELS=$DML_CHANNELS
 export TASK=$TASK
 export VECTOR_DIM=$VECTOR_DIM
@@ -70,6 +89,7 @@ export MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR
 export TRACING=$TRACING
 export PERF=$PERF
 export MILVUS_CONFIG_DIR=$MILVUS_CONFIG_DIR
+export DEBUG=$DEBUG
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -79,7 +99,7 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml load e2fsprogs
 
     module use /soft/modulefiles; module load conda; conda activate base
-    exec > >(tee output.log) 2>&1
+    exec > >(tee workflow.log) 2>&1
 
 elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
@@ -222,15 +242,13 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     # setup ETCD/Minio info which all parts will need
     cp -r ${BASE_DIR}/cpuMilvus/configs/ .
     rm ./configs/milvus.yaml
-    python3 replace.py --mode distributed --wal $WAL
-    
+    python3 replace_unified.py --mode distributed
 
     # Launch cordinator
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM COORDINATOR &
     
     # Launch streaming nodes
     launch_role STREAMING "$STREAMING_NODES" "$STREAMING_NODES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
-    # mpirun -n $STREAMING_NODES --ppn $STREAMING_NODES_PER_CN --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM STREAMING &
 
     # Launch query nodes
     mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM QUERY &
@@ -240,15 +258,27 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     
     # Launch proxy
     launch_role PROXY "$NUM_PROXIES" "$NUM_PROXIES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
-    # mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM PROXY &
 
-    # verify milvus is running
-    TARGET="./workerOut/proxy$((NUM_PROXIES - 1))_running.txt"
-    while [ ! -e "$TARGET" ]; do
-    sleep 0.1
+    # execute.sh only writes these markers after each component passes its health check.
+    SIGNAL_FILES=(
+        "./workerOut/cord0_running.txt"
+        "./workerOut/query0_running.txt"
+        "./workerOut/data0_running.txt"
+    )
+
+    for ((rank=0; rank<STREAMING_NODES; rank++)); do
+        SIGNAL_FILES+=("./workerOut/streaming${rank}_running.txt")
     done
+
+    for ((rank=0; rank<NUM_PROXIES; rank++)); do
+        SIGNAL_FILES+=("./workerOut/proxy${rank}_running.txt")
+    done
+
+    wait_for_signal_files "${SIGNAL_FILES[@]}"
     IP_ADDR=$(jq -r '.hsn0.ipv4[0]' PROXY/PROXY0.json)
     echo $IP_ADDR > worker.ip
+    sleep 30
+    
     env "${PYTHON_ENV_VARS[@]}" python3 poll.py
 fi
 
