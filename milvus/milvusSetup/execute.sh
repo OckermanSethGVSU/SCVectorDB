@@ -29,6 +29,12 @@ HEALTH_PORT="${MILVUS_HEALTH_PORT:-${METRICS_PORT:-9091}}"
 APT_RETRIES="${APT_RETRIES:-5}"
 APT_RETRY_DELAY_SECONDS="${APT_RETRY_DELAY_SECONDS:-10}"
 
+# if Milvus is restoring itself, give it much longer to launch
+if [ -n "$RESTORE_DIR" ]; then
+  HEALTH_TIMEOUT_SECONDS=600
+fi 
+
+
 retry_command() {
   local attempts="$1"
   local delay="$2"

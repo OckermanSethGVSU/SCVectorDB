@@ -48,7 +48,7 @@ IP_ADDR=$(jq -r '.hsn0.ipv4[0]' interfaces${group}.json)
 echo $IP_ADDR > worker.ip
 
 
-mkdir -p ${TARGET_BASE}/volumes/milvus/
+mkdir -p ${TARGET_BASE}/milvus/
 mkdir -p ./workerOut/
 
 
@@ -80,6 +80,8 @@ EOF
 
 python3 replace_unified.py --mode standalone
 cp -r ./configs/ $TARGET_BASE/
+
+
 
 PROXY_PORT=20001
 METRICS_PORT=9091
@@ -115,6 +117,22 @@ if [ -n "$MILVUS_BUILD_DIR" ]; then
 fi 
 
 
+if [ -n "$RESTORE_DIR" ]; then
+    echo "Restoring Milvus from ${RESTORE_DIR}"
+
+    mkdir -p ${TARGET_BASE}/milvus/data/
+    cp -r $RESTORE_DIR/data/cache ${TARGET_BASE}/milvus/data/ & 
+    cp -r $RESTORE_DIR/data/index_files ${TARGET_BASE}/milvus/data/ &
+    cp -r $RESTORE_DIR/data/insert_log ${TARGET_BASE}/milvus/data/ &
+    cp -r $RESTORE_DIR/data/stats_log ${TARGET_BASE}/milvus/data/ &
+    cp -r $RESTORE_DIR/data/wp ${TARGET_BASE}/milvus/data/ &
+
+    cp -r $RESTORE_DIR/etcd/ ${TARGET_BASE}/milvus/ &
+
+    wait
+fi 
+
+
 apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --pwd /milvus \
     --env MILVUSCONF=/milvus/configs/ \
@@ -129,11 +147,12 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env WORKER_IP=$IP_ADDR \
     --env MILVUS_HEALTH_HOST=$IP_ADDR \
     --env MILVUS_HEALTH_PORT=$METRICS_PORT \
+    --env RESTORE_DIR=$RESTORE_DIR \
     -B ./execute.sh:/milvus/app_execute.sh \
     -B ${TARGET_BASE}/configs/:/milvus/configs/ \
     -B ${base}/perfDir/:/perfDir/ \
     -B ./workerOut/:/workerOut/ \
-    -B ${TARGET_BASE}/volumes/milvus:/var/lib/milvus \
+    -B ${TARGET_BASE}/milvus:/var/lib/milvus \
     "${BUILD_ARGS[@]}" \
     "${POLARIS_BINDS[@]}" \
     "${GPU_ARGS[@]}" \

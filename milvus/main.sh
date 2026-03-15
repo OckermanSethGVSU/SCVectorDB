@@ -90,6 +90,7 @@ export TRACING=$TRACING
 export PERF=$PERF
 export MILVUS_CONFIG_DIR=$MILVUS_CONFIG_DIR
 export DEBUG=$DEBUG
+export RESTORE_DIR=$RESTORE_DIR
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -311,7 +312,7 @@ mv *.npy uploadNPY
 if [[ "$TASK" == "index" ]]; then
     touch ./workerOut/workflow_start.txt
 
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index_data.py
+    env "${PYTHON_ENV_VARS[@]}" python3 index_data.py
     
     touch ./workerOut/workflow_end.txt
     touch flag.txt
