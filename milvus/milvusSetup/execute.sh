@@ -21,17 +21,18 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
 fi
 
 
-MAX_HEALTH_RETRIES="${MAX_HEALTH_RETRIES:-5}"
-HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-90}"
+MAX_LAUNCH_RETRIES="${MAX_LAUNCH_RETRIES:-5}"
+STARTUP_TIMEOUT_SECONDS="${STARTUP_TIMEOUT_SECONDS:-300}"
+HEALTH_REQUEST_TIMEOUT_SECONDS="${HEALTH_REQUEST_TIMEOUT_SECONDS:-5}"
 HEALTH_CHECK_INTERVAL_SECONDS="${HEALTH_CHECK_INTERVAL_SECONDS:-10}"
 HEALTH_HOST="${MILVUS_HEALTH_HOST:-127.0.0.1}"
 HEALTH_PORT="${MILVUS_HEALTH_PORT:-${METRICS_PORT:-9091}}"
 APT_RETRIES="${APT_RETRIES:-5}"
 APT_RETRY_DELAY_SECONDS="${APT_RETRY_DELAY_SECONDS:-10}"
 
-# if Milvus is restoring itself, give it much longer to launch
+# if Milvus is restoring itself, give it longer to launch
 if [ -n "$RESTORE_DIR" ]; then
-  HEALTH_TIMEOUT_SECONDS=600
+  STARTUP_TIMEOUT_SECONDS=600
 fi 
 
 
@@ -62,12 +63,12 @@ is_milvus_healthy() {
   if command -v curl >/dev/null 2>&1; then
     response=$(
       NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-      curl --silent --show-error --fail --max-time "$HEALTH_TIMEOUT_SECONDS" "$url" 2>/dev/null
+      curl --silent --show-error --fail --max-time "$HEALTH_REQUEST_TIMEOUT_SECONDS" "$url" 2>/dev/null
     ) || return 1
   elif command -v wget >/dev/null 2>&1; then
     response=$(
       NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-      wget -q -T "$HEALTH_TIMEOUT_SECONDS" -O - "$url" 2>/dev/null
+      wget -q -T "$HEALTH_REQUEST_TIMEOUT_SECONDS" -O - "$url" 2>/dev/null
     ) || return 1
   else
     echo "Neither curl nor wget is available for Milvus health checks" >&2
@@ -78,8 +79,9 @@ is_milvus_healthy() {
 }
 
 wait_for_milvus_health() {
-  local attempt=1
-  while (( attempt <= MAX_HEALTH_RETRIES )); do
+  local deadline=$((SECONDS + STARTUP_TIMEOUT_SECONDS))
+
+  while (( SECONDS < deadline )); do
     if ! kill -0 "$MILVUS_PID" 2>/dev/null; then
       echo "Milvus process exited before becoming healthy"
       return 1
@@ -90,11 +92,11 @@ wait_for_milvus_health() {
       return 0
     fi
 
-    echo "Waiting for Milvus health (${attempt}/${MAX_HEALTH_RETRIES}): http://${HEALTH_HOST}:${HEALTH_PORT}/healthz"
+    echo "Waiting for Milvus health: http://${HEALTH_HOST}:${HEALTH_PORT}/healthz"
     sleep "$HEALTH_CHECK_INTERVAL_SECONDS"
-    attempt=$((attempt + 1))
   done
 
+  echo "Timed out after ${STARTUP_TIMEOUT_SECONDS}s waiting for Milvus health"
   return 1
 }
 
@@ -107,15 +109,15 @@ stop_milvus() {
 
 launch_milvus_with_retry() {
   local launch_attempt
-  for launch_attempt in $(seq 1 "$MAX_HEALTH_RETRIES"); do
-    echo "Launching Milvus (attempt ${launch_attempt}/${MAX_HEALTH_RETRIES})"
+  for launch_attempt in $(seq 1 "$MAX_LAUNCH_RETRIES"); do
+    echo "Launching Milvus (attempt ${launch_attempt}/${MAX_LAUNCH_RETRIES})"
     launch_milvus
 
     if wait_for_milvus_health; then
       return 0
     fi
 
-    echo "Milvus failed health check on launch attempt ${launch_attempt}/${MAX_HEALTH_RETRIES}"
+    echo "Milvus failed health check on launch attempt ${launch_attempt}/${MAX_LAUNCH_RETRIES}"
     stop_milvus
   done
 
