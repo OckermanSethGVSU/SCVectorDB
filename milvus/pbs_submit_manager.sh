@@ -43,7 +43,7 @@ print_config_summary() {
 
 ### Loop variables ###
 NODES=(1)
-CORES=(64)
+CORES=(112)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 
@@ -52,11 +52,11 @@ CORES=(64)
 UPLOAD_BATCH_SIZE=(512) 
 
 # 2 8
-QUERY_BATCH_SIZE=(2048)
+QUERY_BATCH_SIZE=(512)
 
 # PBS Vars
-WALLTIME="01:00:00"
-queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
+WALLTIME="06:00:00"
+queue=capacity # [preemptable, debug, debug-scaling, prod,capacity]
 
 
 
@@ -73,7 +73,7 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
-TASK="index" # [insert,index]
+TASK="query" # [insert, index, query]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
 CORPUS_SIZE=10000000 # total data to insert
@@ -84,6 +84,11 @@ UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 GPU_INDEX="False" # [True, False]
 TRACING="False" 
 DEBUG="False" # [True, False]
+
+# Polaris: TODO
+# Aurora: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/
+
+RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex/"
 
 # Aurora
     # 10 million 
@@ -96,9 +101,9 @@ DEBUG="False" # [True, False]
 
 
 # DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
 # DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
-# DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy" # Path to embeddings
+# DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
+DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
 # VECTOR_DIM=200
 VECTOR_DIM=2560
 DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
@@ -173,8 +178,14 @@ do
                     else
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${CORPUS_SIZE}_${DATE}"
                     fi
+                elif [[ "$TASK" == "query" ]]; then
+                    if [[ "$MODE" == "DISTRIBUTED" ]]; then
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${CORPUS_SIZE}_${QUERY_BATCH_SIZE}_${DATE}"
+                    else
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${CORPUS_SIZE}_${QUERY_BATCH_SIZE}_${DATE}"
+                    fi
                 else
-                    echo "Unknown task: $TASK: valid options include insert, index"
+                    echo "Unknown task: $TASK: valid options include insert, index, query"
                     exit
                 fi
 
@@ -202,6 +213,7 @@ do
                 echo "MILVUS_CONFIG_DIR=${MILVUS_CONFIG_DIR}" >> $target_file
                 echo "TRACING=${TRACING}" >> $target_file
                 echo "DEBUG=${DEBUG}" >> $target_file
+                echo "RESTORE_DIR=${RESTORE_DIR}" >> $target_file
                 
                 
 
@@ -255,9 +267,7 @@ do
                 cp generalPython/replace_unified.py $dir/
                 cp generalPython/profile.py $dir/
                 cp generalPython/poll.py $dir/
-                cp generalPython/status.py $dir/
-                
-                
+                                
                 # all tasks need insert code
                 cp ./generalPython/setup_collection.py $dir/
                 cp ./generalPython/insert_multi_client_summary.py $dir/
@@ -272,7 +282,7 @@ do
                 
                 chmod -R g+w $dir
                 cd $dir
-                qsub $target_file
+                # qsub $target_file
                 sleep 1
                 cd .. 
             done

@@ -27,7 +27,7 @@ def read_ip_from_file(path):
 # MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_HOST = read_ip_from_file("worker.ip")
 MILVUS_HEALTH_PORT = int(os.getenv("MILVUS_HEALTH_PORT", "9091"))
-MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "19530"))
+MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "20001"))
 MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "root:Milvus")
 
 wait_for_milvus(MILVUS_HOST, MILVUS_HEALTH_PORT)
