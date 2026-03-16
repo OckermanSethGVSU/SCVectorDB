@@ -296,9 +296,10 @@ export DATA_FILEPATH=$DATA_FILEPATH
 export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
 
 
+export ACTIVE_TASK="INSERT"
 NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientInsert
 
-if [[ "$TASK" == "insert" ]]; then
+if [[ "$TASK" == "INSERT" ]]; then
     touch flag.txt
 fi
 
@@ -309,9 +310,9 @@ mv summary.csv insert_summary.txt
 mkdir -p uploadNPY
 mv *.npy uploadNPY
 
-if [[ "$TASK" == "index" ]]; then
+if [[ "$TASK" == "INDEX" ]]; then
+    export ACTIVE_TASK=$TASK
     touch ./workerOut/workflow_start.txt
-
     env "${PYTHON_ENV_VARS[@]}" python3 index_data.py
     
     touch ./workerOut/workflow_end.txt
@@ -325,6 +326,7 @@ sleep 60
 if [[ "$TRACING" == "True" ]]; then
     python3 analyze_traces.py > analysis.txt
 fi
+
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
     DAOS_CONT="vectorDBTesting"

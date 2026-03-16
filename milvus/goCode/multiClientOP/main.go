@@ -304,7 +304,8 @@ func clientWorker(
 	_ = wStart
 	_ = wEnd
 
-	task := os.Getenv("TASK")
+	ACTIVE_TASK := os.Getenv("ACTIVE_TASK")
+	TASK := os.Getenv("TASK")
 
 	// We'll compute worker slice using splitRange(totalRows, nWorkers, workerRank)
 	nWorkersStr := os.Getenv("NUM_PROXIES")
@@ -337,11 +338,12 @@ func clientWorker(
 	mcols := len(local[0])
 
 	// ----- Target Milvus Proxy  -----
-	balance_strategy := os.Getenv("UPLOAD_BALANCE_STRATEGY")
-	if balance_strategy == "" {
-		log.Fatalf("invalid UPLOAD_BALANCE_STRATEGY=%q", balance_strategy)
+	balanceEnv := fmt.Sprintf("%s_BALANCE_STRATEGY", ACTIVE_TASK)
+	balanceStrategy := os.Getenv(balanceEnv)
+	if balanceStrategy == "" {
+		log.Fatalf("invalid %s=%q", balanceEnv, balanceStrategy)
 	}
-	bs := strings.ToUpper(strings.TrimSpace(balance_strategy))
+	bs := strings.ToUpper(strings.TrimSpace(balanceStrategy))
 
 	var node *NodeInfo
 	var errN error
@@ -351,7 +353,7 @@ func clientWorker(
 	} else if bs == "WORKER" {
 		node, errN = getNodeByRank("PROXY_registry.txt", workerRank)
 	} else {
-		log.Fatalf("unknown balance_strategy=%q (expected NONE or WORKER)", balance_strategy)
+		log.Fatalf("unknown balance_strategy=%q (expected NONE or WORKER)", balanceStrategy)
 	}
 
 	if errN != nil {
@@ -361,10 +363,12 @@ func clientWorker(
 	MILVUS_HOST := node.IP
 	MILVUS_PORT := node.Port
 
-	batchSizeStr := os.Getenv("UPLOAD_BATCH_SIZE")
+
+	batchEnv := fmt.Sprintf("%s_BATCH_SIZE", ACTIVE_TASK)
+	batchSizeStr := os.Getenv(batchEnv)
 	BATCH_SIZE, err := strconv.Atoi(batchSizeStr)
 	if err != nil || BATCH_SIZE <= 0 {
-		log.Fatalf("invalid UPLOAD_BATCH_SIZE=%q", batchSizeStr)
+		log.Fatalf("invalid %s=%q", batchEnv, batchSizeStr)
 	}
 
 	
@@ -403,7 +407,7 @@ func clientWorker(
 		uploadDurations  []float64
 	)
 
-	if tracingEnabled {
+	if tracingEnabled && (ACTIVE_TASK == TASK) {
 		tracer := otel.Tracer("milvus-client")
 		ctx, span = tracer.Start(ctx, fmt.Sprintf("MilvusClient-rank-%d", globalClientRank))
 		span.SetAttributes(attribute.Int("client.rank", globalClientRank))
@@ -421,7 +425,7 @@ func clientWorker(
 	barrier.Wait()
 
 	// let perf know that it should start tracking
-	if task == "insert" && globalClientRank == 0 {
+	if (ACTIVE_TASK == TASK) && globalClientRank == 0 {
 		file, err := os.Create("./workerOut/workflow_start.txt")
 		if err != nil {
 			log.Fatalf("failed to create file: %v", err)
@@ -445,13 +449,6 @@ func clientWorker(
 		startTotal := time.Now()
 		batch := local[i:end]
 
-		ids := make([]int64, len(batch))
-		for j := range ids {
-			absIdx := startIdx + i + j
-			ids[j] = int64(absIdx)
-		}
-
-		startUpload := time.Now()
 		var milestones []int
 		if ldebugfEnabled {
 			if i == 0 {
@@ -460,29 +457,63 @@ func clientWorker(
 			milestones = append(milestones, crossedInsertMilestones(i, end, 1000)...)
 			for _, milestone := range milestones {
 				log.Printf(
-					"DEBUG: before insert worker=%d client=%d global_client=%d target_proxy=%s:%d local_inserted=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
+					"DEBUG: before op worker=%d client=%d global_client=%d target_proxy=%s:%d local_inserted=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
 					workerRank, clientID, globalClientRank, MILVUS_HOST, MILVUS_PORT, milestone, startIdx+i, len(batch), i, end,
 				)
 			}
 		}
 
 		// make sure RPC does not time out under load
-		insertCtx, insertCancel := context.WithTimeout(ctx, 30*time.Minute)
-		_, err := mclient.Insert(
-			insertCtx,
-			milvusclient.NewColumnBasedInsertOption(collectionName).
-				WithInt64Column(idField, ids).
-				WithFloatVectorColumn(vectorField, mcols, batch),
-		)
-		insertCancel()
+		opCtx, opCancel := context.WithTimeout(ctx, 30*time.Minute)
+
+		var err error
+		var queryResults []milvusclient.ResultSet
+		var startUpload time.Time
+
+		if ACTIVE_TASK == "INSERT" {
+			ids := make([]int64, len(batch))
+			for j := range ids {
+				absIdx := startIdx + i + j
+				ids[j] = int64(absIdx)
+			}
+
+			startUpload = time.Now()
+			_, err = mclient.Insert(
+				opCtx,
+				milvusclient.NewColumnBasedInsertOption(collectionName).
+					WithInt64Column(idField, ids).
+					WithFloatVectorColumn(vectorField, mcols, batch),
+			)
+		} else if ACTIVE_TASK == "QUERY" {
+			vectors := make([]entity.Vector, len(batch))
+			for j := range batch {
+				vectors[j] = entity.FloatVector(batch[j])
+			}
+
+			searchOpt := milvusclient.NewSearchOption(collectionName, 10, vectors).
+				WithANNSField(vectorField)
+
+			startUpload = time.Now()
+			queryResults, err = mclient.Search(opCtx, searchOpt)
+		} else {
+			log.Fatalf("unknown ACTIVE_TASK=%s", ACTIVE_TASK)
+		}
+
+		opCancel()
 		if err != nil {
-			log.Fatalf("insert failed worker=%d client=%d absRowStart=%d: %v", workerRank, clientID, startIdx+i, err)
+			log.Fatalf("op failed worker=%d client=%d absRowStart=%d: %v", workerRank, clientID, startIdx+i, err)
 		}
 		if ldebugfEnabled {
 			for _, milestone := range milestones {
 				log.Printf(
-					"DEBUG insert succeeded worker=%d client=%d global_client=%d target_proxy=%s:%d local_inserted=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
+					"DEBUG op succeeded worker=%d client=%d global_client=%d target_proxy=%s:%d local_count=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
 					workerRank, clientID, globalClientRank, MILVUS_HOST, MILVUS_PORT, milestone, startIdx+i, len(batch), i, end,
+				)
+			}
+			if ACTIVE_TASK == "QUERY" && len(queryResults) > 0 {
+				log.Printf(
+					"DEBUG query sample worker=%d client=%d result_count=%d ids=%v scores=%v",
+					workerRank, clientID, queryResults[0].ResultCount, queryResults[0].IDs, queryResults[0].Scores,
 				)
 			}
 		}
@@ -503,7 +534,7 @@ func clientWorker(
 	sentinelID := int64(totalRows) // unique
 	if globalClientRank == 0 {
 
-		if task == "insert" {
+		if ACTIVE_TASK == "insert" {
 			vec := make([]float32, mcols)
 			_, err := mclient.Insert(
 				ctx,
@@ -532,7 +563,7 @@ func clientWorker(
 	}
 
 	// tell perf to stop tracking
-	if task == "insert" && globalClientRank == 0 {
+	if ACTIVE_TASK == TASK && globalClientRank == 0 {
 		file, err := os.Create("./workerOut/workflow_end.txt")
 		if err != nil {
 			log.Fatalf("failed to create file: %v", err)
@@ -621,30 +652,45 @@ func main() {
 		log.Fatalf("invalid NUM_PROXIES=%q", nWorkersStr)
 	}
 
-	clientsStr := os.Getenv("UPLOAD_CLIENTS_PER_PROXY")
+
+	activeTask := os.Getenv("ACTIVE_TASK")
+	task := os.Getenv("TASK")
+
+	if activeTask == "" && task == "" {
+		log.Fatal("ACTIVE_TASK and TASK environment variables are not set")
+	}
+
+	clientsEnv := fmt.Sprintf("%s_CLIENTS_PER_PROXY", activeTask)
+	clientsStr := os.Getenv(clientsEnv)
 	clientsPerWorker, err := strconv.Atoi(clientsStr)
 	if err != nil || clientsPerWorker <= 0 {
-		log.Fatalf("invalid UPLOAD_CLIENTS_PER_PROXY=%q", clientsStr)
+		log.Fatalf("invalid %s=%q", clientsEnv, clientsStr)
 	}
-	CORPUS_SIZE_str := os.Getenv("CORPUS_SIZE")
+
+	corpusEnv := fmt.Sprintf("%s_CORPUS_SIZE", activeTask)
+	CORPUS_SIZE_str := os.Getenv(corpusEnv)
 	CORPUS_SIZE, err := strconv.Atoi(CORPUS_SIZE_str)
 	if err != nil || CORPUS_SIZE <= 0 {
-		log.Fatalf("invalid CORPUS_SIZE=%q", CORPUS_SIZE_str)
+		log.Fatalf("invalid %s=%q", corpusEnv, CORPUS_SIZE_str)
 	}
 
-	DATA_PATH := os.Getenv("DATA_FILEPATH")
+	dataPathEnv := fmt.Sprintf("%s_DATA_FILEPATH", activeTask)
+	DATA_PATH := os.Getenv(dataPathEnv)
 	if DATA_PATH == "" {
-		log.Fatalf("invalid DATA_FILEPATH=%q", DATA_PATH)
+		log.Fatalf("invalid %s=%q", dataPathEnv, DATA_PATH)
 	}
 
-	batchSizeStr := os.Getenv("UPLOAD_BATCH_SIZE")
+	batchEnv := fmt.Sprintf("%s_BATCH_SIZE", activeTask)
+	batchSizeStr := os.Getenv(batchEnv)
 	BATCH_SIZE, err := strconv.Atoi(batchSizeStr)
 	if err != nil || BATCH_SIZE <= 0 {
-		log.Fatalf("invalid UPLOAD_BATCH_SIZE=%q", batchSizeStr)
+		log.Fatalf("invalid %s=%q", batchEnv, batchSizeStr)
 	}
 
 	totalClients := nWorkers * clientsPerWorker
-	fmt.Printf("CORPUS_SIZE=%d nProxies=%d clientsPerProxy=%d totalClients=%d DATA_FILEPATH=%s\n",
+
+	fmt.Printf(
+		"CORPUS_SIZE=%d nProxies=%d clientsPerProxy=%d totalClients=%d DATA_FILEPATH=%s\n",
 		CORPUS_SIZE, nWorkers, clientsPerWorker, totalClients, DATA_PATH,
 	)
 

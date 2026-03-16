@@ -73,7 +73,7 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
-TASK="query" # [insert, index, query]
+TASK="QUERY" # [INSERT, INDEX, QUERY]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
 CORPUS_SIZE=10000000 # total data to insert
@@ -165,27 +165,27 @@ do
                 
                 
                 DATE=$(date +"%Y-%m-%d_%H_%M_%S")
-                if [[ "$TASK" == "insert" ]]; then
+                if [[ "$TASK" == "INSERT" ]]; then
 
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_SN${STREAMING_NODES}_SPCN${STREAMING_NODES_PER_CN}_${DATE}"
                     else
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_${DATE}"
                     fi
-                elif [[ "$TASK" == "index" ]]; then
+                elif [[ "$TASK" == "INDEX" ]]; then
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${CORPUS_SIZE}_${DATE}"
                     else
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${CORPUS_SIZE}_${DATE}"
                     fi
-                elif [[ "$TASK" == "query" ]]; then
+                elif [[ "$TASK" == "QUERY" ]]; then
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${CORPUS_SIZE}_${QUERY_BATCH_SIZE}_${DATE}"
                     else
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${CORPUS_SIZE}_${QUERY_BATCH_SIZE}_${DATE}"
                     fi
                 else
-                    echo "Unknown task: $TASK: valid options include insert, index, query"
+                    echo "Unknown task: $TASK: valid options include INSERT, INDEX, QUERY"
                     exit
                 fi
 
