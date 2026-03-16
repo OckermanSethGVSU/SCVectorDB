@@ -2,9 +2,9 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if ! "$SCRIPT_DIR/check_dependencies.sh" --missing-only; then
-    exit 1
-fi
+# if ! "$SCRIPT_DIR/check_dependencies.sh" --missing-only; then
+#     exit 1
+# fi
 
 
 print_config_summary() {
@@ -43,13 +43,13 @@ print_config_summary() {
 
 ### Loop variables ###
 NODES=(1)
-CORES=(112)
+CORES=(1)
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 
 # Lustre todo: 8192, 256 (queued?)
 # best batch for 32 clients: 128
-UPLOAD_BATCH_SIZE=(512) 
+INSERT_BATCH_SIZE=(512) 
 
 # 2 8
 QUERY_BATCH_SIZE=(512)
@@ -73,14 +73,14 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
-TASK="QUERY" # [INSERT, INDEX, QUERY]
+TASK="INDEX" # [INSERT, INDEX, QUERY]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
-CORPUS_SIZE=10000000 # total data to insert
-UPLOAD_CLIENTS_PER_PROXY=4
+INSERT_CORPUS_SIZE=10000000 # total data to insert
+INSERT_CLIENTS_PER_PROXY=2
 BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
-UPLOAD_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
+INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 GPU_INDEX="False" # [True, False]
 TRACING="False" 
 DEBUG="False" # [True, False]
@@ -88,7 +88,7 @@ DEBUG="False" # [True, False]
 # Polaris: TODO
 # Aurora: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/
 
-RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex/"
+RESTORE_DIR=""
 
 # Aurora
     # 10 million 
@@ -103,7 +103,7 @@ RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yande
 # DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
 # DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
 # DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
+INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
 # VECTOR_DIM=200
 VECTOR_DIM=2560
 DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
@@ -127,7 +127,7 @@ do
     for query_bs in "${QUERY_BATCH_SIZE[@]}" 
     do
 
-        for upload_bs in "${UPLOAD_BATCH_SIZE[@]}"
+        for upload_bs in "${INSERT_BATCH_SIZE[@]}"
 
         do 
             for numCores in "${CORES[@]}"
@@ -168,9 +168,9 @@ do
                 if [[ "$TASK" == "INSERT" ]]; then
 
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_SN${STREAMING_NODES}_SPCN${STREAMING_NODES_PER_CN}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${INSERT_CLIENTS_PER_PROXY}_uploadBS${INSERT_bs}_SN${STREAMING_NODES}_SPCN${STREAMING_NODES_PER_CN}_${DATE}"
                     else
-                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${UPLOAD_CLIENTS_PER_PROXY}_uploadBS${upload_bs}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${INSERT_CLIENTS_PER_PROXY}_uploadBS${INSERT_bs}_${DATE}"
                     fi
                 elif [[ "$TASK" == "INDEX" ]]; then
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
@@ -190,29 +190,33 @@ do
                 fi
 
                 echo "myDIR=${dir}" >> $target_file
+                echo "PLATFORM=${PLATFORM}" >> $target_file
                 echo "BASE_DIR=${BASE_DIR}" >> $target_file
                 echo "ENV_PATH=${ENV_PATH}" >> $target_file
+                echo "MILVUS_BUILD_DIR=${MILVUS_BUILD_DIR}" >> $target_file
+                echo "MILVUS_CONFIG_DIR=${MILVUS_CONFIG_DIR}" >> $target_file
                 echo "TASK=${TASK}" >> $target_file
-
-                echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}" >> $target_file
-                echo "CORPUS_SIZE=${CORPUS_SIZE}" >> $target_file
-                echo "PERF=${PERF}" >> $target_file
-                echo "CORES=${numCores}" >> $target_file
-                echo "QUERY_BATCH_SIZE=${query_bs}" >> $target_file
-                echo "UPLOAD_BATCH_SIZE=${upload_bs}" >> $target_file
-                echo "UPLOAD_CLIENTS_PER_PROXY=${UPLOAD_CLIENTS_PER_PROXY}" >> $target_file
-                echo "DATA_FILEPATH=${DATA_FILEPATH}" >> $target_file
-                echo "PLATFORM=${PLATFORM}" >> $target_file
                 echo "MODE=${MODE}" >> $target_file
+                echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}" >> $target_file
+                echo "CORES=${numCores}" >> $target_file
                 echo "WAL=${WAL}" >> $target_file
-                echo "UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}" >> $target_file
+
+                echo "INSERT_DATA_FILEPATH=${INSERT_DATA_FILEPATH}" >> $target_file
+                echo "INSERT_BALANCE_STRATEGY=${INSERT_BALANCE_STRATEGY}" >> $target_file
+                echo "INSERT_CORPUS_SIZE=${INSERT_CORPUS_SIZE}" >> $target_file
+                echo "INSERT_BATCH_SIZE=${upload_bs}" >> $target_file
+                echo "INSERT_CLIENTS_PER_PROXY=${INSERT_CLIENTS_PER_PROXY}" >> $target_file
+                
                 echo "VECTOR_DIM=${VECTOR_DIM}" >> $target_file
                 echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
                 echo "GPU_INDEX=${GPU_INDEX}" >> $target_file
-                echo "MILVUS_BUILD_DIR=${MILVUS_BUILD_DIR}" >> $target_file
-                echo "MILVUS_CONFIG_DIR=${MILVUS_CONFIG_DIR}" >> $target_file
+                
+                echo "QUERY_BATCH_SIZE=${query_bs}" >> $target_file
+
                 echo "TRACING=${TRACING}" >> $target_file
+                echo "PERF=${PERF}" >> $target_file
                 echo "DEBUG=${DEBUG}" >> $target_file
+
                 echo "RESTORE_DIR=${RESTORE_DIR}" >> $target_file
                 
                 
@@ -282,7 +286,7 @@ do
                 
                 chmod -R g+w $dir
                 cd $dir
-                # qsub $target_file
+                qsub $target_file
                 sleep 1
                 cd .. 
             done

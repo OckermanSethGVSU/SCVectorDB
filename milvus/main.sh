@@ -72,23 +72,30 @@ PYTHON_ENV_VARS=(
 )
 
 cd $BASE_DIR/$myDIR
-export CORES=$CORES
+
 export BASE_DIR=$BASE_DIR
-export PLATFORM=$PLATFORM
 export myDIR=$myDIR
 export RESULT_PATH=$BASE_DIR/$myDIR
-export ETCD_MODE=$ETCD_MODE
+
+export PLATFORM=$PLATFORM
+export CORES=$CORES
 export MODE=$MODE
+export TASK=$TASK
+export ETCD_MODE=$ETCD_MODE
 export WAL=$WAL
 export DML_CHANNELS=$DML_CHANNELS
-export TASK=$TASK
+export NUM_PROXIES=$NUM_PROXIES
+
+export GPU_INDEX=$GPU_INDEX
 export VECTOR_DIM=$VECTOR_DIM
 export DISTANCE_METRIC=$DISTANCE_METRIC
-export GPU_INDEX=$GPU_INDEX
-export MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR
+
 export TRACING=$TRACING
 export PERF=$PERF
+
+export MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR
 export MILVUS_CONFIG_DIR=$MILVUS_CONFIG_DIR
+
 export DEBUG=$DEBUG
 export RESTORE_DIR=$RESTORE_DIR
 
@@ -181,9 +188,9 @@ if [[ "$MODE" == "STANDALONE" ]]; then
 
 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     export MINIO_MODE=$MINIO_MODE
-    export ETCD_MODE=$ETCD_MODE    
-    mapfile -t NODES < <(awk '!seen[$0]++' "$PBS_NODEFILE")
+    export ETCD_MODE=$ETCD_MODE
 
+    mapfile -t NODES < <(awk '!seen[$0]++' "$PBS_NODEFILE")
 
     # spreads etcd evenly on up to 3 nodes
     if [[ "$ETCD_MODE" == "replicated" ]]; then        
@@ -288,15 +295,14 @@ fi
 env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
 
 
-export UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}
-export CORPUS_SIZE=$CORPUS_SIZE
-export NUM_PROXIES=$NUM_PROXIES
-export UPLOAD_CLIENTS_PER_PROXY=$UPLOAD_CLIENTS_PER_PROXY
-export DATA_FILEPATH=$DATA_FILEPATH
-export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
-
-
 export ACTIVE_TASK="INSERT"
+export INSERT_BALANCE_STRATEGY=${INSERT_BALANCE_STRATEGY}
+export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
+export INSERT_CLIENTS_PER_PROXY=$INSERT_CLIENTS_PER_PROXY
+export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
+export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
+
+
 NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientInsert
 
 if [[ "$TASK" == "INSERT" ]]; then

@@ -41,13 +41,13 @@ QUERY_BATCH_SIZE=(2048)
 UPLOAD_CLIENTS_PER_WORKER=(1)
 # PBS Vars
 WALLTIME="01:00:00"
-queue=debug # [preemptable, debug, debug-scaling, prod, capacity]
+queue=capacity # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
-TASK="insert" # [insert, index]
+TASK="index" # [insert, index]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
-PERF="STAT" # [NONE, STAT, TRACE]
+PERF="NONE" # [NONE, STAT, TRACE]
 CORPUS_SIZE=10000000 # total data to insert
 UPLOAD_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 GPU_INDEX=False
@@ -60,14 +60,14 @@ GPU_INDEX=False
     # 10 million 
     #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
     #     Yandex: /eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy
-DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
-VECTOR_DIM=2560
-DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
+DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
+VECTOR_DIM=200
+DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 
-QDRANT_EXECUTABLE="" # [qdrant, qdrantInsertTracing]
+QDRANT_EXECUTABLE="qdrant" # [qdrant, qdrantInsertTracing]
 
 print_config_summary
 
@@ -214,7 +214,7 @@ do
                         chmod -R g+w $dir
                         cd $dir
 
-                        qsub $target_file
+                        # qsub $target_file
                         sleep 5
                         cd .. 
                     done

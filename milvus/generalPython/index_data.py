@@ -4,6 +4,75 @@ import time
 import requests
 from pymilvus import MilvusClient
 
+
+
+def create_index_with_fallback_poll(
+    client,
+    collection_name,
+    index_params,
+    timeout_s=18000,
+    poll_interval_s=0.5,
+):
+    """
+    Try synchronous index creation first.
+    If sync=True fails, fall back to polling index state until finished.
+
+    Returns the final index description/info when finished.
+    Raises on timeout or terminal failure.
+    """
+
+    try:
+        resp = client.create_index(collection_name, index_params, sync=True)
+        return 
+    except Exception as e:
+        sync_error = e
+        print(f"sync create_index failed, falling back to manual polling", flush=True)
+
+    # Fallback: poll until the index state says finished
+    last_print = 0
+    start = time.time()
+    while True:
+        elapsed = time.time() - start
+        if elapsed > timeout_s:
+            raise TimeoutError(
+                f"Timed out after {timeout_s}s waiting for index build. "
+                f"Original sync error: {sync_error}"
+            )
+
+        try:
+            info = client.describe_index(collection_name, "vector")
+
+            state = info["state"]
+            indexed_rows = info["indexed_rows"]
+            total_rows = info["total_rows"]
+            pending_index_rows = info["pending_index_rows"]
+
+            now = time.time()
+            if now - last_print >= 600:  # 10 minutes
+                print(
+                    f"index state={state} indexed_rows={indexed_rows}/{total_rows} "
+                    f"pending_index_rows={pending_index_rows}",
+                    flush=True,
+                )
+                last_print = now
+
+            state_str = state.strip().lower()
+
+            if state_str == "finished":
+                return
+
+            if state_str == "failed":
+                raise RuntimeError(f"Index build entered failure state: {info}")
+
+        except Exception as e:
+            # Transient polling failures can happen; keep going until timeout
+            print(f"transient polling error: {e}", flush=True)
+            time.sleep(3)
+
+        time.sleep(poll_interval_s)
+
+
+
 def wait_for_milvus(host, port):
     print(f"Waiting for Milvus at {host}:{port}...")
     for _ in range(60):
@@ -25,6 +94,7 @@ def read_ip_from_file(path):
 # MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_HOST = read_ip_from_file("worker.ip")
 MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "20001"))
+CORPUS_SIZE = int(os.getenv("CORPUS_SIZE", "10000000"))
 
 MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "root:Milvus")
 
@@ -32,7 +102,39 @@ MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "root:Milvus")
 client = MilvusClient(f"http://{MILVUS_HOST}:{MILVUS_GRPC_PORT}", token=MILVUS_TOKEN)
 collection_name = "standalone"
 
-client.flush(collection_name)
+def persistent_row_count(client, collection_name):
+    segs = client.list_persistent_segments(collection_name=collection_name)
+    total = 0
+    for seg in segs:
+        if isinstance(seg, dict):
+            total += seg.get("num_rows", 0)
+        else:
+            total += getattr(seg, "num_rows", 0)
+    return total
+
+
+try:
+    client.flush(collection_name)
+except Exception as e:
+    start = time.time()
+    while True:
+        try:
+            rows = persistent_row_count(client, collection_name)
+        
+        # rebuild client on intermittent RPC failures
+        except Exception as e:
+            time.sleep(60) 
+            client = MilvusClient(f"http://{MILVUS_HOST}:{MILVUS_GRPC_PORT}", token=MILVUS_TOKEN)
+            continue
+
+        if rows == CORPUS_SIZE:
+            break
+        
+        if time.time() start > (60 * 60):
+            raise TimeoutError(f"Timed out waiting for persistent rows in {collection_name}")
+
+        time.sleep(30)
+
 
 print(f"Indexes for {collection_name}: ", client.list_indexes(collection_name), flush=True)
 print(client.describe_index(collection_name,'vector'), flush=True)
@@ -90,7 +192,8 @@ else:
 
 # client.flush(collection_name)
 t1 = time.time()
-resp = client.create_index(collection_name, index_params, sync=True)
+# resp = client.create_index(collection_name, index_params, sync=True)
+create_index_with_fallback_poll(client, collection_name, index_params)
 t2 = time.time()
 
 
