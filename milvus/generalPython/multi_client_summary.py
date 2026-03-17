@@ -26,10 +26,10 @@ def extract_time(rank):
 
 
 ACTIVE_TASK = os.getenv("ACTIVE_TASK")
+CORPUS_SIZE = int(os.getenv(f"{ACTIVE_TASK}_CORPUS_SIZE"))
 batch_size = int(os.getenv(f"{ACTIVE_TASK}_BATCH_SIZE"))
 cPerWorker = int(os.getenv(f"{ACTIVE_TASK}_CLIENTS_PER_PROXY"))
 clients = int(os.getenv("NUM_PROXIES"))
-CORPUS_SIZE = int(os.getenv(f"{ACTIVE_TASK}_CORPUS_SIZE"))
 
 
 

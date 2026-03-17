@@ -325,14 +325,17 @@ func clientWorker(
 
 	local := matrix[startIdx:endIdx]
 	localRows := len(local)
+	
 	if localRows == 0 {
-		sharedTiming.MarkClientReady()
 		// Still participate in barriers to avoid deadlock.
+		sharedTiming.MarkClientReady()
+		barrier.Wait()
+		barrier.Wait()
+		barrier.Wait()
 		sharedTiming.WaitSearchable()
 		barrier.Wait()
 		barrier.Wait()
-		barrier.Wait()
-		return
+		
 	}
 
 	mcols := len(local[0])
@@ -574,7 +577,7 @@ func clientWorker(
 
 	// local sanity (skip if no rows)
 	localExists := false
-	if localRows > 0 {
+	if TASK == "INSERT" && localRows > 0 {
 		localRes, localErr := mclient.Get(ctx, localOpt)
 		localExists = (localErr == nil && localRes.ResultCount == 1)
 		if localErr != nil {
@@ -585,12 +588,15 @@ func clientWorker(
 		localExists = false
 	}
 
-	// global sanity (spot check)
-	globalRes, globalErr := mclient.Get(ctx, globalOpt)
-	globalExists := (globalErr == nil && globalRes.ResultCount == 1)
-	if globalErr != nil {
-		log.Printf("Global sanity check failed worker=%d client=%d lastID=%d: %v",
-			workerRank, clientID, lastID, globalErr)
+	globalExists := false
+	if TASK == "INSERT" {
+		// global sanity (spot check)
+		globalRes, globalErr := mclient.Get(ctx, globalOpt)
+		globalExists = (globalErr == nil && globalRes.ResultCount == 1)
+		if globalErr != nil {
+			log.Printf("Global sanity check failed worker=%d client=%d lastID=%d: %v",
+				workerRank, clientID, lastID, globalErr)
+		}
 	}
 
 	barrier.Wait()
