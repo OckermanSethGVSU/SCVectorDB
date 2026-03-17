@@ -24,8 +24,8 @@ def summarize_npy(path, rank, name, batch_size):
 
     return [rank, name, np.sum(arr),np.mean(arr),np.std(arr), np.percentile(arr, 99), len(arr) / (np.sum(arr)/ 1000), (batch_size * len(arr)) / (np.sum(arr) / 1000)], arr
 
-def ag_stats(rank, name, arr, totalTime,batch_size):
-    return [rank, name, np.sum(arr),np.mean(arr),np.std(arr), np.percentile(arr, 99), len(arr) / (totalTime), (batch_size * len(arr)) / (totalTime)]
+def ag_stats(rank, name, arr, totalTime, CORPUS_SIZE):
+    return [rank, name, np.sum(arr),np.mean(arr),np.std(arr), np.percentile(arr, 99), len(arr) / (totalTime), (CORPUS_SIZE) / (totalTime)]
 
 def extract_time(rank):
     with open("times.csv", newline="") as f:
@@ -49,6 +49,7 @@ def extract_time(rank):
 # summarize_npy("target/debug/op_times.npy")
 
 batch_size = int(os.getenv("UPLOAD_BATCH_SIZE"))
+CORPUS_SIZE = int(os.getenv(f"CORPUS_SIZE"))
 clients = int(os.getenv("N_WORKERS"))
 cPerWorker = int(os.getenv("UPLOAD_CLIENTS_PER_WORKER"))
 
@@ -86,6 +87,6 @@ ag_time = extract_time(0)
 
 with open(f"insert_summary.csv", "a", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(ag_stats("all","prep",stacked_prep, ag_time, batch_size))
-    writer.writerow(ag_stats("all","upload",stacked_upload, ag_time, batch_size))
-    writer.writerow(ag_stats("all","op",stacked_op, ag_time, batch_size))
+    writer.writerow(ag_stats("all","prep",stacked_prep, ag_time, CORPUS_SIZE))
+    writer.writerow(ag_stats("all","upload",stacked_upload, ag_time, CORPUS_SIZE))
+    writer.writerow(ag_stats("all","op",stacked_op, ag_time, CORPUS_SIZE))

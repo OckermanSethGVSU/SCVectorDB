@@ -3,20 +3,6 @@ import csv
 import os
 from datetime import datetime
 
-def inspect_npy(path, ag_time):
-    arr = np.load(path)
-    print(f"File: {path}")
-    print(f"shape: {arr.shape}")
-
-    # Print first element safely based on dimension
-    try:
-        first = arr.flat[0]   # Works for any shape
-        print(f"First element: {first}")
-    except Exception as e:
-        print(f"Could not get first element: {e}")
-
-    print()
-
 
 
 def summarize_npy(path, rank, name, batch_size):
@@ -24,8 +10,8 @@ def summarize_npy(path, rank, name, batch_size):
 
     return [rank, name, np.sum(arr),np.mean(arr),np.std(arr), np.percentile(arr, 99), len(arr) / (np.sum(arr)/ 1000), (batch_size * len(arr)) / (np.sum(arr) / 1000)], arr
 
-def ag_stats(rank, name, arr, totalTime,batch_size):
-    return [rank, name, np.sum(arr),np.mean(arr),np.std(arr), np.percentile(arr, 99), len(arr) / (totalTime), (batch_size * len(arr)) / (totalTime)]
+def ag_stats(rank, name, arr, totalTime,CORPUS_SIZE):
+    return [rank, name, np.sum(arr),np.mean(arr),np.std(arr), np.percentile(arr, 99), len(arr) / (totalTime), (CORPUS_SIZE) / (totalTime)]
 
 def extract_time(rank):
     with open("times.csv", newline="") as f:
@@ -35,27 +21,17 @@ def extract_time(rank):
             if row[0] == f"{rank}":
                 targetRow = row
                 break
-    # start = datetime.fromisoformat(targetRow[1])
-    # end = datetime.fromisoformat(targetRow[2])
-    # globalEnd = datetime.fromisoformat(targetRow[3])
 
     return float(targetRow[10])
 
 
-   
-
-# Example usage:
-# summarize_npy("target/debug/upload_times.npy")
-# summarize_npy("target/debug/op_times.npy")
-
-batch_size = int(os.getenv("UPLOAD_BATCH_SIZE"))
+ACTIVE_TASK = os.getenv("ACTIVE_TASK")
+batch_size = int(os.getenv(f"{ACTIVE_TASK}_BATCH_SIZE"))
+cPerWorker = int(os.getenv(f"{ACTIVE_TASK}_CLIENTS_PER_PROXY"))
 clients = int(os.getenv("NUM_PROXIES"))
-cPerWorker = int(os.getenv("UPLOAD_CLIENTS_PER_PROXY"))
+CORPUS_SIZE = int(os.getenv(f"{ACTIVE_TASK}_CORPUS_SIZE"))
 
-# clients = clients * cPerWorker
 
-# batch_size = 128
-# clients = 2
 
 with open(f"summary.csv", "w", newline="") as f:
     writer = csv.writer(f)
@@ -86,6 +62,6 @@ ag_time = extract_time(0)
 
 with open(f"summary.csv", "a", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(ag_stats("all","prep",stacked_prep, ag_time, batch_size))
-    writer.writerow(ag_stats("all","upload",stacked_upload, ag_time, batch_size))
-    writer.writerow(ag_stats("all","op",stacked_op, ag_time, batch_size))
+    writer.writerow(ag_stats("all","prep",stacked_prep, ag_time, CORPUS_SIZE))
+    writer.writerow(ag_stats("all","upload",stacked_upload, ag_time, CORPUS_SIZE))
+    writer.writerow(ag_stats("all","op",stacked_op, ag_time, CORPUS_SIZE))
