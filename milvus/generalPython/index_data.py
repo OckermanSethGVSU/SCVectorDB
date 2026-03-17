@@ -130,7 +130,7 @@ except Exception as e:
         if rows == CORPUS_SIZE:
             break
         
-        if time.time() start > (60 * 60):
+        if time.time() - start > (60 * 60):
             raise TimeoutError(f"Timed out waiting for persistent rows in {collection_name}")
 
         time.sleep(30)
