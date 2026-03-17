@@ -1,6 +1,6 @@
 # Milvus workflow
 
-This workflow launches Milvus on PBS systems (standalone or distributed), runs multi-client ingest, and can optionally trigger index conversion.
+This workflow launches Milvus on PBS systems (standalone or distributed), runs multi-client insert/query operations, and can optionally perform index generation.
 
 Main entrypoint:
 
@@ -8,12 +8,15 @@ Main entrypoint:
 
 ## What is currently supported
 
-- Task modes: `insert`, `index` (`TASK`)
+- Task modes: `INSERT`, `INDEX`, `QUERY` (`TASK`)
 - Deployment modes: `STANDALONE`, `DISTRIBUTED` (`MODE`)
 - Platforms: `POLARIS`, `AURORA` (`PLATFORM`)
 - Storage options (`STORAGE_MEDIUM`): `memory`, `DAOS`, `lustre`, `SSD`
 - WAL configuration (`WAL`): `woodpecker`, `default`
-- Upload balancing (`UPLOAD_BALANCE_STRATEGY`): `NONE`, `WORKER`
+- Perf modes (`PERF`): `NONE`, `STAT`, `RECORD`
+- Insert/query balancing:
+  - `INSERT_BALANCE_STRATEGY`: `NONE`, `WORKER`
+  - `QUERY_BALANCE_STRATEGY`: `NONE`, `WORKER`
 - Distributed controls:
   - `MINIO_MODE`: `single`, `stripped`
   - `MINIO_MEDIUM`: `DAOS`, `lustre`
@@ -24,13 +27,14 @@ Main entrypoint:
 
 ## Workflow files
 
-- `pbs_submit_manager.sh`: configuration sweep + PBS generation + staging + `qsub`
-- `main.sh`: runtime orchestration for standalone/distributed paths
-- `check_dependencies.sh`: validates required files before submission
-- `milvusSetup/*.sh`: component launch scripts (standalone, etcd, minio, role launches)
-- `generalPython/*.py`: status/polling/profiling/collection setup/summary/index conversion
-- `goCode/multiClientInsert/`: Go ingest client
-- `cpuMilvus/configs/`: base Milvus config templates used at runtime
+- `pbs_submit_manager.sh`: config sweep + PBS generation + staging + `qsub`
+- `main.sh`: runtime orchestration for standalone/distributed paths and task modes
+- `check_dependencies.sh`: dependency validation helper
+- `milvusSetup/*.sh`: component launch scripts
+- `generalPython/*.py`: profiling/polling/setup/summary/index helpers
+- `goCode/multiClientOP/`: Go multi-client binary used by the workflow
+- `cpuMilvus/configs/`: Milvus config templates used at runtime
+- `utils/`: tracing helpers, status checks, and utility scripts
 
 ## Important submit variables (`pbs_submit_manager.sh`)
 
@@ -38,24 +42,26 @@ Main entrypoint:
 
 - `NODES=(...)`
 - `CORES=(...)`
-- `UPLOAD_BATCH_SIZE=(...)`
+- `INSERT_BATCH_SIZE=(...)`
 - `QUERY_BATCH_SIZE=(...)`
 
 ### Runtime variables
 
 - `TASK`
-- `STORAGE_MEDIUM`
-- `usePerf` (exported as `USEPERF`)
-- `CORPUS_SIZE`
-- `UPLOAD_CLIENTS_PER_PROXY`
-- `UPLOAD_BALANCE_STRATEGY`
-- `BASE_DIR`
-- `WAL`
-- `DATA_FILEPATH`
-- `VECTOR_DIM`
-- `ENV_PATH`
-- `PLATFORM`
 - `MODE`
+- `STORAGE_MEDIUM`
+- `PERF`
+- `TRACING`
+- `GPU_INDEX`
+- `ENV_PATH`
+- `MILVUS_BUILD_DIR`
+- `MILVUS_CONFIG_DIR`
+- `WAL`
+- Insert/query variables:
+  - `INSERT_DATA_FILEPATH`, `INSERT_CORPUS_SIZE`, `INSERT_CLIENTS_PER_PROXY`, `INSERT_BALANCE_STRATEGY`
+  - `QUERY_DATA_FILEPATH`, `QUERY_CORPUS_SIZE`, `QUERY_CLIENTS_PER_PROXY`, `QUERY_BALANCE_STRATEGY`
+- `VECTOR_DIM`, `DISTANCE_METRIC`
+- `RESTORE_DIR`
 - Distributed-only variables listed above
 
 ### Scheduler variables
@@ -65,15 +71,15 @@ Main entrypoint:
 
 ## Runtime flow (`main.sh`)
 
-1. Sets environment, loads platform modules, and activates Python env.
+1. Exports runtime variables and loads platform-specific modules/env.
 2. Optionally mounts DAOS (`launch-dfuse.sh`) for Milvus and/or MinIO storage.
 3. Launches Milvus:
-   - `STANDALONE`: one server process + profiling.
-   - `DISTRIBUTED`: etcd/minio + coordinator/streaming/query/data/proxy components.
-4. Waits for service readiness and configures collection (`setup_collection.py`).
-5. Runs Go ingest client (`./multiClientInsert`).
-6. Produces summary/timing outputs.
-7. If `TASK=index`, runs `convert_to_hnsw.py`.
+   - `STANDALONE`: one server process.
+   - `DISTRIBUTED`: etcd/minio + Milvus service roles.
+4. Waits for readiness and, for insert/index, configures collection (`setup_collection.py`).
+5. Runs Go multi-client operation binary (`./multiClientOP`) in insert/query modes.
+6. If `TASK=INDEX`, runs `generalPython/index_data.py`.
+7. Writes timing/summary outputs and optional trace analysis.
 
 ## Dependency check
 
@@ -83,39 +89,36 @@ Run manually:
 ./check_dependencies.sh
 ```
 
-The submit manager runs the missing-only check automatically:
+Or missing-only mode:
 
 ```bash
 ./check_dependencies.sh --missing-only
 ```
 
-`check_dependencies.sh` always checks for required images/scripts/binaries and has additional `perfDir/perf` warning behavior unless `USE_PERF=true`.
-
 ## Build notes
 
-Build the Go uploader with:
+Build the Go client from `milvus/goCode`:
 
 ```bash
 cd goCode
-./build.sh multiClientInsert
+./build.sh multiClientOP
 ```
 
-This produces `goCode/multiClientInsert/multiClientInsert`.
+This produces `goCode/multiClientOP/multiClientOP`.
 
 ## Required local artifacts (not committed)
 
-- `milvus.sif`
-- `etcd_v3.5.18.sif`
-- `minio.sif`
-- Built Go client: `goCode/multiClientInsert/multiClientInsert`
-- `perfDir/` (and optionally `perfDir/perf` for profiling)
+- `sifs/milvus.sif`
+- `sifs/etcd_v3.5.18.sif`
+- `sifs/minio.sif`
+- Built Go client: `goCode/multiClientOP/multiClientOP`
+- Optional tracing image: `sifs/otel-collector.sif` (when `TRACING=True`)
 
 ## Typical run outputs
 
 Per run directory:
 
 - `workflow.out`, `output.log`
-- `insert_times.txt`
-- `insert_summary.txt`
-- `uploadNPY/*.npy`
-- `workerOut/*` logs and readiness markers
+- Task-specific timing/summary files
+- `uploadNPY/*.npy` (for insert/index runs)
+- Component logs under node/worker output folders
