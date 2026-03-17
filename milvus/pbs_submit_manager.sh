@@ -14,14 +14,15 @@ print_config_summary() {
 
     echo "Platform:                 $PLATFORM"
     echo "Mode:                     $MODE"
+    echo "Task:                     $TASK"
     echo "Storage Medium:           $STORAGE_MEDIUM"
     echo "Perf:                     $PERF"
     echo "Tracing:          $TRACING"
-    echo "Corpus Size:              $CORPUS_SIZE"
+    echo "Corpus Size:              $INSERT_CORPUS_SIZE"
     echo "Vector Dim:               $VECTOR_DIM"
     echo "Distance Metric:          $DISTANCE_METRIC"
     echo "GPU Index:                $GPU_INDEX"
-    echo "Data File:                $DATA_FILEPATH"
+    echo "Data File:                $INSERT_DATA_FILEPATH"
     echo "Env Path:                 $ENV_PATH"
     echo "Milvus Build Dir:         $MILVUS_BUILD_DIR"
     echo "WAL Mode:                 $WAL"
@@ -41,55 +42,38 @@ print_config_summary() {
 }
 
 
-### Loop variables ###
+### Allocation Variables ###
 NODES=(1)
-CORES=(1)
+CORES=(112)
 
-# Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-
-# Lustre todo: 8192, 256 (queued?)
-# best batch for 32 clients: 128
-INSERT_BATCH_SIZE=(512) 
-
-# 2 8
-QUERY_BATCH_SIZE=(512)
 
 # PBS Vars
-WALLTIME="06:00:00"
-queue=capacity # [preemptable, debug, debug-scaling, prod,capacity]
-
-
-
-
+WALLTIME="01:00:00"
+queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
 
 ### Platform/DIR Specific Variables ###
-# Path to Python env
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
 # Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
 ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
 MILVUS_BUILD_DIR="cpuMilvus" # Name of the directory with your build: traceMilvus, cpuMilvus
-MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the base dir
+MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the dir containing the yaml file
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
+TASK="QUERY" # [INSERT, INDEX, QUERY]
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
-TASK="INDEX" # [INSERT, INDEX, QUERY]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
-INSERT_CORPUS_SIZE=10000000 # total data to insert
-INSERT_CLIENTS_PER_PROXY=2
-BASE_DIR="$(pwd)"
 WAL="woodpecker" # [woodpecker, default]
-INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 GPU_INDEX="False" # [True, False]
 TRACING="False" 
 DEBUG="False" # [True, False]
+BASE_DIR="$(pwd)"
 
-# Polaris: TODO
-# Aurora: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/
-
-RESTORE_DIR=""
-
+### Insertion Variables ### 
+INSERT_CORPUS_SIZE=10000000 # total data to insert
+INSERT_CLIENTS_PER_PROXY=4
+INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 # Aurora
     # 10 million 
     #    HPC-Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
@@ -98,15 +82,33 @@ RESTORE_DIR=""
     # 10 million 
     #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
     #     Yandex: /eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy
+INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
+
+# Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
+# best batch for 32 clients: 128
+INSERT_BATCH_SIZE=(512)
 
 
-# DATA_FILEPATH="/eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy"
-# DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
-# DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
-INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" # Path to embeddings
+### QUERY Variables ###
+QUERY_CORPUS_SIZE=1000 # queries
+QUERY_CLIENTS_PER_PROXY=1
+QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
+QUERY_BATCH_SIZE=(2)
+
+# Aurora
+    # * Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy
+QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
+
+
+# Polaris: TODO
+# Aurora: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/
+RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex"
+
+
+
 # VECTOR_DIM=200
-VECTOR_DIM=2560
-DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
+VECTOR_DIM=200
+DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 
 ### Distributed Variables ###
 MINIO_MODE="stripped" # [single, stripped]
@@ -174,15 +176,15 @@ do
                     fi
                 elif [[ "$TASK" == "INDEX" ]]; then
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${CORPUS_SIZE}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${INSERT_CORPUS_SIZE}_${DATE}"
                     else
-                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${CORPUS_SIZE}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${INSERT_CORPUS_SIZE}_${DATE}"
                     fi
                 elif [[ "$TASK" == "QUERY" ]]; then
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${CORPUS_SIZE}_${QUERY_BATCH_SIZE}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${QUERY_BATCH_SIZE}_${DATE}"
                     else
-                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${CORPUS_SIZE}_${QUERY_BATCH_SIZE}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${QUERY_BATCH_SIZE}_${DATE}"
                     fi
                 else
                     echo "Unknown task: $TASK: valid options include INSERT, INDEX, QUERY"
@@ -207,12 +209,16 @@ do
                 echo "INSERT_BATCH_SIZE=${upload_bs}" >> $target_file
                 echo "INSERT_CLIENTS_PER_PROXY=${INSERT_CLIENTS_PER_PROXY}" >> $target_file
                 
+                echo "QUERY_DATA_FILEPATH=${QUERY_DATA_FILEPATH}" >> $target_file
+                echo "QUERY_BALANCE_STRATEGY=${QUERY_BALANCE_STRATEGY}" >> $target_file
+                echo "QUERY_CORPUS_SIZE=${QUERY_CORPUS_SIZE}" >> $target_file
+                echo "QUERY_BATCH_SIZE=${query_bs}" >> $target_file
+                echo "QUERY_CLIENTS_PER_PROXY=${QUERY_CLIENTS_PER_PROXY}" >> $target_file
+                
                 echo "VECTOR_DIM=${VECTOR_DIM}" >> $target_file
                 echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
                 echo "GPU_INDEX=${GPU_INDEX}" >> $target_file
                 
-                echo "QUERY_BATCH_SIZE=${query_bs}" >> $target_file
-
                 echo "TRACING=${TRACING}" >> $target_file
                 echo "PERF=${PERF}" >> $target_file
                 echo "DEBUG=${DEBUG}" >> $target_file
@@ -266,20 +272,30 @@ do
                     cp utils/otel_config.yaml $dir/
                     cp utils/analyze_traces.py $dir/
                 fi
+
+
                 # Copy in basic python utils
                 cp generalPython/net_mapping.py $dir/
                 cp generalPython/replace_unified.py $dir/
                 cp generalPython/profile.py $dir/
                 cp generalPython/poll.py $dir/
+                cp ./generalPython/multi_client_summary.py "$dir/"
                                 
-                # all tasks need insert code
-                cp ./generalPython/setup_collection.py $dir/
-                cp ./generalPython/insert_multi_client_summary.py $dir/
-                cp ./goCode/multiClientInsert/multiClientInsert $dir/
-                cp ./goCode/multiClientInsert/main.go $dir/multiClientInsert.go
+                # all tasks need go code
+                cp ./goCode/multiClientOP/multiClientOP $dir/
+                cp ./goCode/multiClientOP/main.go $dir/multiClient.go
 
-                if [[ "$TASK" == "index" ]]; then
-                    cp generalPython/index_data.py $dir/
+                
+                if [[ "$TASK" == "INDEX" || "$TASK" == "INSERT" ]]; then
+                    cp ./generalPython/setup_collection.py "$dir/"
+                fi
+
+                if [[ "$TASK" == "INDEX" ]]; then
+                    cp ./generalPython/index_data.py "$dir/"
+                fi
+                
+                if [[ "$TASK" == "QUERY" ]]; then
+                    cp ./utils/status.py "$dir/"
                 fi
 
                 mv $target_file $dir

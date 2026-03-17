@@ -81,10 +81,11 @@ export PLATFORM=$PLATFORM
 export CORES=$CORES
 export MODE=$MODE
 export TASK=$TASK
-export ETCD_MODE=$ETCD_MODE
 export WAL=$WAL
 export DML_CHANNELS=$DML_CHANNELS
+
 export NUM_PROXIES=$NUM_PROXIES
+export NUM_PROXIES_PER_CN=$NUM_PROXIES_PER_CN
 
 export GPU_INDEX=$GPU_INDEX
 export VECTOR_DIM=$VECTOR_DIM
@@ -189,6 +190,7 @@ if [[ "$MODE" == "STANDALONE" ]]; then
 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     export MINIO_MODE=$MINIO_MODE
     export ETCD_MODE=$ETCD_MODE
+    
 
     mapfile -t NODES < <(awk '!seen[$0]++' "$PBS_NODEFILE")
 
@@ -290,48 +292,76 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     env "${PYTHON_ENV_VARS[@]}" python3 poll.py
 fi
 
+# if we are not restoring, run insert and/or indexing
+if [ -z "$RESTORE_DIR" ]; then
+    env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
+
+    export ACTIVE_TASK="INSERT"
+    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
+    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
+    export INSERT_CLIENTS_PER_PROXY=$INSERT_CLIENTS_PER_PROXY
+    export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
+    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
 
 
-env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+
+    if [[ "$TASK" == "INSERT" ]]; then
+        touch flag.txt
+    fi
+
+    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
+
+    mv times.csv insert_times.txt
+    mv summary.csv insert_summary.txt
+    mkdir -p uploadNPY
+    mv *.npy uploadNPY
+
+    if [[ "$TASK" == "INDEX" ]]; then
+        export ACTIVE_TASK="INDEX"
+        touch ./workerOut/workflow_start.txt
+        env "${PYTHON_ENV_VARS[@]}" python3 index_data.py
+        
+        touch ./workerOut/workflow_end.txt
+        touch flag.txt
+    fi
 
 
-export ACTIVE_TASK="INSERT"
-export INSERT_BALANCE_STRATEGY=${INSERT_BALANCE_STRATEGY}
-export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
-export INSERT_CLIENTS_PER_PROXY=$INSERT_CLIENTS_PER_PROXY
-export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
-export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
 
+    sleep 60
 
-NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientInsert
-
-if [[ "$TASK" == "INSERT" ]]; then
-    touch flag.txt
-fi
-
-env "${PYTHON_ENV_VARS[@]}" python3 insert_multi_client_summary.py
-
-mv times.csv insert_times.txt
-mv summary.csv insert_summary.txt
-mkdir -p uploadNPY
-mv *.npy uploadNPY
-
-if [[ "$TASK" == "INDEX" ]]; then
-    export ACTIVE_TASK=$TASK
-    touch ./workerOut/workflow_start.txt
-    env "${PYTHON_ENV_VARS[@]}" python3 index_data.py
     
-    touch ./workerOut/workflow_end.txt
-    touch flag.txt
+
+
+
 fi
 
+if [[ "$TASK" == "QUERY" ]]; then
+    env "${PYTHON_ENV_VARS[@]}" python3 status.py
+
+    export ACTIVE_TASK="QUERY"
+    export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
+    export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
+    export QUERY_CLIENTS_PER_PROXY=$QUERY_CLIENTS_PER_PROXY
+    export QUERY_DATA_FILEPATH=$QUERY_DATA_FILEPATH
+    export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
 
 
-sleep 60
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+
+    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
+
+    mv times.csv query_times.txt
+    mv summary.csv query_summary.txt
+    mkdir -p queryNPY
+    mv *.npy queryNPY
+
+fi 
 
 if [[ "$TRACING" == "True" ]]; then
-    python3 analyze_traces.py > analysis.txt
+        python3 analyze_traces.py > analysis.txt
 fi
+
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
