@@ -299,23 +299,21 @@ func clientWorker(
 	globalClientRank := workerRank*clientsPerWorker + clientID
 	ldebugfEnabled := envEnabled("DEBUG")
 
-	// ----- slice assignment: worker slice, then client slice within worker -----
-	wStart, wEnd := splitRange(totalRows, workerRank+1, workerRank)
-	_ = wStart
-	_ = wEnd
-
+	
+	
 	ACTIVE_TASK := os.Getenv("ACTIVE_TASK")
 	TASK := os.Getenv("TASK")
-
+	
 	// We'll compute worker slice using splitRange(totalRows, nWorkers, workerRank)
 	nWorkersStr := os.Getenv("NUM_PROXIES")
 	nWorkers, err := strconv.Atoi(nWorkersStr)
-
+	
 	RESULT_PATH := os.Getenv("RESULT_PATH")
 	if RESULT_PATH == "" {
 		log.Fatalf("invalid RESULT_PATH=%q", RESULT_PATH)
 	}
-
+	
+	// ----- slice assignment: worker slice, then client slice within worker -----
 	workerStart, workerEnd := splitRange(totalRows, nWorkers, workerRank)
 	workerLen := workerEnd - workerStart
 
@@ -335,6 +333,7 @@ func clientWorker(
 		sharedTiming.WaitSearchable()
 		barrier.Wait()
 		barrier.Wait()
+		return 
 		
 	}
 
@@ -530,14 +529,12 @@ func clientWorker(
 	// Wait for everyone to finish inserting
 	barrier.Wait()
 
-	if tracingEnabled {
-		span.End()
-	}
+	
 	// Insert a final value so we can measure when it has been processed
 	sentinelID := int64(totalRows) // unique
 	if globalClientRank == 0 {
 
-		if ACTIVE_TASK == "insert" {
+		if ACTIVE_TASK == "INSERT" {
 			vec := make([]float32, mcols)
 			_, err := mclient.Insert(
 				ctx,
