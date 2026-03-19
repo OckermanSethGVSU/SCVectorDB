@@ -62,6 +62,13 @@ if [ -n "$QDRANT_EXECUTABLE" ]; then
     BUILD_ARGS+=(--bind ./qdrant:/qdrant/qdrant)
 fi 
 
+if [ -n "$RESTORE_DIR" ]; then
+    rm -fr ${TARGET_BASE}/data/node$RANK
+    echo "Restoring from ${RESTORE_DIR} to ${TARGET_BASE}/data/"
+    cp -r $RESTORE_DIR/data/node$RANK/ ${TARGET_BASE}/data/
+    python3 fix_peer_id.py --path ${TARGET_BASE}/data/node${RANK}/raft_state.json --ip $IP_ADDR --port $P2P_PORT
+fi 
+
 
 # === Launch Qdrant Nodes ===
 apptainer exec \

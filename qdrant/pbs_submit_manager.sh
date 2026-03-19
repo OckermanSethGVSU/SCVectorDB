@@ -68,6 +68,7 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 
 
 QDRANT_EXECUTABLE="qdrant" # [qdrant, qdrantInsertTracing]
+RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/yandex/"
 
 print_config_summary
 
@@ -146,6 +147,7 @@ do
                         echo "PLATFORM=${PLATFORM}" >> $target_file
                         echo "GPU_INDEX=${GPU_INDEX}" >> $target_file
                         echo "QDRANT_EXECUTABLE=${QDRANT_EXECUTABLE}" >> $target_file
+                        echo "RESTORE_DIR=${RESTORE_DIR}" >> $target_file
 
                         echo "" >> $target_file
                         cat main.sh >> $target_file
@@ -176,6 +178,10 @@ do
                         cp ./rustCode/multiClientUpload/src/main.rs $dir/rustSrc/multiClientUpload.rs
                         cp generalPython/insert_multi_client_summary.py $dir/
                         
+                        if [ -n "$RESTORE_DIR" ]; then
+                            cp generalPython/fix_peer_id.py $dir/
+                        fi 
+    
                         if [[ "$TASK" == "index" ]]; then
                             cp generalPython/index.py $dir/
                         fi

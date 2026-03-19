@@ -5,6 +5,7 @@ export DISTANCE_METRIC=$DISTANCE_METRIC
 export GPU_INDEX=$GPU_INDEX
 export QDRANT_EXECUTABLE=$QDRANT_EXECUTABLE
 export PERF=$PERF
+export RESTORE_DIR=$RESTORE_DIR
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
