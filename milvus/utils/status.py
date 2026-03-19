@@ -41,7 +41,50 @@ client.load_collection("standalone")
 
 
 print(f"Indexes for {collection_name}: ", client.list_indexes(collection_name), flush=True)
-print(client.describe_index(collection_name,'vector'), flush=True)
+
+EXPECTED_CORPUS_SIZE = int(os.getenv("EXPECTED_CORPUS_SIZE", "10000000"))
+
+start = time.time()
+last_print = 0
+while True:
+    try:
+        index_status = client.describe_index(collection_name, 'vector')
+        index_current_count = int(index_status['total_rows'])
+
+        stats = client.get_collection_stats(collection_name)
+        collection_current_count = int(stats["row_count"])
+    except Exception as e:
+        if time.time() - start > 60 * 10:
+            raise TimeoutError(f"Timed out while polling Milvus state: {e}", flush=True)
+        print(f"[warn] polling failed: {e}", flush=True)
+        time.sleep(10)
+        continue
+
+
+    now = time.time()
+    if now - last_print > 60:
+        print(f"[wait] rows={collection_current_count}/{EXPECTED_CORPUS_SIZE}", flush=True)
+        last_print = now
+    
+    if collection_current_count == EXPECTED_CORPUS_SIZE and index_current_count == collection_current_count:
+        break
+    
+    elif time.time() - start > (60 * 10):
+        raise TimeoutError("Expected row count not detected in 10 minutes ")
+    else:
+        time.sleep(10)
+
+
+
+
+client.load_collection("standalone")
+
+while True:
+    res = client.get_load_state(collection_name=collection_name)
+    if "Loaded" in str(res.get("state", "")):
+        break
+    time.sleep(5)
+
 
 res = client.describe_collection(
     collection_name="standalone"

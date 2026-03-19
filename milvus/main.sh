@@ -332,12 +332,14 @@ if [ -z "$RESTORE_DIR" ]; then
 
     
 
-
+else
+    export EXPECTED_CORPUS_SIZE=$EXPECTED_CORPUS_SIZE
+    env "${PYTHON_ENV_VARS[@]}" python3 status.py
 
 fi
 
 if [[ "$TASK" == "QUERY" ]]; then
-    env "${PYTHON_ENV_VARS[@]}" python3 status.py
+    
 
     export ACTIVE_TASK="QUERY"
     export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY

@@ -15,6 +15,7 @@ print_config_summary() {
     echo "Platform:                 $PLATFORM"
     echo "Mode:                     $MODE"
     echo "Task:                     $TASK"
+    echo "Debug:                    $DEBUG"
     echo "Storage Medium:           $STORAGE_MEDIUM"
     echo "Perf:                     $PERF"
     echo "Tracing:          $TRACING"
@@ -72,7 +73,7 @@ BASE_DIR="$(pwd)"
 
 ### Insertion Variables ### 
 INSERT_CORPUS_SIZE=10000000 # total data to insert
-INSERT_CLIENTS_PER_PROXY=4
+INSERT_CLIENTS_PER_PROXY=1
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 # Aurora
     # 10 million 
@@ -86,29 +87,37 @@ INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/em
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 # best batch for 32 clients: 128
-INSERT_BATCH_SIZE=(512)
+INSERT_BATCH_SIZE=(256)
+VECTOR_DIM=2560
+# VECTOR_DIM=2560
+DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 
 
 ### QUERY Variables ###
-QUERY_CORPUS_SIZE=1000 # queries
+QUERY_CORPUS_SIZE=22723  # queries
+# QUERY_CORPUS_SIZE=100000  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
-QUERY_BATCH_SIZE=(2)
+QUERY_BATCH_SIZE=(4096)
 
 # Aurora
     # * Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy
-QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
+    # * Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy
+# QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
+QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
 
 
 # Polaris: TODO
-# Aurora: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/
-RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex"
+# Aurora: 
+#   Yandex: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex
+#   pes2o: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o
+RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o"
+# RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex"
+# RESTORE_DIR=""
+EXPECTED_CORPUS_SIZE=10000000
 
 
 
-# VECTOR_DIM=200
-VECTOR_DIM=200
-DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 
 ### Distributed Variables ###
 MINIO_MODE="stripped" # [single, stripped]
@@ -224,6 +233,7 @@ do
                 echo "DEBUG=${DEBUG}" >> $target_file
 
                 echo "RESTORE_DIR=${RESTORE_DIR}" >> $target_file
+                echo "EXPECTED_CORPUS_SIZE=${EXPECTED_CORPUS_SIZE}" >> $target_file
                 
                 
 
