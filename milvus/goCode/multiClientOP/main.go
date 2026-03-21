@@ -256,6 +256,23 @@ func envEnabled(name string) bool {
 	}
 }
 
+func getEnvIntDefault(defaultValue int, names ...string) int {
+	for _, name := range names {
+		value := strings.TrimSpace(os.Getenv(name))
+		if value == "" {
+			continue
+		}
+
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed <= 0 {
+			log.Fatalf("invalid %s=%q", name, value)
+		}
+		return parsed
+	}
+
+	return defaultValue
+}
+
 func crossedInsertMilestones(batchStart, batchEnd, interval int) []int {
 	if interval <= 0 || batchEnd <= batchStart {
 		return nil
@@ -298,21 +315,20 @@ func clientWorker(
 
 	globalClientRank := workerRank*clientsPerWorker + clientID
 	ldebugfEnabled := envEnabled("DEBUG")
+	efSearch := getEnvIntDefault(64, "QUERY_EF_SEARCH", "EF_SEARCH")
 
-	
-	
 	ACTIVE_TASK := os.Getenv("ACTIVE_TASK")
 	TASK := os.Getenv("TASK")
-	
+
 	// We'll compute worker slice using splitRange(totalRows, nWorkers, workerRank)
 	nWorkersStr := os.Getenv("NUM_PROXIES")
 	nWorkers, err := strconv.Atoi(nWorkersStr)
-	
+
 	RESULT_PATH := os.Getenv("RESULT_PATH")
 	if RESULT_PATH == "" {
 		log.Fatalf("invalid RESULT_PATH=%q", RESULT_PATH)
 	}
-	
+
 	// ----- slice assignment: worker slice, then client slice within worker -----
 	workerStart, workerEnd := splitRange(totalRows, nWorkers, workerRank)
 	workerLen := workerEnd - workerStart
@@ -323,7 +339,7 @@ func clientWorker(
 
 	local := matrix[startIdx:endIdx]
 	localRows := len(local)
-	
+
 	if localRows == 0 {
 		// Still participate in barriers to avoid deadlock.
 		sharedTiming.MarkClientReady()
@@ -333,8 +349,8 @@ func clientWorker(
 		sharedTiming.WaitSearchable()
 		barrier.Wait()
 		barrier.Wait()
-		return 
-		
+		return
+
 	}
 
 	mcols := len(local[0])
@@ -365,7 +381,6 @@ func clientWorker(
 	MILVUS_HOST := node.IP
 	MILVUS_PORT := node.Port
 
-
 	batchEnv := fmt.Sprintf("%s_BATCH_SIZE", ACTIVE_TASK)
 	batchSizeStr := os.Getenv(batchEnv)
 	BATCH_SIZE, err := strconv.Atoi(batchSizeStr)
@@ -373,7 +388,6 @@ func clientWorker(
 		log.Fatalf("invalid %s=%q", batchEnv, batchSizeStr)
 	}
 
-	
 	url := fmt.Sprintf("http://%s:%d", MILVUS_HOST, MILVUS_PORT)
 	mclient, err := milvusclient.New(ctx, &milvusclient.ClientConfig{
 		Address:     url,
@@ -439,7 +453,6 @@ func clientWorker(
 
 	barrier.Wait()
 
-	
 	sharedTiming.MarkLoopStart()
 	startLoop := time.Now()
 	for i := 0; i < localRows; i += BATCH_SIZE {
@@ -493,7 +506,8 @@ func clientWorker(
 			}
 
 			searchOpt := milvusclient.NewSearchOption(collectionName, 10, vectors).
-				WithANNSField(vectorField)
+				WithANNSField(vectorField).
+				WithSearchParam("ef", strconv.Itoa(efSearch))
 
 			startUpload = time.Now()
 			queryResults, err = mclient.Search(opCtx, searchOpt)
@@ -529,7 +543,6 @@ func clientWorker(
 	// Wait for everyone to finish inserting
 	barrier.Wait()
 
-	
 	// Insert a final value so we can measure when it has been processed
 	sentinelID := int64(totalRows) // unique
 	if globalClientRank == 0 {
@@ -654,7 +667,6 @@ func main() {
 	if err != nil || nWorkers <= 0 {
 		log.Fatalf("invalid NUM_PROXIES=%q", nWorkersStr)
 	}
-
 
 	activeTask := os.Getenv("ACTIVE_TASK")
 	task := os.Getenv("TASK")

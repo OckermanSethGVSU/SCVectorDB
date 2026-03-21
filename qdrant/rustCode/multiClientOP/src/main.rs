@@ -5,7 +5,7 @@ use ndarray::{s, Array1, Array2, ArrayView2, Axis};
 use ndarray_npy::{read_npy, write_npy};
 use qdrant_client::qdrant::{
     CountPointsBuilder, GetPointsBuilder, PointStruct, Query, QueryBatchPointsBuilder,
-    QueryPoints, QueryPointsBuilder, UpsertPointsBuilder,
+    QueryPoints, QueryPointsBuilder, SearchParamsBuilder, UpsertPointsBuilder,
 };
 use qdrant_client::{Payload, Qdrant};
 use std::env;
@@ -49,6 +49,7 @@ struct RunConfig {
     balance_strategy: String,
     npy_path: String,
     debug_results: bool,
+    ef_search: u64,
 }
 
 #[derive(Debug)]
@@ -139,6 +140,16 @@ fn parse_optional_bool(names: &[&str]) -> bool {
         .unwrap_or(false)
 }
 
+fn parse_optional_u64(names: &[&str]) -> anyhow::Result<Option<u64>> {
+    match first_env(names) {
+        Some(raw) => raw
+            .parse()
+            .map(Some)
+            .with_context(|| format!("expected integer for {:?}, got {raw:?}", names)),
+        None => Ok(None),
+    }
+}
+
 fn infer_active_task() -> anyhow::Result<ActiveTask> {
     let active_task = first_env(&["ACTIVE_TASK", "TASK"])
         .context("missing ACTIVE_TASK/TASK; set ACTIVE_TASK=INSERT or ACTIVE_TASK=QUERY")?;
@@ -184,6 +195,11 @@ fn load_config() -> anyhow::Result<RunConfig> {
 
     let debug_results = matches!(active_task, ActiveTask::Query)
         && parse_optional_bool(&["QUERY_DEBUG_RESULTS"]);
+    let ef_search = if matches!(active_task, ActiveTask::Query) {
+        parse_optional_u64(&["QUERY_EF_SEARCH", "EF_SEARCH"])?.unwrap_or(64)
+    } else {
+        64
+    };
 
     Ok(RunConfig {
         active_task,
@@ -194,6 +210,7 @@ fn load_config() -> anyhow::Result<RunConfig> {
         balance_strategy,
         npy_path,
         debug_results,
+        ef_search,
     })
 }
 
@@ -360,6 +377,7 @@ async fn worker(
                 view,
                 config.batch_size,
                 config.debug_results,
+                config.ef_search,
                 barrier,
                 lock,
                 config.active_task,
@@ -583,6 +601,7 @@ async fn run_query(
     view: ArrayView2<'_, f32>,
     batch_size: usize,
     debug_results: bool,
+    ef_search: u64,
     barrier: Arc<Barrier>,
     lock: Arc<Mutex<()>>,
     task: ActiveTask,
@@ -594,6 +613,7 @@ async fn run_query(
     let mut elapsed_query_times = Vec::new();
     let mut elapsed_op_times = Vec::new();
     let mut printed_debug_results = false;
+    let search_params = SearchParamsBuilder::default().hnsw_ef(ef_search).build();
 
     barrier.wait().await;
 
@@ -606,6 +626,7 @@ async fn run_query(
         if batch_size == 1 {
             let query = QueryPointsBuilder::new(collection_name)
                 .query(Query::new_nearest(chunk.row(0).to_vec()))
+                .params(search_params.clone())
                 .limit(10);
             let start_query = Instant::now();
             let response = client.query(query).await?;
@@ -634,6 +655,7 @@ async fn run_query(
                 .map(|row| {
                     QueryPointsBuilder::new(collection_name)
                         .query(Query::new_nearest(row.to_vec()))
+                        .params(search_params.clone())
                         .limit(10)
                         .build()
                 })
