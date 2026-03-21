@@ -1,4 +1,5 @@
 
+
 export myDIR=$myDIR
 export VECTOR_DIM=$VECTOR_DIM
 export DISTANCE_METRIC=$DISTANCE_METRIC
@@ -39,6 +40,7 @@ fi
 
 TOTAL=$((NODES * WORKERS_PER_NODE))
 MAX_RANK=$((TOTAL - 1))
+export N_WORKERS=$TOTAL
 
 tail -n +2 $PBS_NODEFILE > worker_nodefile.txt
 cat $PBS_NODEFILE > all_nodefile.txt
@@ -96,60 +98,80 @@ done
 echo "Qdrant Cluster setup"
 sleep 30
 
-# Setup the cluster 
-TARGET_FILE="ready.flag"
-while [[ ! -e "$TARGET_FILE" ]]; do
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 configureTopo.py
-    sleep 30
-done
-rm $TARGET_FILE
-sleep 3
 
 ########## Workflow ###############
 line=$(head -n 1 ip_registry.txt)
 IFS=',' read -r id ip port <<< "$line"
 port=$((port - 1))
 
-export CORPUS_SIZE=$CORPUS_SIZE
-export UPLOAD_CLIENTS_PER_WORKER=$UPLOAD_CLIENTS_PER_WORKER
-export N_WORKERS=$TOTAL
-export DATA_FILEPATH=$DATA_FILEPATH
-export UPLOAD_BATCH_SIZE=$UPLOAD_BATCH_SIZE
-export UPLOAD_BALANCE_STRATEGY=$UPLOAD_BALANCE_STRATEGY
-NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientUpload
+if [ -z "$RESTORE_DIR" ]; then
+    
+    # Setup the cluster 
+    TARGET_FILE="ready.flag"
+    while [[ ! -e "$TARGET_FILE" ]]; do
+        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 configureTopo.py
+        sleep 30
+    done
+    rm $TARGET_FILE
+    sleep 3
+
+    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
+    export INSERT_CLIENTS_PER_WORKER=$INSERT_CLIENTS_PER_WORKER
+    export INSERT_FILEPATH=$INSERT_FILEPATH
+    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
+    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
+    export ACTIVE_TASK="INSERT"
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+    
+    # tell the profs to close and give them time to do so
+    if [[ "$TASK" == "INSERT" ]]; then
+        touch flag.txt
+        touch ./perf/flag.txt
+        sleep 30
+        mkdir systemStats/
+        mv *_system_*.csv systemStats/
+    fi
+
+    python3 multi_client_summary.py
+
+    mkdir -p uploadNPY
+    mv *.npy uploadNPY
+   
+   
+    if [[ "$TASK" == "INDEX" ]]; then
+
+        # TODO: parameterize index
+        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
+        
+        touch flag.txt
+        touch ./perf/flag.txt
+        sleep 30
+        mkdir systemStats/
+        mv *_system_*.csv systemStats/
+    fi
+else
+    export EXPECTED_CORPUS_SIZE=$EXPECTED_CORPUS_SIZE
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 status.py
+fi
 
 
-# tell the profs to close and give them time to do so
-if [[ "$TASK" == "insert" ]]; then
+if [[ "$TASK" == "QUERY" ]]; then
+    export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
+    export QUERY_CLIENTS_PER_WORKER=$QUERY_CLIENTS_PER_WORKER
+    export QUERY_FILEPATH=$QUERY_FILEPATH
+    export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
+    export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
+    export ACTIVE_TASK="QUERY"
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+
+    python3 multi_client_summary.py
+
     touch flag.txt
     touch ./perf/flag.txt
     sleep 30
     mkdir systemStats/
     mv *_system_*.csv systemStats/
 fi
-
-python3 insert_multi_client_summary.py
-mv times.csv insert_times.csv
-
-mkdir -p uploadNPY
-mv *.npy uploadNPY
-
-if [[ "$TASK" == "index" ]]; then
-
-    # TODO - move this logic to the python so perf is more exact
-    touch ./perf/workflow_start.txt
-    sleep 5
-    # TODO: parameterize index
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
-    
-    touch ./perf/workflow_stop.txt
-    touch flag.txt
-    touch ./perf/flag.txt
-    sleep 30
-    mkdir systemStats/
-     mv *_system_*.csv systemStats/
-fi
-
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
 
