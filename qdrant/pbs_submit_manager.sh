@@ -77,7 +77,7 @@ GPU_INDEX=False
     #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
     #     Yandex: /eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy
 INSERT_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
-INSERT_CORPUS_SIZE=10000000 # total data to insert
+INSERT_CORPUS_SIZE=1000000 # total data to insert
 INSERT_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 INSERT_BATCH_SIZE=(512) 
@@ -85,8 +85,11 @@ INSERT_CLIENTS_PER_WORKER=1
 
 
 ### Query ### 
-QUERY_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
-QUERY_CORPUS_SIZE=10000000 # total data to QUERY
+# Aurora
+    # * Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy
+    # * Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy
+QUERY_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
+QUERY_CORPUS_SIZE=100000 # total data to QUERY
 QUERY_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 QUERY_BATCH_SIZE=(512) 
@@ -101,6 +104,7 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 
 QDRANT_EXECUTABLE="qdrant" # [qdrant, qdrantInsertTracing]
 RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/yandex/"
+# RESTORE_DIR=""
 EXPECTED_CORPUS_SIZE=10000000
 
 print_config_summary
@@ -242,6 +246,10 @@ do
 
                     if [[ "$TASK" == "INDEX" ]]; then
                         cp generalPython/index.py $dir/
+                    fi
+                    
+                    if [[ "$TASK" == "QUERY" ]]; then
+                        cp generalPython/status.py $dir/
                     fi
 
                     mv $target_file $dir
