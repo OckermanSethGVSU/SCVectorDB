@@ -38,6 +38,12 @@ def get_line(path, line_no):
             if i == line_no:
                 return line.strip()
 
+
+def mark_perf_event(filename):
+    perf_dir = "perf"
+    os.makedirs(perf_dir, exist_ok=True)
+    open(os.path.join(perf_dir, filename), "a").close()
+
 # ---------- Main ----------
 def main():
     
@@ -69,6 +75,9 @@ def main():
     info = client.get_collection(collection_name)
     print(info, flush=True)
     # re-enable graph and time rebuild
+    mark_perf_event("workflow_start.txt")
+    time.sleep(5)
+    
     t1 = time.time()
     client.update_collection(
         collection_name=collection_name,
@@ -80,6 +89,7 @@ def main():
         info = client.get_collection(collection_name)
         if info.status == models.CollectionStatus.GREEN:
             t2 = time.time()
+            mark_perf_event("workflow_stop.txt")
             break
         time.sleep(0.01)
 
