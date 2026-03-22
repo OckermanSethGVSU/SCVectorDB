@@ -6,6 +6,77 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #     exit 1
 # fi
 
+apply_override_value() {
+    local var_name="$1"
+    local override_name="$2"
+    local override_value="${!override_name-}"
+
+    if [[ -n "$override_value" ]]; then
+        printf -v "$var_name" '%s' "$override_value"
+    fi
+}
+
+apply_override_array() {
+    local var_name="$1"
+    local override_name="$2"
+    local override_value="${!override_name-}"
+    local -n var_ref="$var_name"
+
+    if [[ -n "$override_value" ]]; then
+        read -r -a var_ref <<< "$override_value"
+    fi
+}
+
+apply_overrides() {
+    apply_override_value queue QUEUE_OVERRIDE
+    apply_override_array NODES NODES_OVERRIDE
+    apply_override_array CORES CORES_OVERRIDE
+
+    apply_override_value WALLTIME WALLTIME_OVERRIDE
+
+    apply_override_value ENV_PATH ENV_PATH_OVERRIDE
+    apply_override_value MILVUS_BUILD_DIR MILVUS_BUILD_DIR_OVERRIDE
+    apply_override_value MILVUS_CONFIG_DIR MILVUS_CONFIG_DIR_OVERRIDE
+    apply_override_value PLATFORM PLATFORM_OVERRIDE
+
+    apply_override_value TASK TASK_OVERRIDE
+    apply_override_value MODE MODE_OVERRIDE
+    apply_override_value STORAGE_MEDIUM STORAGE_MEDIUM_OVERRIDE
+    apply_override_value PERF PERF_OVERRIDE
+    apply_override_value WAL WAL_OVERRIDE
+    apply_override_value GPU_INDEX GPU_INDEX_OVERRIDE
+    apply_override_value TRACING TRACING_OVERRIDE
+    apply_override_value DEBUG DEBUG_OVERRIDE
+    apply_override_value BASE_DIR BASE_DIR_OVERRIDE
+
+    apply_override_value INSERT_CORPUS_SIZE INSERT_CORPUS_SIZE_OVERRIDE
+    apply_override_value INSERT_CLIENTS_PER_PROXY INSERT_CLIENTS_PER_PROXY_OVERRIDE
+    apply_override_value INSERT_BALANCE_STRATEGY INSERT_BALANCE_STRATEGY_OVERRIDE
+    apply_override_value INSERT_DATA_FILEPATH INSERT_DATA_FILEPATH_OVERRIDE
+    apply_override_array INSERT_BATCH_SIZE INSERT_BATCH_SIZE_OVERRIDE
+
+    apply_override_value VECTOR_DIM VECTOR_DIM_OVERRIDE
+    apply_override_value DISTANCE_METRIC DISTANCE_METRIC_OVERRIDE
+
+    apply_override_value QUERY_CORPUS_SIZE QUERY_CORPUS_SIZE_OVERRIDE
+    apply_override_value QUERY_CLIENTS_PER_PROXY QUERY_CLIENTS_PER_PROXY_OVERRIDE
+    apply_override_value QUERY_BALANCE_STRATEGY QUERY_BALANCE_STRATEGY_OVERRIDE
+    apply_override_value QUERY_DATA_FILEPATH QUERY_DATA_FILEPATH_OVERRIDE
+    apply_override_array QUERY_BATCH_SIZE QUERY_BATCH_SIZE_OVERRIDE
+
+    apply_override_value RESTORE_DIR RESTORE_DIR_OVERRIDE
+    apply_override_value EXPECTED_CORPUS_SIZE EXPECTED_CORPUS_SIZE_OVERRIDE
+
+    apply_override_value MINIO_MODE MINIO_MODE_OVERRIDE
+    apply_override_value MINIO_MEDIUM MINIO_MEDIUM_OVERRIDE
+    apply_override_value ETCD_MODE ETCD_MODE_OVERRIDE
+    apply_override_value STREAMING_NODES STREAMING_NODES_OVERRIDE
+    apply_override_value STREAMING_NODES_PER_CN STREAMING_NODES_PER_CN_OVERRIDE
+    apply_override_value NUM_PROXIES NUM_PROXIES_OVERRIDE
+    apply_override_value NUM_PROXIES_PER_CN NUM_PROXIES_PER_CN_OVERRIDE
+    apply_override_value DML_CHANNELS DML_CHANNELS_OVERRIDE
+}
+
 
 print_config_summary() {
     echo
@@ -15,18 +86,41 @@ print_config_summary() {
     echo "Platform:                 $PLATFORM"
     echo "Mode:                     $MODE"
     echo "Task:                     $TASK"
-    echo "Debug:                    $DEBUG"
     echo "Storage Medium:           $STORAGE_MEDIUM"
+    echo "Env Path:                 $ENV_PATH"
+    echo "Milvus Build Dir:         $MILVUS_BUILD_DIR"
+    echo "Milvus Config Dir:        $MILVUS_CONFIG_DIR"
     echo "Perf:                     $PERF"
-    echo "Tracing:          $TRACING"
-    echo "Corpus Size:              $INSERT_CORPUS_SIZE"
+    echo "Tracing:                  $TRACING"
+    echo "Debug:                    $DEBUG"
     echo "Vector Dim:               $VECTOR_DIM"
     echo "Distance Metric:          $DISTANCE_METRIC"
     echo "GPU Index:                $GPU_INDEX"
-    echo "Data File:                $INSERT_DATA_FILEPATH"
-    echo "Env Path:                 $ENV_PATH"
-    echo "Milvus Build Dir:         $MILVUS_BUILD_DIR"
-    echo "WAL Mode:                 $WAL"
+
+    case "$TASK" in
+        INSERT)
+            echo "Insert Corpus Size:       $INSERT_CORPUS_SIZE"
+            echo "Insert Data File:         $INSERT_DATA_FILEPATH"
+            echo "Insert Batch Sizes:       ${INSERT_BATCH_SIZE[*]}"
+            echo "Insert Clients/Proxy:     $INSERT_CLIENTS_PER_PROXY"
+            echo "Insert Balance:           $INSERT_BALANCE_STRATEGY"
+            ;;
+        INDEX)
+            echo "Index Corpus Size:        $INSERT_CORPUS_SIZE"
+            echo "Restore Dir:              ${RESTORE_DIR:-<unset>}"
+            echo "Expected Corpus Size:     $EXPECTED_CORPUS_SIZE"
+            ;;
+        QUERY)
+            echo "Query Corpus Size:        $QUERY_CORPUS_SIZE"
+            echo "Query Data File:          $QUERY_DATA_FILEPATH"
+            echo "Query Batch Sizes:        ${QUERY_BATCH_SIZE[*]}"
+            echo "Query Clients/Proxy:      $QUERY_CLIENTS_PER_PROXY"
+            echo "Query Balance:            $QUERY_BALANCE_STRATEGY"
+            echo "Restore Dir:              ${RESTORE_DIR:-<unset>}"
+            echo "Expected Corpus Size:     $EXPECTED_CORPUS_SIZE"
+            ;;
+    esac
+
     if [[ "$MODE" == "DISTRIBUTED" ]]; then
         echo "MinIO Mode:               $MINIO_MODE"
         echo "MinIO Medium:             $MINIO_MEDIUM"
@@ -36,6 +130,19 @@ print_config_summary() {
         echo "Proxies:                  $NUM_PROXIES"
         echo "Proxies/Compute Node:     $NUM_PROXIES_PER_CN"
         echo "DML Channels:             $DML_CHANNELS"
+    else
+        echo "WAL Mode:                 $WAL"
+        case "$TASK" in
+            INSERT)
+                echo "Standalone Cores:         ${CORES[*]}"
+                ;;
+            INDEX)
+                echo "Standalone Cores:         ${CORES[*]}"
+                ;;
+            QUERY)
+                echo "Standalone Cores:         ${CORES[*]}"
+                ;;
+        esac
     fi
 
     echo "======================================================"
@@ -50,7 +157,7 @@ CORES=(112)
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
+queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
 
 ### Platform/DIR Specific Variables ###
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
@@ -98,7 +205,7 @@ QUERY_CORPUS_SIZE=22723  # queries
 # QUERY_CORPUS_SIZE=100000  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
-QUERY_BATCH_SIZE=(4096)
+QUERY_BATCH_SIZE=(8192)
 
 # Aurora
     # * Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy
@@ -128,6 +235,8 @@ STREAMING_NODES_PER_CN=4
 NUM_PROXIES=8
 NUM_PROXIES_PER_CN=4
 DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
+
+apply_overrides
 
 
 print_config_summary

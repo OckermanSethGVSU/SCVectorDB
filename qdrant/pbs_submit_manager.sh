@@ -38,26 +38,88 @@ print_config_summary() {
     fi
 }
 
+apply_scalar_override() {
+    local var_name="$1"
+    local override_name="${var_name}_OVERRIDE"
+    local uppercase_var_name="${var_name^^}"
+    local uppercase_override_name="${uppercase_var_name}_OVERRIDE"
+    local override_value=""
+
+    if [[ -n "${!override_name:-}" ]]; then
+        override_value="${!override_name}"
+    elif [[ -n "${!uppercase_override_name:-}" ]]; then
+        override_value="${!uppercase_override_name}"
+    fi
+
+    if [[ -n "$override_value" ]]; then
+        printf -v "$var_name" '%s' "$override_value"
+    fi
+}
+
+apply_array_override() {
+    local var_name="$1"
+    local override_name="${var_name}_OVERRIDE"
+    local uppercase_var_name="${var_name^^}"
+    local uppercase_override_name="${uppercase_var_name}_OVERRIDE"
+    local override_value=""
+
+    if [[ -n "${!override_name:-}" ]]; then
+        override_value="${!override_name}"
+    elif [[ -n "${!uppercase_override_name:-}" ]]; then
+        override_value="${!uppercase_override_name}"
+    fi
+
+    if [[ -n "$override_value" ]]; then
+        read -r -a "$var_name" <<< "$override_value"
+    fi
+}
+
+apply_overrides() {
+    apply_array_override NODES
+    apply_array_override WORKERS_PER_NODE
+    apply_array_override CORES
+    apply_array_override INSERT_BATCH_SIZE
+    apply_array_override QUERY_BATCH_SIZE
+
+    apply_scalar_override WALLTIME
+    apply_scalar_override queue
+    apply_scalar_override TASK
+    apply_scalar_override STORAGE_MEDIUM
+    apply_scalar_override PERF
+    apply_scalar_override VECTOR_DIM
+    apply_scalar_override DISTANCE_METRIC
+    apply_scalar_override GPU_INDEX
+    apply_scalar_override INSERT_FILEPATH
+    apply_scalar_override INSERT_CORPUS_SIZE
+    apply_scalar_override INSERT_BALANCE_STRATEGY
+    apply_scalar_override INSERT_CLIENTS_PER_WORKER
+    apply_scalar_override QUERY_FILEPATH
+    apply_scalar_override QUERY_CORPUS_SIZE
+    apply_scalar_override QUERY_BALANCE_STRATEGY
+    apply_scalar_override QUERY_CLIENTS_PER_WORKER
+    apply_scalar_override PLATFORM
+    apply_scalar_override QDRANT_EXECUTABLE
+    apply_scalar_override RESTORE_DIR
+    apply_scalar_override EXPECTED_CORPUS_SIZE
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if ! "$SCRIPT_DIR/check_dependencies.sh" --missing-only; then
     exit 1
 fi
 
-
-
-
-
-
 ### Loop variables ###
 NODES=(1)
 WORKERS_PER_NODE=(1)
-CORES=(112)
+CORES=(1)
+INSERT_BATCH_SIZE=(256)
+QUERY_BATCH_SIZE=(32)
 
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=capacity # [preemptable, debug, debug-scaling, prod, capacity]
+queue="debug" # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
@@ -80,7 +142,6 @@ INSERT_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.
 INSERT_CORPUS_SIZE=1000000 # total data to insert
 INSERT_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-INSERT_BATCH_SIZE=(512) 
 INSERT_CLIENTS_PER_WORKER=1
 
 
@@ -89,10 +150,11 @@ INSERT_CLIENTS_PER_WORKER=1
     # * Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy
     # * Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy
 QUERY_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
+
+# 22723, 100000
 QUERY_CORPUS_SIZE=100000 # total data to QUERY
-QUERY_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
+QUERY_BALANCE_STRATEGY="NO_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-QUERY_BATCH_SIZE=(512) 
 QUERY_CLIENTS_PER_WORKER=1
 
 
@@ -103,9 +165,12 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 
 
 QDRANT_EXECUTABLE="qdrant" # [qdrant, qdrantInsertTracing]
+# RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/yandex/"
 RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/yandex/"
 # RESTORE_DIR=""
 EXPECTED_CORPUS_SIZE=10000000
+
+apply_overrides
 
 print_config_summary
 
@@ -257,7 +322,8 @@ do
                     chmod -R g+w $dir
                     cd $dir
 
-                    # qsub $target_file
+                    qsub_output="$(qsub "$target_file")" || exit $?
+                    echo "$qsub_output"
                     sleep 5
                     cd .. 
                 done
