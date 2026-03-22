@@ -157,7 +157,7 @@ CORES=(112)
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
+queue=capacity # [preemptable, debug, debug-scaling, prod,capacity]
 
 ### Platform/DIR Specific Variables ###
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
@@ -205,7 +205,7 @@ QUERY_CORPUS_SIZE=22723  # queries
 # QUERY_CORPUS_SIZE=100000  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
-QUERY_BATCH_SIZE=(8192)
+QUERY_BATCH_SIZE=(128 256 512 1024 2048)
 
 # Aurora
     # * Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy
@@ -300,9 +300,9 @@ do
                     fi
                 elif [[ "$TASK" == "QUERY" ]]; then
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${QUERY_BATCH_SIZE}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${query_bs}_${DATE}"
                     else
-                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${QUERY_BATCH_SIZE}_${DATE}"
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${query_bs}_${DATE}"
                     fi
                 else
                     echo "Unknown task: $TASK: valid options include INSERT, INDEX, QUERY"
