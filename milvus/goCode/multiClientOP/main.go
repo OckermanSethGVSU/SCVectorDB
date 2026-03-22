@@ -547,7 +547,7 @@ func clientWorker(
 	sentinelID := int64(totalRows) // unique
 	if globalClientRank == 0 {
 
-		if ACTIVE_TASK == "INSERT" {
+		if TASK == "INSERT" {
 			vec := make([]float32, mcols)
 			_, err := mclient.Insert(
 				ctx,
