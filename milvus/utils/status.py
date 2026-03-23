@@ -91,3 +91,5 @@ res = client.describe_collection(
 )
 
 print(res,flush=True)
+index_status = client.describe_index(collection_name, 'vector')
+print(index_status, flush=True)
