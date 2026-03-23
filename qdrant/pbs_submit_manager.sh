@@ -112,7 +112,7 @@ fi
 ### Loop variables ###
 NODES=(1)
 WORKERS_PER_NODE=(1)
-CORES=(1)
+CORES=(128)
 INSERT_BATCH_SIZE=(256)
 QUERY_BATCH_SIZE=(32)
 
@@ -123,7 +123,7 @@ queue="debug" # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
-TASK="QUERY" # [INSERT, INDEX, QUERY]
+TASK="INDEX" # [INSERT, INDEX, QUERY]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, TRACE]
 VECTOR_DIM=200
@@ -166,7 +166,7 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 
 QDRANT_EXECUTABLE="qdrant" # [qdrant, qdrantInsertTracing]
 # RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/yandex/"
-RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/yandex/"
+RESTORE_DIR=""
 # RESTORE_DIR=""
 EXPECTED_CORPUS_SIZE=10000000
 
