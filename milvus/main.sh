@@ -317,13 +317,15 @@ if [ -z "$RESTORE_DIR" ]; then
     mkdir -p uploadNPY
     mv *.npy uploadNPY
 
-    if [[ "$TASK" == "INDEX" ]]; then
+    if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
         export ACTIVE_TASK="INDEX"
         touch ./workerOut/workflow_start.txt
         env "${PYTHON_ENV_VARS[@]}" python3 index_data.py
         
-        touch ./workerOut/workflow_end.txt
-        touch flag.txt
+        if [[ "$TASK" == "INDEX" ]]; then
+            touch ./workerOut/workflow_end.txt
+            touch flag.txt
+        fi
     fi
 
 

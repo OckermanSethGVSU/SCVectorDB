@@ -152,11 +152,11 @@ print_config_summary() {
 
 ### Allocation Variables ###
 NODES=(1)
-CORES=(112)
+CORES=(2)
 
 
 # PBS Vars
-WALLTIME="01:00:00"
+WALLTIME="03:00:00"
 queue=capacity # [preemptable, debug, debug-scaling, prod,capacity]
 
 ### Platform/DIR Specific Variables ###
@@ -180,7 +180,7 @@ BASE_DIR="$(pwd)"
 
 ### Insertion Variables ### 
 INSERT_CORPUS_SIZE=10000000 # total data to insert
-INSERT_CLIENTS_PER_PROXY=1
+INSERT_CLIENTS_PER_PROXY=2
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 # Aurora
     # 10 million 
@@ -190,22 +190,22 @@ INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
     # 10 million 
     #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
     #     Yandex: /eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy
-INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
+INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 # best batch for 32 clients: 128
-INSERT_BATCH_SIZE=(256)
+INSERT_BATCH_SIZE=(512)
+# VECTOR_DIM=200
 VECTOR_DIM=2560
-# VECTOR_DIM=2560
 DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 
 
 ### QUERY Variables ###
+# QUERY_CORPUS_SIZE=22723  # queries
 QUERY_CORPUS_SIZE=22723  # queries
-# QUERY_CORPUS_SIZE=100000  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
-QUERY_BATCH_SIZE=(128 256 512 1024 2048)
+QUERY_BATCH_SIZE=(32)
 
 # Aurora
     # * Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy
@@ -218,9 +218,9 @@ QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/que
 # Aurora: 
 #   Yandex: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex
 #   pes2o: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o
+# RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o"
 RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o"
 # RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex"
-# RESTORE_DIR=""
 EXPECTED_CORPUS_SIZE=10000000
 
 
@@ -405,17 +405,17 @@ do
                 cp ./goCode/multiClientOP/main.go $dir/multiClient.go
 
                 
-                if [[ "$TASK" == "INDEX" || "$TASK" == "INSERT" ]]; then
+                if [[ -z "$RESTORE_DIR" ]]; then
                     cp ./generalPython/setup_collection.py "$dir/"
+
+                    if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
+                        cp ./generalPython/index_data.py "$dir/"
+                    fi
+                else
+                        cp ./utils/status.py "$dir/"
                 fi
 
-                if [[ "$TASK" == "INDEX" ]]; then
-                    cp ./generalPython/index_data.py "$dir/"
-                fi
                 
-                if [[ "$TASK" == "QUERY" ]]; then
-                    cp ./utils/status.py "$dir/"
-                fi
 
                 mv $target_file $dir
                 

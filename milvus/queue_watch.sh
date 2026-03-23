@@ -5,9 +5,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANAGER_SCRIPT="$SCRIPT_DIR/pbs_submit_manager.sh"
 
-CORES=(112 64 32 16 8 4 2 1)
-QUERY_BATCH_SIZES=(128 256 512 1024 2048)
-QUEUES=(debug debug-scaling capacity)
+CORES=(128 64 32 16 8 4 2 1)
+QUERY_BATCH_SIZES=(2048)
+QUEUES=(capacity)
 declare -A QUEUE_CAPACITY=(
     [debug]=1
     [debug-scaling]=1
