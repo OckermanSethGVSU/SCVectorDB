@@ -1,20 +1,21 @@
 # Milvus workflow
 
-This workflow launches Milvus on PBS systems (standalone or distributed), runs multi-client insert/query operations, and can optionally perform index generation.
+This directory contains the Milvus workflows used in this repo: standalone and distributed cluster launch paths, Go client binaries for insert/query, and a Go mixed insert/query runner for event-timeline experiments.
 
-Main entrypoint:
+Main HPC entrypoint:
 
 - `pbs_submit_manager.sh`
 
-## What is currently supported
+## Current workflow capabilities
 
 - Task modes: `INSERT`, `INDEX`, `QUERY` (`TASK`)
 - Deployment modes: `STANDALONE`, `DISTRIBUTED` (`MODE`)
 - Platforms: `POLARIS`, `AURORA` (`PLATFORM`)
-- Storage options (`STORAGE_MEDIUM`): `memory`, `DAOS`, `lustre`, `SSD`
-- WAL configuration (`WAL`): `woodpecker`, `default`
-- Perf modes (`PERF`): `NONE`, `STAT`, `RECORD`
-- Insert/query balancing:
+- Storage media: `memory`, `DAOS`, `lustre`, `SSD` (`STORAGE_MEDIUM`)
+- WAL settings: `woodpecker`, `default` (`WAL`)
+- Perf modes: `NONE`, `STAT`, `RECORD` (`PERF`)
+- Optional tracing via `TRACING=True`
+- Insert/query balancing used by the Go clients:
   - `INSERT_BALANCE_STRATEGY`: `NONE`, `WORKER`
   - `QUERY_BALANCE_STRATEGY`: `NONE`, `WORKER`
 - Distributed controls:
@@ -25,16 +26,31 @@ Main entrypoint:
   - `NUM_PROXIES`, `NUM_PROXIES_PER_CN`
   - `DML_CHANNELS`
 
-## Workflow files
+## Important files
 
-- `pbs_submit_manager.sh`: config sweep + PBS generation + staging + `qsub`
-- `main.sh`: runtime orchestration for standalone/distributed paths and task modes
+- `pbs_submit_manager.sh`: sweep configuration and PBS script generation
+- `main.sh`: runtime orchestration for standalone and distributed runs
 - `check_dependencies.sh`: dependency validation helper
-- `milvusSetup/*.sh`: component launch scripts
-- `generalPython/*.py`: profiling/polling/setup/summary/index helpers
-- `goCode/multiClientOP/`: Go multi-client binary used by the workflow
+- `milvusSetup/`: launch scripts for Milvus, etcd, and MinIO
+- `generalPython/`: collection setup, profiling, polling, indexing, summaries, and helper scripts
+- `goCode/multiClientOP/`: main Go client used by `main.sh`
+- `goCode/mixedrunner/`: mixed insert/query Go runner with JSONL event logs
+- `goCode/run_mixed.sh`: example launcher for the mixed runner
 - `cpuMilvus/configs/`: Milvus config templates used at runtime
-- `utils/`: tracing helpers, status checks, and utility scripts
+- `utils/`: tracing helpers, status scripts, local standalone helpers, and timeline analysis
+
+## HPC runtime flow (`main.sh`)
+
+1. Export run variables and activate the configured platform-specific Python environment.
+2. Optionally mount DAOS and start OpenTelemetry when tracing is enabled.
+3. Launch either:
+   - standalone Milvus on one worker node, or
+   - distributed etcd/MinIO plus Milvus service roles across worker nodes.
+4. Wait for readiness and determine the reachable Milvus address.
+5. For insert/index paths, configure the collection with `generalPython/setup_collection.py`.
+6. Run the Go multi-client binary for insert or query workload generation.
+7. If `TASK=INDEX`, run `generalPython/index_data.py`.
+8. Write timing outputs, summaries, optional tracing data, and worker logs.
 
 ## Important submit variables (`pbs_submit_manager.sh`)
 
@@ -52,34 +68,65 @@ Main entrypoint:
 - `STORAGE_MEDIUM`
 - `PERF`
 - `TRACING`
+- `WAL`
 - `GPU_INDEX`
+- `DEBUG`
+- `BASE_DIR`
 - `ENV_PATH`
 - `MILVUS_BUILD_DIR`
 - `MILVUS_CONFIG_DIR`
-- `WAL`
-- Insert/query variables:
-  - `INSERT_DATA_FILEPATH`, `INSERT_CORPUS_SIZE`, `INSERT_CLIENTS_PER_PROXY`, `INSERT_BALANCE_STRATEGY`
-  - `QUERY_DATA_FILEPATH`, `QUERY_CORPUS_SIZE`, `QUERY_CLIENTS_PER_PROXY`, `QUERY_BALANCE_STRATEGY`
-- `VECTOR_DIM`, `DISTANCE_METRIC`
-- `RESTORE_DIR`
-- Distributed-only variables listed above
+- Insert path:
+  - `INSERT_DATA_FILEPATH`
+  - `INSERT_CORPUS_SIZE`
+  - `INSERT_CLIENTS_PER_PROXY`
+  - `INSERT_BALANCE_STRATEGY`
+  - `INSERT_BATCH_SIZE`
+- Query path:
+  - `QUERY_DATA_FILEPATH`
+  - `QUERY_CORPUS_SIZE`
+  - `QUERY_CLIENTS_PER_PROXY`
+  - `QUERY_BALANCE_STRATEGY`
+  - `QUERY_BATCH_SIZE`
+- Collection/index path:
+  - `VECTOR_DIM`
+  - `DISTANCE_METRIC`
+  - `RESTORE_DIR`
+  - `EXPECTED_CORPUS_SIZE`
+- Distributed-only controls listed above
 
 ### Scheduler variables
 
 - `WALLTIME`
 - `queue`
 
-## Runtime flow (`main.sh`)
+## Go clients
 
-1. Exports runtime variables and loads platform-specific modules/env.
-2. Optionally mounts DAOS (`launch-dfuse.sh`) for Milvus and/or MinIO storage.
-3. Launches Milvus:
-   - `STANDALONE`: one server process.
-   - `DISTRIBUTED`: etcd/minio + Milvus service roles.
-4. Waits for readiness and, for insert/index, configures collection (`setup_collection.py`).
-5. Runs Go multi-client operation binary (`./multiClientOP`) in insert/query modes.
-6. If `TASK=INDEX`, runs `generalPython/index_data.py`.
-7. Writes timing/summary outputs and optional trace analysis.
+Build from `milvus/goCode`:
+
+```bash
+cd goCode
+./build.sh multiClientOP
+./build.sh mixedrunner
+```
+
+Important binaries/scripts:
+
+- `goCode/multiClientOP/multiClientOP`: insert/query client used by `main.sh`
+- `goCode/mixedrunner/mixedrunner`: mixed insert/query runner
+- `goCode/run_mixed.sh`: example mixed-runner invocation
+
+## Mixed runner notes
+
+The Go mixed runner is not the main HPC entrypoint, but it is present in the repo and currently supports:
+
+- dedicated insert and query worker counts
+- `max` and `rate` modes per role
+- deterministic row partitioning
+- per-worker JSONL event logs
+- fixed or bounded-random batch sizing
+- optional dry-run backend
+
+It is useful for reconstructing a mixed insert/query timeline outside the larger PBS workflow.
 
 ## Dependency check
 
@@ -87,38 +134,24 @@ Run manually:
 
 ```bash
 ./check_dependencies.sh
-```
-
-Or missing-only mode:
-
-```bash
 ./check_dependencies.sh --missing-only
 ```
 
-## Build notes
+## Expected outputs
 
-Build the Go client from `milvus/goCode`:
+Per run directory you will typically see:
 
-```bash
-cd goCode
-./build.sh multiClientOP
-```
+- `workflow.out`, `workflow.log`, and component logs
+- timing/summary CSV or NPY files
+- insert/query outputs under task-specific directories
+- tracing outputs when `TRACING=True`
+- worker status files under `workerOut/` or related runtime directories
 
-This produces `goCode/multiClientOP/multiClientOP`.
+## Required local artifacts (site-specific)
 
-## Required local artifacts (not committed)
+Examples of required non-committed artifacts include:
 
-- `sifs/milvus.sif`
-- `sifs/etcd_v3.5.18.sif`
-- `sifs/minio.sif`
-- Built Go client: `goCode/multiClientOP/multiClientOP`
-- Optional tracing image: `sifs/otel-collector.sif` (when `TRACING=True`)
-
-## Typical run outputs
-
-Per run directory:
-
-- `workflow.out`, `output.log`
-- Task-specific timing/summary files
-- `uploadNPY/*.npy` (for insert/index runs)
-- Component logs under node/worker output folders
+- Milvus/etcd/MinIO Apptainer images
+- built Go clients
+- Python environments referenced by `ENV_PATH`
+- dataset `.npy` files and optional restore directories
