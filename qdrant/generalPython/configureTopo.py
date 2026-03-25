@@ -95,6 +95,7 @@ def load_topology(file_path, use_localhost=True):
 
 nodes = load_topology("ip_registry.txt", use_localhost=False)
 collection_name = "singleShard"
+run_mode = os.getenv("RUN_MODE", "PBS").strip().lower()
 
 
 
@@ -148,6 +149,12 @@ while True:
         # Sleep for 30 seconds on error
         # time.sleep(30)
         exit()
+
+if run_mode == "local":
+    time.sleep(2)
+    info = client.get_collection(collection_name)
+    print(info, flush=True)
+    exit()
 
 
 
