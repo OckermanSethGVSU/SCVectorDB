@@ -511,6 +511,11 @@ async fn run_upload(
     let sanity_check = (!resp.is_empty()).to_string();
 
     let files = time_files(task);
+    if rank == 0 {
+        write_upload_header(&files.csv, &lock).await?;
+    }
+    barrier.wait().await;
+    
     write_upload_summary(
         rank,
         &files.csv,
@@ -548,6 +553,28 @@ async fn run_upload(
     Ok(())
 }
 
+async fn write_upload_header(csv_path: &str, lock: &Mutex<()>) -> anyhow::Result<()> {
+    let _guard = lock.lock().await;
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(csv_path)?;
+    let mut w = WriterBuilder::new().has_headers(false).from_writer(file);
+
+    w.write_record([
+        "rank",
+        "sanity_check",
+        "loop_duration",
+        "wait_period",
+        "total",
+        "start_loop_utc",
+        "end_loop_utc",
+        "global_end_utc",
+    ])?;
+    Ok(())
+}
+
 async fn write_upload_summary(
     rank: usize,
     csv_path: &str,
@@ -567,19 +594,6 @@ async fn write_upload_summary(
     let _guard = lock.lock().await;
     let file = OpenOptions::new().create(true).append(true).open(csv_path)?;
     let mut w = WriterBuilder::new().has_headers(false).from_writer(file);
-
-    if rank == 0 {
-        w.write_record([
-            "rank",
-            "sanity_check",
-            "loop_duration",
-            "wait_period",
-            "total",
-            "start_loop_utc",
-            "end_loop_utc",
-            "global_end_utc",
-        ])?;
-    }
 
     w.write_record([
         rank.to_string(),
@@ -703,6 +717,11 @@ async fn run_query(
     let global_end = Utc::now();
 
     let files = time_files(task);
+    if rank == 0 {
+        write_query_header(&files.csv, &lock).await?;
+    }
+    barrier.wait().await;
+
     write_query_summary(
         rank,
         &files.csv,
@@ -733,6 +752,27 @@ async fn run_query(
     Ok(())
 }
 
+async fn write_query_header(csv_path: &str, lock: &Mutex<()>) -> anyhow::Result<()> {
+    let _guard = lock.lock().await;
+    let file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(csv_path)?;
+    let mut w = WriterBuilder::new().has_headers(false).from_writer(file);
+
+    w.write_record([
+        "rank",
+        "loop_duration",
+        "wait_period",
+        "total",
+        "start_loop_utc",
+        "end_loop_utc",
+        "global_end_utc",
+    ])?;
+    Ok(())
+}
+
 async fn write_query_summary(
     rank: usize,
     csv_path: &str,
@@ -751,18 +791,6 @@ async fn write_query_summary(
     let _guard = lock.lock().await;
     let file = OpenOptions::new().create(true).append(true).open(csv_path)?;
     let mut w = WriterBuilder::new().has_headers(false).from_writer(file);
-
-    if rank == 0 {
-        w.write_record([
-            "rank",
-            "loop_duration",
-            "wait_period",
-            "total",
-            "start_loop_utc",
-            "end_loop_utc",
-            "global_end_utc",
-        ])?;
-    }
 
     w.write_record([
         rank.to_string(),
