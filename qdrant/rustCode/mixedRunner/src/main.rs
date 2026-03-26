@@ -464,9 +464,17 @@ fn parse_config() -> Result<Config> {
 
     let n_workers = optional_usize(value_with_args(&args, "n-workers", &["N_WORKERS"]))?;
     let insert_clients_per_worker =
-        optional_usize(value_with_args(&args, "insert-clients-per-worker", &["INSERT_CLIENTS_PER_WORKER"]))?;
+        optional_usize(value_with_args(
+            &args,
+            "insert-clients-per-worker",
+            &["MIXED_INSERT_CLIENTS_PER_WORKER", "INSERT_CLIENTS_PER_WORKER"],
+        ))?;
     let query_clients_per_worker =
-        optional_usize(value_with_args(&args, "query-clients-per-worker", &["QUERY_CLIENTS_PER_WORKER"]))?;
+        optional_usize(value_with_args(
+            &args,
+            "query-clients-per-worker",
+            &["MIXED_QUERY_CLIENTS_PER_WORKER", "QUERY_CLIENTS_PER_WORKER"],
+        ))?;
 
     let insert_clients = resolve_client_count(
         value_with_args(&args, "insert-clients", &["INSERT_CLIENTS"]),
@@ -487,12 +495,12 @@ fn parse_config() -> Result<Config> {
         corpus_size: required_usize(value_with_args(
             &args,
             "insert-corpus-size",
-            &["INSERT_CORPUS_SIZE", "CORPUS_SIZE"],
+            &["MIXED_CORPUS_SIZE"],
         ))?,
         vectors_path: PathBuf::from(required_string(value_with_args(
             &args,
             "insert-vectors",
-            &["INSERT_FILEPATH", "INSERT_DATA_FILEPATH", "DATA_FILEPATH"],
+            &["MIXED_DATA_FILEPATH"],
         ))?),
         batch: parse_batch_config(
             &args,

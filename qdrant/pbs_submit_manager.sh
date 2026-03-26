@@ -124,7 +124,7 @@ queue="debug-scaling" # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
-TASK="QUERY" # [INSERT, INDEX, QUERY, MIXED]
+TASK="MIXED" # [INSERT, INDEX, QUERY, MIXED]
 RUN_MODE="local" # [PBS, local]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, TRACE]
@@ -159,7 +159,7 @@ INSERT_CLIENTS_PER_WORKER=4
 QUERY_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 
 # 22723, 100000
-QUERY_CORPUS_SIZE=100000 # total data to QUERY
+QUERY_CORPUS_SIZE=100 # total data to QUERY
 QUERY_BALANCE_STRATEGY="NO_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 QUERY_CLIENTS_PER_WORKER=1
@@ -391,8 +391,12 @@ do
                         cp generalPython/configureTopo.py $dir/
                     fi
 
-                    if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
+                    if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
                         cp generalPython/index.py $dir/
+                    fi
+
+                    if [[ "$TASK" == "MIXED" ]]; then
+                        cp generalPython/mixed_timeline.py $dir/
                     fi
                     
           

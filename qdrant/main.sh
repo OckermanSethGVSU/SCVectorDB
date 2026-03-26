@@ -7,21 +7,7 @@ export GPU_INDEX=$GPU_INDEX
 export QDRANT_EXECUTABLE=$QDRANT_EXECUTABLE
 export PERF=$PERF
 export RESTORE_DIR=$RESTORE_DIR
-export RESULT_PATH=$RESULT_PATH
-export INSERT_MODE=$INSERT_MODE
-export INSERT_OPS_PER_SEC=$INSERT_OPS_PER_SEC
-export QUERY_MODE=$QUERY_MODE
-export QUERY_OPS_PER_SEC=$QUERY_OPS_PER_SEC
-export INSERT_START_ID=$INSERT_START_ID
-export COLLECTION_NAME=$COLLECTION_NAME
-export TOP_K=$TOP_K
-export QUERY_EF_SEARCH=$QUERY_EF_SEARCH
-export RPC_TIMEOUT=$RPC_TIMEOUT
-export QDRANT_REGISTRY_PATH=$QDRANT_REGISTRY_PATH
-export INSERT_BATCH_MIN=$INSERT_BATCH_MIN
-export INSERT_BATCH_MAX=$INSERT_BATCH_MAX
-export QUERY_BATCH_MIN=$QUERY_BATCH_MIN
-export QUERY_BATCH_MAX=$QUERY_BATCH_MAX
+
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -183,6 +169,82 @@ if [[ "$TASK" == "QUERY" ]]; then
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
 
     python3 multi_client_summary.py
+
+    touch flag.txt
+    touch ./perf/flag.txt
+    sleep 30
+    mkdir systemStats/
+    mv *_system_*.csv systemStats/
+fi
+
+
+if [[ "$TASK" == "MIXED" ]]; then
+
+
+    if [[ -z "$RESTORE_DIR"  ]]; then
+        # index the data
+        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
+    fi
+
+    # Reuses these vars from insert
+    export INSERT_CLIENTS_PER_WORKER=$INSERT_CLIENTS_PER_WORKER
+    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
+    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
+
+    # Reuses these query vars
+    export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
+    export QUERY_CLIENTS_PER_WORKER=$QUERY_CLIENTS_PER_WORKER
+    export QUERY_FILEPATH=$QUERY_FILEPATH
+    export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
+    export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
+
+    # Actual important mixed vars
+    export MIXED_CORPUS_SIZE=$MIXED_CORPUS_SIZE
+    export MIXED_DATA_FILEPATH=$MIXED_DATA_FILEPATH
+    export MIXED_QUERY_CLIENTS_PER_WORKER=$MIXED_QUERY_CLIENTS_PER_WORKER
+    export MIXED_INSERT_CLIENTS_PER_WORKER=$MIXED_INSERT_CLIENTS_PER_WORKER
+    export RESULT_PATH=$RESULT_PATH
+    export INSERT_MODE=$INSERT_MODE
+    export INSERT_OPS_PER_SEC=$INSERT_OPS_PER_SEC
+    export INSERT_START_ID=$INSERT_START_ID
+    export QUERY_MODE=$QUERY_MODE
+    export QUERY_OPS_PER_SEC=$QUERY_OPS_PER_SEC
+    
+    # optimal vars included for completeness 
+    export COLLECTION_NAME=$COLLECTION_NAME
+    export TOP_K=$TOP_K
+    export QUERY_EF_SEARCH=$QUERY_EF_SEARCH
+    export RPC_TIMEOUT=$RPC_TIMEOUT
+    export QDRANT_REGISTRY_PATH=$QDRANT_REGISTRY_PATH
+    export INSERT_BATCH_MIN=$INSERT_BATCH_MIN
+    export INSERT_BATCH_MAX=$INSERT_BATCH_MAX
+    export QUERY_BATCH_MIN=$QUERY_BATCH_MIN
+    export QUERY_BATCH_MAX=$QUERY_BATCH_MAX
+
+    export ACTIVE_TASK="MIXED"
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixedRunner
+
+    python3 multi_client_summary.py
+
+    MIXED_TIMELINE_METRIC="dot"
+    if [[ "$DISTANCE_METRIC" == "COSINE" ]]; then
+        MIXED_TIMELINE_METRIC="cosine"
+    elif [[ "$DISTANCE_METRIC" == "L2" ]]; then
+        MIXED_TIMELINE_METRIC="l2"
+    fi
+
+    MIXED_TIMELINE_ARGS=(
+        mixed_timeline.py
+        --log-dir "$RESULT_PATH"
+        --insert-vectors "$MIXED_DATA_FILEPATH"
+        --query-vectors "$QUERY_FILEPATH"
+        --metric "$MIXED_TIMELINE_METRIC"
+        --insert-id-offset "$INSERT_START_ID"
+    )
+    if [[ -z "$RESTORE_DIR" ]]; then
+        MIXED_TIMELINE_ARGS+=(--init-vectors "$INSERT_FILEPATH")
+    fi
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 "${MIXED_TIMELINE_ARGS[@]}"
 
     touch flag.txt
     touch ./perf/flag.txt
