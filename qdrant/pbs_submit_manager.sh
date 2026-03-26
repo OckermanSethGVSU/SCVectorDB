@@ -120,7 +120,7 @@ QUERY_BATCH_SIZE=(32)
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue="debug" # [preemptable, debug, debug-scaling, prod, capacity]
+queue="debug-scaling" # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
@@ -128,8 +128,8 @@ TASK="QUERY" # [INSERT, INDEX, QUERY, MIXED]
 RUN_MODE="local" # [PBS, local]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, TRACE]
-VECTOR_DIM=200
-DISTANCE_METRIC="IP" # [IP, COSINE, L2]
+VECTOR_DIM=2560
+DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 GPU_INDEX=False
 
 # Aurora
@@ -147,7 +147,7 @@ INSERT_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.n
 INSERT_CORPUS_SIZE=1000000 # total data to insert
 INSERT_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-INSERT_CLIENTS_PER_WORKER=1
+INSERT_CLIENTS_PER_WORKER=4
 
 
 ### Query ### 

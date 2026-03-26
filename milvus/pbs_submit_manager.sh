@@ -158,8 +158,8 @@ CORES=(112)
 
 
 # PBS Vars
-WALLTIME="03:00:00"
-queue=capacity # [preemptable, debug, debug-scaling, prod,capacity]
+WALLTIME="01:00:00"
+queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
 
 ### Platform/DIR Specific Variables ###
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
@@ -208,10 +208,10 @@ DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 
 ### QUERY Variables ###
 # QUERY_CORPUS_SIZE=22723  # queries
-QUERY_CORPUS_SIZE=10000  # queries
+QUERY_CORPUS_SIZE=100000  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
-QUERY_BATCH_SIZE=(32)
+QUERY_BATCH_SIZE=(512)
 
 # Aurora
     # * Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy
@@ -227,9 +227,9 @@ QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQ
 # Aurora: 
 #   Yandex: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex
 #   pes2o: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o
-RESTORE_DIR=""
+RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex"
 # RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o"
-# RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex"
+# RESTORE_DIR=""
 EXPECTED_CORPUS_SIZE=10000000
 
 
