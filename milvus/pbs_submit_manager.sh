@@ -40,6 +40,7 @@ apply_overrides() {
     apply_override_value PLATFORM PLATFORM_OVERRIDE
 
     apply_override_value TASK TASK_OVERRIDE
+    apply_override_value RUN_MODE RUN_MODE_OVERRIDE
     apply_override_value MODE MODE_OVERRIDE
     apply_override_value STORAGE_MEDIUM STORAGE_MEDIUM_OVERRIDE
     apply_override_value PERF PERF_OVERRIDE
@@ -86,6 +87,7 @@ print_config_summary() {
     echo "Platform:                 $PLATFORM"
     echo "Mode:                     $MODE"
     echo "Task:                     $TASK"
+    echo "Run Mode:                 $RUN_MODE"
     echo "Storage Medium:           $STORAGE_MEDIUM"
     echo "Env Path:                 $ENV_PATH"
     echo "Milvus Build Dir:         $MILVUS_BUILD_DIR"
@@ -152,7 +154,7 @@ print_config_summary() {
 
 ### Allocation Variables ###
 NODES=(1)
-CORES=(2)
+CORES=(112)
 
 
 # PBS Vars
@@ -169,6 +171,7 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 TASK="QUERY" # [INSERT, INDEX, QUERY]
+RUN_MODE="local" # [PBS, local]
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
@@ -180,7 +183,7 @@ BASE_DIR="$(pwd)"
 
 ### Insertion Variables ### 
 INSERT_CORPUS_SIZE=10000000 # total data to insert
-INSERT_CLIENTS_PER_PROXY=2
+INSERT_CLIENTS_PER_PROXY=1
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 # Aurora
     # 10 million 
@@ -190,19 +193,22 @@ INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
     # 10 million 
     #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
     #     Yandex: /eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy
-INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
+# Local (docker based)
+    # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
+INSERT_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy"
+# INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 # best batch for 32 clients: 128
-INSERT_BATCH_SIZE=(512)
+INSERT_BATCH_SIZE=(32)
 # VECTOR_DIM=200
-VECTOR_DIM=2560
-DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
+VECTOR_DIM=200
+DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 
 
 ### QUERY Variables ###
 # QUERY_CORPUS_SIZE=22723  # queries
-QUERY_CORPUS_SIZE=22723  # queries
+QUERY_CORPUS_SIZE=10000  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
 QUERY_BATCH_SIZE=(32)
@@ -210,16 +216,19 @@ QUERY_BATCH_SIZE=(32)
 # Aurora
     # * Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy
     # * Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy
+# Local (docker based)
+    # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
 # QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
-QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
+# QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
+QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 
 
 # Polaris: TODO
 # Aurora: 
 #   Yandex: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex
 #   pes2o: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o
+RESTORE_DIR=""
 # RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o"
-RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o"
 # RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex"
 EXPECTED_CORPUS_SIZE=10000000
 
@@ -316,6 +325,7 @@ do
                 echo "MILVUS_BUILD_DIR=${MILVUS_BUILD_DIR}" >> $target_file
                 echo "MILVUS_CONFIG_DIR=${MILVUS_CONFIG_DIR}" >> $target_file
                 echo "TASK=${TASK}" >> $target_file
+                echo "RUN_MODE=${RUN_MODE}" >> $target_file
                 echo "MODE=${MODE}" >> $target_file
                 echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}" >> $target_file
                 echo "CORES=${numCores}" >> $target_file
@@ -362,57 +372,74 @@ do
                 fi
 
                 echo "" >> $target_file
-                cat main.sh >> $target_file
+                if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
+                    cat local_main.sh >> $target_file
+                else
+                    cat main.sh >> $target_file
+                fi
                 mkdir -p $dir
 
-                # Copy in mode specific files
-                if [[ "$MODE" == "STANDALONE" ]]; then
-                    cp sifs/milvus.sif $dir/
-                    cp milvusSetup/standaloneLaunch.sh $dir/
-                    cp milvusSetup/execute.sh $dir/
+                if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
+                    cp ./goCode/multiClientOP/multiClientOP $dir/
+                    cp ./goCode/multiClientOP/main.go $dir/multiClient.go
+                    cp ./generalPython/multi_client_summary.py "$dir/"
 
-                elif [[ "$MODE" == "DISTRIBUTED" ]]; then
-                    cp sifs/milvus.sif $dir/
-                    cp sifs/etcd_v3.5.18.sif $dir/
-                    cp sifs/minio.sif $dir/
-                    cp milvusSetup/execute.sh $dir/
-                    cp milvusSetup/launch_etcd.sh $dir/
-                    cp milvusSetup/launch_minio.sh $dir/
-                    cp milvusSetup/launch_milvus_part.sh $dir/
-                else
-                    echo "Unknown MODE: $SYSTEM"
-                    exit
-                fi
+                    if [[ -z "$RESTORE_DIR" ]]; then
+                        cp ./generalPython/setup_collection.py "$dir/"
 
-
-                if [[ "$TRACING" == "True" ]]; then
-                    cp sifs/otel-collector.sif $dir/
-                    cp utils/launch_otel.sh $dir/
-                    cp utils/otel_config.yaml $dir/
-                    cp utils/analyze_traces.py $dir/
-                fi
-
-
-                # Copy in basic python utils
-                cp generalPython/net_mapping.py $dir/
-                cp generalPython/replace_unified.py $dir/
-                cp generalPython/profile.py $dir/
-                cp generalPython/poll.py $dir/
-                cp ./generalPython/multi_client_summary.py "$dir/"
-                                
-                # all tasks need go code
-                cp ./goCode/multiClientOP/multiClientOP $dir/
-                cp ./goCode/multiClientOP/main.go $dir/multiClient.go
-
-                
-                if [[ -z "$RESTORE_DIR" ]]; then
-                    cp ./generalPython/setup_collection.py "$dir/"
-
-                    if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
-                        cp ./generalPython/index_data.py "$dir/"
+                        if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
+                            cp ./generalPython/index_data.py "$dir/"
+                        fi
+                    else
+                        cp ./utils/status.py "$dir/"
                     fi
                 else
-                        cp ./utils/status.py "$dir/"
+                    # Copy in mode specific files
+                    if [[ "$MODE" == "STANDALONE" ]]; then
+                        cp sifs/milvus.sif $dir/
+                        cp milvusSetup/standaloneLaunch.sh $dir/
+                        cp milvusSetup/execute.sh $dir/
+
+                    elif [[ "$MODE" == "DISTRIBUTED" ]]; then
+                        cp sifs/milvus.sif $dir/
+                        cp sifs/etcd_v3.5.18.sif $dir/
+                        cp sifs/minio.sif $dir/
+                        cp milvusSetup/execute.sh $dir/
+                        cp milvusSetup/launch_etcd.sh $dir/
+                        cp milvusSetup/launch_minio.sh $dir/
+                        cp milvusSetup/launch_milvus_part.sh $dir/
+                    else
+                        echo "Unknown MODE: $SYSTEM"
+                        exit
+                    fi
+
+                    if [[ "$TRACING" == "True" ]]; then
+                        cp sifs/otel-collector.sif $dir/
+                        cp utils/launch_otel.sh $dir/
+                        cp utils/otel_config.yaml $dir/
+                        cp utils/analyze_traces.py $dir/
+                    fi
+
+                    # Copy in basic python utils
+                    cp generalPython/net_mapping.py $dir/
+                    cp generalPython/replace_unified.py $dir/
+                    cp generalPython/profile.py $dir/
+                    cp generalPython/poll.py $dir/
+                    cp ./generalPython/multi_client_summary.py "$dir/"
+                                    
+                    # all tasks need go code
+                    cp ./goCode/multiClientOP/multiClientOP $dir/
+                    cp ./goCode/multiClientOP/main.go $dir/multiClient.go
+
+                    if [[ -z "$RESTORE_DIR" ]]; then
+                        cp ./generalPython/setup_collection.py "$dir/"
+
+                        if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
+                            cp ./generalPython/index_data.py "$dir/"
+                        fi
+                    else
+                            cp ./utils/status.py "$dir/"
+                    fi
                 fi
 
                 
@@ -420,10 +447,15 @@ do
                 mv $target_file $dir
                 
                 chmod -R g+w $dir
-                cd $dir
-                qsub $target_file
-                sleep 1
-                cd .. 
+
+                if [[ "${RUN_MODE^^}" != "LOCAL" ]]; then
+                    cd $dir
+                    qsub $target_file
+                    sleep 1
+                    cd .. 
+                else
+                    echo "Created local dir ${dir} for testing"
+                fi
             done
         done
     done
