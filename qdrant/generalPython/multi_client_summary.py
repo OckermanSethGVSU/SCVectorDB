@@ -59,7 +59,7 @@ def main():
     clients = n_workers * clients_per_worker
 
     if task == "INSERT":
-        main_name = "upload"
+        main_name = "insert"
         main_prefix = "upload_times"
     else:
         main_name = "query"

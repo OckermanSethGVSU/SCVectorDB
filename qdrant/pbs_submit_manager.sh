@@ -128,8 +128,8 @@ TASK="QUERY" # [INSERT, INDEX, QUERY, MIXED]
 RUN_MODE="local" # [PBS, local]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, TRACE]
-VECTOR_DIM=2560
-DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
+VECTOR_DIM=200
+DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 GPU_INDEX=False
 
 # Aurora
@@ -143,8 +143,8 @@ GPU_INDEX=False
 
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
-INSERT_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy"
-INSERT_CORPUS_SIZE=1000000 # total data to insert
+INSERT_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+INSERT_CORPUS_SIZE=1000 # total data to insert
 INSERT_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 INSERT_CLIENTS_PER_WORKER=4
@@ -173,8 +173,10 @@ INSERT_MODE="MAX" # ["MAX", "RATE"]
 INSERT_OPS_PER_SEC="" # Only needed if we are using INSERT_MODE="RATE"
 QUERY_MODE="MAX" # ["MAX", "RATE"]
 QUERY_OPS_PER_SEC="" # Only needed if we are using QUERY_MODE="RATE"
-
-
+MIXED_CORPUS_SIZE=1000
+MIXED_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+MIXED_QUERY_CLIENTS_PER_WORKER=1
+MIXED_INSERT_CLIENTS_PER_WORKER=1
 
 # Optional but useful:
 COLLECTION_NAME=""
@@ -287,6 +289,7 @@ do
                     echo "myDIR=${dir}" >> $target_file
                 
                     echo "PLATFORM=${PLATFORM}" >> $target_file
+                    echo "QDRANT_EXECUTABLE=${QDRANT_EXECUTABLE}" >> $target_file
                     echo "CORES=${numCores}" >> $target_file
                     echo "TASK=${TASK}" >> $target_file
                     echo "RUN_MODE=${RUN_MODE}" >> $target_file
@@ -310,24 +313,29 @@ do
                     echo "QUERY_CLIENTS_PER_WORKER=${QUERY_CLIENTS_PER_WORKER}" >> $target_file
                     echo "QUERY_BALANCE_STRATEGY=${QUERY_BALANCE_STRATEGY}" >> $target_file
                     
-        
-                    echo "RESULT_PATH=${RESULT_PATH}" >> $target_file
+                    
+                    ## Mixed vars
                     echo "INSERT_MODE=${INSERT_MODE}" >> $target_file
                     echo "INSERT_OPS_PER_SEC=${INSERT_OPS_PER_SEC}" >> $target_file
-	                    echo "INSERT_START_ID=${INSERT_START_ID}" >> $target_file
-                    echo "QUERY_MODE=${QUERY_MODE}" >> $target_file
-                    echo "QUERY_OPS_PER_SEC=${QUERY_OPS_PER_SEC}" >> $target_file
-                    echo "COLLECTION_NAME=${COLLECTION_NAME}" >> $target_file
-                    echo "TOP_K=${TOP_K}" >> $target_file
-                    echo "QUERY_EF_SEARCH=${QUERY_EF_SEARCH}" >> $target_file
-                    echo "RPC_TIMEOUT=${RPC_TIMEOUT}" >> $target_file
+                    echo "MIXED_INSERT_CLIENTS_PER_WORKER=${MIXED_INSERT_CLIENTS_PER_WORKER}" >> $target_file
+                    echo "INSERT_START_ID=${INSERT_START_ID}" >> $target_file
                     echo "INSERT_BATCH_MIN=${INSERT_BATCH_MIN}" >> $target_file
                     echo "INSERT_BATCH_MAX=${INSERT_BATCH_MAX}" >> $target_file
+                    
+                    echo "QUERY_MODE=${QUERY_MODE}" >> $target_file
+                    echo "QUERY_OPS_PER_SEC=${QUERY_OPS_PER_SEC}" >> $target_file
+                    echo "MIXED_QUERY_CLIENTS_PER_WORKER=${MIXED_QUERY_CLIENTS_PER_WORKER}" >> $target_file
+                    echo "QUERY_EF_SEARCH=${QUERY_EF_SEARCH}" >> $target_file
                     echo "QUERY_BATCH_MIN=${QUERY_BATCH_MIN}" >> $target_file
                     echo "QUERY_BATCH_MAX=${QUERY_BATCH_MAX}" >> $target_file
                     
-                            
-                    echo "QDRANT_EXECUTABLE=${QDRANT_EXECUTABLE}" >> $target_file
+                    echo "MIXED_CORPUS_SIZE=${MIXED_CORPUS_SIZE}" >> $target_file
+                    echo "MIXED_DATA_FILEPATH=${MIXED_DATA_FILEPATH}" >> $target_file
+                    echo "RESULT_PATH=${RESULT_PATH}" >> $target_file
+                    echo "COLLECTION_NAME=${COLLECTION_NAME}" >> $target_file
+                    echo "TOP_K=${TOP_K}" >> $target_file
+                    echo "RPC_TIMEOUT=${RPC_TIMEOUT}" >> $target_file
+                                                
                     echo "RESTORE_DIR=${RESTORE_DIR}" >> $target_file
                     echo "EXPECTED_CORPUS_SIZE=${EXPECTED_CORPUS_SIZE}" >> $target_file
 
