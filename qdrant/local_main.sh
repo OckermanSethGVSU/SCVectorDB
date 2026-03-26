@@ -214,8 +214,30 @@ run_mixed() {
     export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:?QUERY_CORPUS_SIZE is required}"
     export INSERT_FILEPATH="${INSERT_FILEPATH:?INSERT_FILEPATH is required}"
     export QUERY_FILEPATH="${QUERY_FILEPATH:?QUERY_FILEPATH is required}"
+    export INSERT_CLIENTS_PER_WORKER="${INSERT_CLIENTS_PER_WORKER:-1}"
+    export QUERY_CLIENTS_PER_WORKER="${QUERY_CLIENTS_PER_WORKER:-1}"
+    export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:-1}"
+    export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:-1}"
     export INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:-NO_BALANCE}"
     export QUERY_BALANCE_STRATEGY="${QUERY_BALANCE_STRATEGY:-NO_BALANCE}"
+    export MIXED_CORPUS_SIZE="${MIXED_CORPUS_SIZE:-$INSERT_CORPUS_SIZE}"
+    export MIXED_DATA_FILEPATH="${MIXED_DATA_FILEPATH:-$INSERT_FILEPATH}"
+    export MIXED_QUERY_CLIENTS_PER_WORKER="${MIXED_QUERY_CLIENTS_PER_WORKER:-$QUERY_CLIENTS_PER_WORKER}"
+    export MIXED_INSERT_CLIENTS_PER_WORKER="${MIXED_INSERT_CLIENTS_PER_WORKER:-$INSERT_CLIENTS_PER_WORKER}"
+    export INSERT_MODE="${INSERT_MODE:-}"
+    export INSERT_OPS_PER_SEC="${INSERT_OPS_PER_SEC:-}"
+    export INSERT_START_ID="${INSERT_START_ID:-0}"
+    export QUERY_MODE="${QUERY_MODE:-}"
+    export QUERY_OPS_PER_SEC="${QUERY_OPS_PER_SEC:-}"
+    export COLLECTION_NAME="${COLLECTION_NAME:-singleShard}"
+    export TOP_K="${TOP_K:-}"
+    export QUERY_EF_SEARCH="${QUERY_EF_SEARCH:-}"
+    export RPC_TIMEOUT="${RPC_TIMEOUT:-}"
+    export QDRANT_REGISTRY_PATH="${QDRANT_REGISTRY_PATH:-$RUN_DIR/ip_registry.txt}"
+    export INSERT_BATCH_MIN="${INSERT_BATCH_MIN:-}"
+    export INSERT_BATCH_MAX="${INSERT_BATCH_MAX:-}"
+    export QUERY_BATCH_MIN="${QUERY_BATCH_MIN:-}"
+    export QUERY_BATCH_MAX="${QUERY_BATCH_MAX:-}"
     mkdir -p "$RESULT_PATH"
     "$MIXED_BINARY_PATH"
 }
@@ -252,6 +274,30 @@ run_index() {
         python3 ./index.py
 }
 
+run_mixed_timeline() {
+    local mixed_timeline_metric="dot"
+    if [[ "$DISTANCE_METRIC" == "COSINE" ]]; then
+        mixed_timeline_metric="cosine"
+    elif [[ "$DISTANCE_METRIC" == "L2" ]]; then
+        mixed_timeline_metric="l2"
+    fi
+
+    local mixed_timeline_args=(
+        ./mixed_timeline.py
+        --log-dir "$RESULT_PATH"
+        --insert-vectors "$MIXED_DATA_FILEPATH"
+        --query-vectors "$QUERY_FILEPATH"
+        --metric "$mixed_timeline_metric"
+        --insert-id-offset "$INSERT_START_ID"
+    )
+    if [[ -z "$RESTORE_DIR" ]]; then
+        mixed_timeline_args+=(--init-vectors "$INSERT_FILEPATH")
+    fi
+
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+        python3 "${mixed_timeline_args[@]}"
+}
+
 main() {
     cd "$RUN_DIR"
     ensure_runtime_tools
@@ -262,12 +308,6 @@ main() {
     if [[ -n "$RESTORE_DIR" ]]; then
         run_restore_status
     else
-        if [[ "$TASK" == "MIXED" || "$WORKLOAD_MODE" == "mixed" ]]; then
-            run_mixed
-            echo "Mixed logs written to: $RESULT_PATH"
-            return 0
-        fi
-
         run_insert
 
         if [[ "$TASK" == "INSERT" ]]; then
@@ -287,12 +327,27 @@ main() {
         if [[ "$TASK" == "QUERY" ]]; then
             run_index
         fi
+
+        if [[ "$TASK" == "MIXED" || "$WORKLOAD_MODE" == "mixed" ]]; then
+            run_index
+            run_mixed
+            run_mixed_timeline
+            echo "Mixed logs written to: $RESULT_PATH"
+            return 0
+        fi
     fi
 
     if [[ "$TASK" == "QUERY" ]]; then
         run_query
         summarize_standard_run
         finalize_local_run
+        return 0
+    fi
+
+    if [[ "$TASK" == "MIXED" || "$WORKLOAD_MODE" == "mixed" ]]; then
+        run_mixed
+        run_mixed_timeline
+        echo "Mixed logs written to: $RESULT_PATH"
         return 0
     fi
 
