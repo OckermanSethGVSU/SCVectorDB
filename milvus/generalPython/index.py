@@ -4,6 +4,13 @@ import time
 import requests
 from pymilvus import MilvusClient
 
+"""
+IMPORTANT NOTE: if the collection was initialized with a FLAT index and this script
+drops that index to rebuild HNSW or GPU_CAGRA on the same vector field, Milvus 2.6.6
+hits a bug that massively degrades query performance. As of March 27th, 2026, that
+bug is not resolved. This workaround is still required for our indexing experiments.
+"""
+
 
 
 def create_index_with_fallback_poll(
@@ -102,6 +109,34 @@ MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "root:Milvus")
 client = MilvusClient(f"http://{MILVUS_HOST}:{MILVUS_GRPC_PORT}", token=MILVUS_TOKEN)
 collection_name = "standalone"
 
+INIT_FLAT_INDEX = os.getenv("INIT_FLAT_INDEX", "TRUE").strip().lower() == "true"
+
+if INIT_FLAT_INDEX:
+    print(
+        "Collection was initialized with a FLAT index; dropping it before building the target index. "
+        "WARNING: this sequence triggers a Milvus bug (as of 03/27/26 and v.2.6.6) that massively degrades query performance.",
+        flush=True,
+    )
+    print(f"Indexes for {collection_name}: ", client.list_indexes(collection_name), flush=True)
+    print(client.describe_index(collection_name, "vector"), flush=True)
+
+    client.release_collection(collection_name=collection_name)
+    client.drop_index(collection_name, "vector")
+
+    while True:
+        idxs = client.list_indexes(collection_name=collection_name)
+        if not idxs:
+            break
+        time.sleep(0.5)
+
+    print(f"Indexes for {collection_name}: ", client.list_indexes(collection_name), flush=True)
+    time.sleep(60)
+else:
+    print(
+        "Collection was initialized without a FLAT index; building the target index directly.",
+        flush=True,
+    )
+
 
 
 index_params = client.prepare_index_params()
@@ -141,7 +176,7 @@ else:
     )
 
 client.flush(collection_name)
-print("Data flushed")
+print("Data flushed", flush=True)
 
 t1 = time.time()
 resp = create_index_with_fallback_poll(client, collection_name, index_params)
@@ -204,10 +239,8 @@ while True:
     time.sleep(5)
 
 
-res = client.describe_collection(
-    collection_name="standalone")
+res = client.describe_collection(collection_name="standalone")
+index_status = client.describe_index(collection_name, 'vector')
 
 print(res,flush=True)
-index_status = client.describe_index(collection_name, 'vector')
 print(index_status, flush=True)
-
