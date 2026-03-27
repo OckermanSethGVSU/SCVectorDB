@@ -19,13 +19,11 @@ def wait_for_milvus(host, port):
     raise RuntimeError("Milvus did not respond in time")
 
 
-MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 def read_ip_from_file(path):
     with open(path, 'r', encoding='utf-8') as f:
         return f.read().strip()
 
 
-# MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_HOST = read_ip_from_file("worker.ip")
 MILVUS_HEALTH_PORT = int(os.getenv("MILVUS_HEALTH_PORT", "9091"))
 MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "20001"))
