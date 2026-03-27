@@ -58,6 +58,7 @@ apply_overrides() {
 
     apply_override_value VECTOR_DIM VECTOR_DIM_OVERRIDE
     apply_override_value DISTANCE_METRIC DISTANCE_METRIC_OVERRIDE
+    apply_override_value INIT_FLAT_INDEX INIT_FLAT_INDEX_OVERRIDE
 
     apply_override_value QUERY_CORPUS_SIZE QUERY_CORPUS_SIZE_OVERRIDE
     apply_override_value QUERY_CLIENTS_PER_PROXY QUERY_CLIENTS_PER_PROXY_OVERRIDE
@@ -97,6 +98,7 @@ print_config_summary() {
     echo "Debug:                    $DEBUG"
     echo "Vector Dim:               $VECTOR_DIM"
     echo "Distance Metric:          $DISTANCE_METRIC"
+    echo "Init Flat Index:          $INIT_FLAT_INDEX"
     echo "GPU Index:                $GPU_INDEX"
 
     case "$TASK" in
@@ -204,6 +206,7 @@ INSERT_BATCH_SIZE=(512)
 # VECTOR_DIM=200
 VECTOR_DIM=200
 DISTANCE_METRIC="IP" # [IP, COSINE, L2]
+INIT_FLAT_INDEX="FALSE" # [TRUE, FALSE]
 
 
 ### QUERY Variables ###
@@ -345,6 +348,7 @@ do
                 
                 echo "VECTOR_DIM=${VECTOR_DIM}" >> $target_file
                 echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
+                echo "INIT_FLAT_INDEX=${INIT_FLAT_INDEX}" >> $target_file
                 echo "GPU_INDEX=${GPU_INDEX}" >> $target_file
                 
                 echo "TRACING=${TRACING}" >> $target_file
