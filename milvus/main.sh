@@ -319,32 +319,25 @@ if [ -z "$RESTORE_DIR" ]; then
 
     if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
         export ACTIVE_TASK="INDEX"
-        touch ./workerOut/workflow_start.txt
-        env "${PYTHON_ENV_VARS[@]}" python3 index_data.py
+        if [[ "$TASK" == "INDEX" ]]; then
+            touch ./workerOut/workflow_start.txt
+        fi
+        env "${PYTHON_ENV_VARS[@]}" python3 index.py
         
         if [[ "$TASK" == "INDEX" ]]; then
             touch ./workerOut/workflow_end.txt
             touch flag.txt
         fi
     fi
-
-
-
-    sleep 60
-
-    
-
+    sleep 30
 else
     export EXPECTED_CORPUS_SIZE=$EXPECTED_CORPUS_SIZE
-
-    export ACTIVE_TASK="QUERY"
     export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
     export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
     export QUERY_CLIENTS_PER_PROXY=$QUERY_CLIENTS_PER_PROXY
     export QUERY_DATA_FILEPATH=$QUERY_DATA_FILEPATH
     export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
     env "${PYTHON_ENV_VARS[@]}" python3 status.py
-    # sleep 300
 
 fi
 

@@ -165,13 +165,13 @@ queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
 # Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
 ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
-MILVUS_BUILD_DIR="cpuMilvus" # Name of the directory with your build: traceMilvus, cpuMilvus
+MILVUS_BUILD_DIR="" # Name of the directory with your build: traceMilvus, cpuMilvus
 MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the dir containing the yaml file
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 TASK="QUERY" # [INSERT, INDEX, QUERY]
-RUN_MODE="local" # [PBS, local]
+RUN_MODE="PBS" # [PBS, local]
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
@@ -183,7 +183,7 @@ BASE_DIR="$(pwd)"
 
 ### Insertion Variables ### 
 INSERT_CORPUS_SIZE=10000000 # total data to insert
-INSERT_CLIENTS_PER_PROXY=1
+INSERT_CLIENTS_PER_PROXY=4
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 # Aurora
     # 10 million 
@@ -195,12 +195,12 @@ INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
     #     Yandex: /eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
-INSERT_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy"
+INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 # best batch for 32 clients: 128
-INSERT_BATCH_SIZE=(32)
+INSERT_BATCH_SIZE=(512)
 # VECTOR_DIM=200
 VECTOR_DIM=200
 DISTANCE_METRIC="IP" # [IP, COSINE, L2]
@@ -220,16 +220,16 @@ QUERY_BATCH_SIZE=(512)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
 # QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
 # QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
-QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
 
 
 # Polaris: TODO
 # Aurora: 
 #   Yandex: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex
 #   pes2o: /lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o
-RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex"
+# RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/yandex"
 # RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o"
-# RESTORE_DIR=""
+RESTORE_DIR=""
 EXPECTED_CORPUS_SIZE=10000000
 
 
@@ -385,10 +385,10 @@ do
                     cp ./generalPython/multi_client_summary.py "$dir/"
 
                     if [[ -z "$RESTORE_DIR" ]]; then
-                        cp ./generalPython/setup_collection.py "$dir/"
+                        cp ./generalPython/query_setup_collection.py "$dir/"
 
                         if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
-                            cp ./generalPython/index_data.py "$dir/"
+                            cp ./generalPython/index.py "$dir/"
                         fi
                     else
                         cp ./utils/status.py "$dir/"
@@ -396,7 +396,8 @@ do
                 else
                     # Copy in mode specific files
                     if [[ "$MODE" == "STANDALONE" ]]; then
-                        cp sifs/milvus.sif $dir/
+                        # cp sifs/milvus.sif $dir/
+                        cp sifs/milvus-2.6.6.sif $dir/milvus.sif
                         cp milvusSetup/standaloneLaunch.sh $dir/
                         cp milvusSetup/execute.sh $dir/
 
@@ -435,7 +436,7 @@ do
                         cp ./generalPython/setup_collection.py "$dir/"
 
                         if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
-                            cp ./generalPython/index_data.py "$dir/"
+                            cp ./generalPython/index.py "$dir/"
                         fi
                     else
                             cp ./utils/status.py "$dir/"
@@ -450,7 +451,7 @@ do
 
                 if [[ "${RUN_MODE^^}" != "LOCAL" ]]; then
                     cd $dir
-                    qsub $target_file
+                    # qsub $target_file
                     sleep 1
                     cd .. 
                 else
