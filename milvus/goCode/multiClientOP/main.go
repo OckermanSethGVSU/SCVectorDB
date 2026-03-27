@@ -61,6 +61,12 @@ type NodeInfo struct {
 	Port int
 }
 
+type SweepConfig struct {
+	BatchSize  int
+	ResultPath string
+	Label      string
+}
+
 func getNodeByRank(filename string, targetRank int) (*NodeInfo, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -273,6 +279,39 @@ func getEnvIntDefault(defaultValue int, names ...string) int {
 	return defaultValue
 }
 
+func parseBatchSizes(raw string) ([]int, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, fmt.Errorf("empty batch size")
+	}
+
+	if single, err := strconv.Atoi(trimmed); err == nil {
+		if single <= 0 {
+			return nil, fmt.Errorf("invalid batch size %q", raw)
+		}
+		return []int{single}, nil
+	}
+
+	cleaned := strings.Trim(trimmed, "()[]")
+	fields := strings.FieldsFunc(cleaned, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n'
+	})
+	if len(fields) == 0 {
+		return nil, fmt.Errorf("invalid batch size list %q", raw)
+	}
+
+	sizes := make([]int, 0, len(fields))
+	for _, field := range fields {
+		value, err := strconv.Atoi(field)
+		if err != nil || value <= 0 {
+			return nil, fmt.Errorf("invalid batch size entry %q in %q", field, raw)
+		}
+		sizes = append(sizes, value)
+	}
+
+	return sizes, nil
+}
+
 func crossedInsertMilestones(batchStart, batchEnd, interval int) []int {
 	if interval <= 0 || batchEnd <= batchStart {
 		return nil
@@ -292,13 +331,14 @@ func crossedInsertMilestones(batchStart, batchEnd, interval int) []int {
 
 func clientWorker(
 	wg *sync.WaitGroup,
-	barrier *Barrier,
-	sharedTiming *SharedTiming,
 	workerRank int,
 	clientID int,
 	clientsPerWorker int,
 	totalRows int,
 	matrix [][]float32,
+	sweeps []SweepConfig,
+	barriers []*Barrier,
+	sharedTimings []*SharedTiming,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -324,11 +364,6 @@ func clientWorker(
 	nWorkersStr := os.Getenv("NUM_PROXIES")
 	nWorkers, err := strconv.Atoi(nWorkersStr)
 
-	RESULT_PATH := os.Getenv("RESULT_PATH")
-	if RESULT_PATH == "" {
-		log.Fatalf("invalid RESULT_PATH=%q", RESULT_PATH)
-	}
-
 	// ----- slice assignment: worker slice, then client slice within worker -----
 	workerStart, workerEnd := splitRange(totalRows, nWorkers, workerRank)
 	workerLen := workerEnd - workerStart
@@ -339,21 +374,10 @@ func clientWorker(
 
 	local := matrix[startIdx:endIdx]
 	localRows := len(local)
-
-	if localRows == 0 {
-		// Still participate in barriers to avoid deadlock.
-		sharedTiming.MarkClientReady()
-		barrier.Wait()
-		barrier.Wait()
-		barrier.Wait()
-		sharedTiming.WaitSearchable()
-		barrier.Wait()
-		barrier.Wait()
-		return
-
+	mcols := 0
+	if localRows > 0 {
+		mcols = len(local[0])
 	}
-
-	mcols := len(local[0])
 
 	// ----- Target Milvus Proxy  -----
 	balanceEnv := fmt.Sprintf("%s_BALANCE_STRATEGY", ACTIVE_TASK)
@@ -381,13 +405,6 @@ func clientWorker(
 	MILVUS_HOST := node.IP
 	MILVUS_PORT := node.Port
 
-	batchEnv := fmt.Sprintf("%s_BATCH_SIZE", ACTIVE_TASK)
-	batchSizeStr := os.Getenv(batchEnv)
-	BATCH_SIZE, err := strconv.Atoi(batchSizeStr)
-	if err != nil || BATCH_SIZE <= 0 {
-		log.Fatalf("invalid %s=%q", batchEnv, batchSizeStr)
-	}
-
 	url := fmt.Sprintf("http://%s:%d", MILVUS_HOST, MILVUS_PORT)
 	mclient, err := milvusclient.New(ctx, &milvusclient.ClientConfig{
 		Address:     url,
@@ -412,17 +429,6 @@ func clientWorker(
 		WithIDs(column.NewColumnInt64("id", []int64{localLastID})).
 		WithConsistencyLevel(entity.ClStrong)
 
-	fmt.Printf(
-		"Proxy=%d client=%d global_client=%d assigned [%d,%d) rows=%d batch=%d\n",
-		workerRank, clientID, globalClientRank, startIdx, endIdx, localRows, BATCH_SIZE,
-	)
-
-	var (
-		totalDurations   []float64
-		convertDurations []float64
-		uploadDurations  []float64
-	)
-
 	if tracingEnabled && (ACTIVE_TASK == TASK) {
 		tracer := otel.Tracer("milvus-client")
 		ctx, span = tracer.Start(ctx, fmt.Sprintf("MilvusClient-rank-%d", globalClientRank))
@@ -437,228 +443,245 @@ func clientWorker(
 			)
 		}
 	}
-	// Barrier before inserting
-	barrier.Wait()
+	for sweepIdx, sweep := range sweeps {
+		barrier := barriers[sweepIdx]
+		sharedTiming := sharedTimings[sweepIdx]
 
-	// let perf know that it should start tracking
-	if (ACTIVE_TASK == TASK) && globalClientRank == 0 {
-		file, err := os.Create("./workerOut/workflow_start.txt")
-		if err != nil {
-			log.Fatalf("failed to create file: %v", err)
-		}
-		file.Close()
+		fmt.Printf(
+			"Proxy=%d client=%d global_client=%d assigned [%d,%d) rows=%d batch=%d sweep=%s\n",
+			workerRank, clientID, globalClientRank, startIdx, endIdx, localRows, sweep.BatchSize, sweep.Label,
+		)
 
-		time.Sleep(2 * time.Second) // give perf a momement to attach
-	}
+		var (
+			totalDurations   []float64
+			convertDurations []float64
+			uploadDurations  []float64
+		)
 
-	barrier.Wait()
-
-	sharedTiming.MarkLoopStart()
-	startLoop := time.Now()
-	for i := 0; i < localRows; i += BATCH_SIZE {
-		end := i + BATCH_SIZE
-		if end > localRows {
-			end = localRows
-		}
-
-		startTotal := time.Now()
-		batch := local[i:end]
-
-		var milestones []int
-		if ldebugfEnabled {
-			if i == 0 {
-				milestones = append(milestones, 0)
-			}
-			milestones = append(milestones, crossedInsertMilestones(i, end, 1000)...)
-			for _, milestone := range milestones {
-				log.Printf(
-					"DEBUG: before op worker=%d client=%d global_client=%d target_proxy=%s:%d local_inserted=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
-					workerRank, clientID, globalClientRank, MILVUS_HOST, MILVUS_PORT, milestone, startIdx+i, len(batch), i, end,
-				)
-			}
+		if localRows == 0 {
+			sharedTiming.MarkClientReady()
+			barrier.Wait()
+			barrier.Wait()
+			barrier.Wait()
+			sharedTiming.WaitSearchable()
+			barrier.Wait()
+			barrier.Wait()
+			continue
 		}
 
-		// make sure RPC does not time out under load
-		opCtx, opCancel := context.WithTimeout(ctx, 30*time.Minute)
+		// Barrier before inserting/searching for this sweep.
+		barrier.Wait()
 
-		var err error
-		var queryResults []milvusclient.ResultSet
-		var startUpload time.Time
-
-		if ACTIVE_TASK == "INSERT" {
-			ids := make([]int64, len(batch))
-			for j := range ids {
-				absIdx := startIdx + i + j
-				ids[j] = int64(absIdx)
-			}
-
-			startUpload = time.Now()
-			_, err = mclient.Insert(
-				opCtx,
-				milvusclient.NewColumnBasedInsertOption(collectionName).
-					WithInt64Column(idField, ids).
-					WithFloatVectorColumn(vectorField, mcols, batch),
-			)
-		} else if ACTIVE_TASK == "QUERY" {
-			vectors := make([]entity.Vector, len(batch))
-			for j := range batch {
-				vectors[j] = entity.FloatVector(batch[j])
-			}
-
-			searchOpt := milvusclient.NewSearchOption(collectionName, 10, vectors).
-				WithANNSField(vectorField).
-				WithSearchParam("ef", strconv.Itoa(efSearch))
-
-			startUpload = time.Now()
-			queryResults, err = mclient.Search(opCtx, searchOpt)
-		} else {
-			log.Fatalf("unknown ACTIVE_TASK=%s", ACTIVE_TASK)
-		}
-
-		opCancel()
-		if err != nil {
-			log.Fatalf("op failed worker=%d client=%d absRowStart=%d: %v", workerRank, clientID, startIdx+i, err)
-		}
-		if ldebugfEnabled {
-			for _, milestone := range milestones {
-				log.Printf(
-					"DEBUG op succeeded worker=%d client=%d global_client=%d target_proxy=%s:%d local_count=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d)",
-					workerRank, clientID, globalClientRank, MILVUS_HOST, MILVUS_PORT, milestone, startIdx+i, len(batch), i, end,
-				)
-			}
-			if ACTIVE_TASK == "QUERY" && len(queryResults) > 0 {
-				log.Printf(
-					"DEBUG query sample worker=%d client=%d result_count=%d ids=%v scores=%v",
-					workerRank, clientID, queryResults[0].ResultCount, queryResults[0].IDs, queryResults[0].Scores,
-				)
-			}
-		}
-		endUpload := time.Now()
-
-		convertDurations = append(convertDurations, startUpload.Sub(startTotal).Seconds())
-		uploadDurations = append(uploadDurations, endUpload.Sub(startUpload).Seconds())
-		totalDurations = append(totalDurations, endUpload.Sub(startTotal).Seconds())
-	}
-	endLoop := time.Now()
-	// Wait for everyone to finish inserting
-	barrier.Wait()
-
-	// Insert a final value so we can measure when it has been processed
-	sentinelID := int64(totalRows) // unique
-	if globalClientRank == 0 {
-
-		if TASK == "INSERT" {
-			vec := make([]float32, mcols)
-			_, err := mclient.Insert(
-				ctx,
-				milvusclient.NewColumnBasedInsertOption(collectionName).
-					WithInt64Column(idField, []int64{sentinelID}).
-					WithFloatVectorColumn(vectorField, mcols, [][]float32{vec}),
-			)
+		// Preserve the existing perf marker behavior for the single-sweep case.
+		if len(sweeps) == 1 && (ACTIVE_TASK == TASK) && globalClientRank == 0 {
+			file, err := os.Create("./workerOut/workflow_start.txt")
 			if err != nil {
-				log.Printf("sentinel insert failed: %v", err)
+				log.Fatalf("failed to create file: %v", err)
+			}
+			file.Close()
+
+			time.Sleep(2 * time.Second)
+		}
+
+		barrier.Wait()
+
+		sharedTiming.MarkLoopStart()
+		startLoop := time.Now()
+		for i := 0; i < localRows; i += sweep.BatchSize {
+			end := i + sweep.BatchSize
+			if end > localRows {
+				end = localRows
 			}
 
-			ok := waitForLocalLastIDSearchable(ctx, mclient, collectionName, idField, sentinelID)
-			if !ok {
-				log.Printf("Timed out waiting for sentinel visibility id=%d", sentinelID)
+			startTotal := time.Now()
+			batch := local[i:end]
+
+			var milestones []int
+			if ldebugfEnabled {
+				if i == 0 {
+					milestones = append(milestones, 0)
+				}
+				milestones = append(milestones, crossedInsertMilestones(i, end, 1000)...)
+				for _, milestone := range milestones {
+					log.Printf(
+						"DEBUG: before op worker=%d client=%d global_client=%d target_proxy=%s:%d local_inserted=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d) sweep=%s",
+						workerRank, clientID, globalClientRank, MILVUS_HOST, MILVUS_PORT, milestone, startIdx+i, len(batch), i, end, sweep.Label,
+					)
+				}
+			}
+
+			opCtx, opCancel := context.WithTimeout(ctx, 30*time.Minute)
+
+			var err error
+			var queryResults []milvusclient.ResultSet
+			var startUpload time.Time
+
+			if ACTIVE_TASK == "INSERT" {
+				ids := make([]int64, len(batch))
+				for j := range ids {
+					absIdx := startIdx + i + j
+					ids[j] = int64(absIdx)
+				}
+
+				startUpload = time.Now()
+				_, err = mclient.Insert(
+					opCtx,
+					milvusclient.NewColumnBasedInsertOption(collectionName).
+						WithInt64Column(idField, ids).
+						WithFloatVectorColumn(vectorField, mcols, batch),
+				)
+			} else if ACTIVE_TASK == "QUERY" {
+				vectors := make([]entity.Vector, len(batch))
+				for j := range batch {
+					vectors[j] = entity.FloatVector(batch[j])
+				}
+
+				searchOpt := milvusclient.NewSearchOption(collectionName, 10, vectors).
+					WithANNSField(vectorField).
+					WithConsistencyLevel(entity.ClBounded).
+					WithSearchParam("ef", strconv.Itoa(efSearch))
+
+				startUpload = time.Now()
+				queryResults, err = mclient.Search(opCtx, searchOpt)
+			} else {
+				log.Fatalf("unknown ACTIVE_TASK=%s", ACTIVE_TASK)
+			}
+
+			opCancel()
+			if err != nil {
+				log.Fatalf("op failed worker=%d client=%d absRowStart=%d sweep=%s: %v", workerRank, clientID, startIdx+i, sweep.Label, err)
+			}
+			if ldebugfEnabled {
+				for _, milestone := range milestones {
+					log.Printf(
+						"DEBUG op succeeded worker=%d client=%d global_client=%d target_proxy=%s:%d local_count=%d abs_row_start=%d batch_rows=%d batch_local_range=[%d,%d) sweep=%s",
+						workerRank, clientID, globalClientRank, MILVUS_HOST, MILVUS_PORT, milestone, startIdx+i, len(batch), i, end, sweep.Label,
+					)
+				}
+				if ACTIVE_TASK == "QUERY" && len(queryResults) > 0 {
+					log.Printf(
+						"DEBUG query sample worker=%d client=%d result_count=%d ids=%v scores=%v sweep=%s",
+						workerRank, clientID, queryResults[0].ResultCount, queryResults[0].IDs, queryResults[0].Scores, sweep.Label,
+					)
+				}
+			}
+			endUpload := time.Now()
+
+			convertDurations = append(convertDurations, startUpload.Sub(startTotal).Seconds())
+			uploadDurations = append(uploadDurations, endUpload.Sub(startUpload).Seconds())
+			totalDurations = append(totalDurations, endUpload.Sub(startTotal).Seconds())
+		}
+		endLoop := time.Now()
+		barrier.Wait()
+
+		sentinelID := int64(totalRows)
+		if globalClientRank == 0 {
+			if TASK == "INSERT" {
+				vec := make([]float32, mcols)
+				_, err := mclient.Insert(
+					ctx,
+					milvusclient.NewColumnBasedInsertOption(collectionName).
+						WithInt64Column(idField, []int64{sentinelID}).
+						WithFloatVectorColumn(vectorField, mcols, [][]float32{vec}),
+				)
+				if err != nil {
+					log.Printf("sentinel insert failed: %v", err)
+				}
+
+				ok := waitForLocalLastIDSearchable(ctx, mclient, collectionName, idField, sentinelID)
+				if !ok {
+					log.Printf("Timed out waiting for sentinel visibility id=%d", sentinelID)
+				}
+			}
+			sharedTiming.MarkSearchable()
+		}
+
+		sharedTiming.WaitSearchable()
+		searchableAtClient := time.Now()
+
+		if strings.ToLower(tracing) == "true" && sweepIdx == len(sweeps)-1 {
+			span.End()
+		}
+
+		if len(sweeps) == 1 && ACTIVE_TASK == TASK && globalClientRank == 0 {
+			file, err := os.Create("./workerOut/workflow_end.txt")
+			if err != nil {
+				log.Fatalf("failed to create file: %v", err)
+			}
+			file.Close()
+		}
+		barrier.Wait()
+
+		localExists := false
+		if TASK == "INSERT" && localRows > 0 {
+			localRes, localErr := mclient.Get(ctx, localOpt)
+			localExists = (localErr == nil && localRes.ResultCount == 1)
+			if localErr != nil {
+				log.Printf("Local sanity check failed worker=%d client=%d localLastID=%d: %v",
+					workerRank, clientID, localLastID, localErr)
 			}
 		}
-		sharedTiming.MarkSearchable()
-	}
 
-	sharedTiming.WaitSearchable()
-	searchableAtClient := time.Now()
+		globalExists := false
+		if TASK == "INSERT" {
+			globalRes, globalErr := mclient.Get(ctx, globalOpt)
+			globalExists = (globalErr == nil && globalRes.ResultCount == 1)
+			if globalErr != nil {
+				log.Printf("Global sanity check failed worker=%d client=%d lastID=%d: %v",
+					workerRank, clientID, lastID, globalErr)
+			}
+		}
 
-	// end tracing
-	if strings.ToLower(tracing) == "true" {
-		span.End()
-	}
+		barrier.Wait()
 
-	// tell perf to stop tracking
-	if ACTIVE_TASK == TASK && globalClientRank == 0 {
-		file, err := os.Create("./workerOut/workflow_end.txt")
+		loopDuration := endLoop.Sub(startLoop).Seconds()
+		waitDuration := searchableAtClient.Sub(endLoop).Seconds()
+		clientTotalToSearchable := searchableAtClient.Sub(startLoop).Seconds()
+		sharedWindow := sharedTiming.searchableAt.Sub(sharedTiming.loopStart).Seconds()
+
+		time.Sleep(time.Second * time.Duration(globalClientRank*2))
+
+		file, err := os.OpenFile(sweep.ResultPath+"/times.csv", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
-			log.Fatalf("failed to create file: %v", err)
+			log.Fatal(err)
 		}
-		file.Close()
-	}
-	barrier.Wait()
 
-	// local sanity (skip if no rows)
-	localExists := false
-	if TASK == "INSERT" && localRows > 0 {
-		localRes, localErr := mclient.Get(ctx, localOpt)
-		localExists = (localErr == nil && localRes.ResultCount == 1)
-		if localErr != nil {
-			log.Printf("Local sanity check failed worker=%d client=%d localLastID=%d: %v",
-				workerRank, clientID, localLastID, localErr)
+		writer := csv.NewWriter(file)
+
+		if globalClientRank == 0 {
+			_ = writer.Write([]string{
+				"worker", "client", "global_client",
+				"start_idx", "end_idx",
+				"local_sanity_check", "global_sanity_check",
+				"loop_duration", "wait_after_loop", "client_total_to_searchable",
+				"shared_loop_start_to_searchable",
+			})
 		}
-	} else {
-		localExists = false
-	}
-
-	globalExists := false
-	if TASK == "INSERT" {
-		// global sanity (spot check)
-		globalRes, globalErr := mclient.Get(ctx, globalOpt)
-		globalExists = (globalErr == nil && globalRes.ResultCount == 1)
-		if globalErr != nil {
-			log.Printf("Global sanity check failed worker=%d client=%d lastID=%d: %v",
-				workerRank, clientID, lastID, globalErr)
-		}
-	}
-
-	barrier.Wait()
-
-	loopDuration := endLoop.Sub(startLoop).Seconds()
-	waitDuration := searchableAtClient.Sub(endLoop).Seconds()
-	clientTotalToSearchable := searchableAtClient.Sub(startLoop).Seconds()
-	sharedWindow := sharedTiming.searchableAt.Sub(sharedTiming.loopStart).Seconds()
-
-	// stagger file writes a bit
-	time.Sleep(time.Second * time.Duration(globalClientRank*2))
-
-	file, err := os.OpenFile(RESULT_PATH+"/times.csv", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	if globalClientRank == 0 {
 		_ = writer.Write([]string{
-			"worker", "client", "global_client",
-			"start_idx", "end_idx",
-			"local_sanity_check", "global_sanity_check",
-			"loop_duration", "wait_after_loop", "client_total_to_searchable",
-			"shared_loop_start_to_searchable",
+			strconv.Itoa(workerRank),
+			strconv.Itoa(clientID),
+			strconv.Itoa(globalClientRank),
+			strconv.Itoa(startIdx),
+			strconv.Itoa(endIdx),
+			strconv.FormatBool(localExists),
+			strconv.FormatBool(globalExists),
+			strconv.FormatFloat(loopDuration, 'g', -1, 64),
+			strconv.FormatFloat(waitDuration, 'g', -1, 64),
+			strconv.FormatFloat(clientTotalToSearchable, 'g', -1, 64),
+			strconv.FormatFloat(sharedWindow, 'g', -1, 64),
 		})
+		writer.Flush()
+		file.Close()
+
+		w1, _ := gonpy.NewFileWriter(fmt.Sprintf(sweep.ResultPath+"/batch_construction_times_w%d_c%d.npy", workerRank, clientID))
+		_ = w1.WriteFloat64(convertDurations)
+
+		w2, _ := gonpy.NewFileWriter(fmt.Sprintf(sweep.ResultPath+"/upload_times_w%d_c%d.npy", workerRank, clientID))
+		_ = w2.WriteFloat64(uploadDurations)
+
+		w3, _ := gonpy.NewFileWriter(fmt.Sprintf(sweep.ResultPath+"/op_times_w%d_c%d.npy", workerRank, clientID))
+		_ = w3.WriteFloat64(totalDurations)
 	}
-	_ = writer.Write([]string{
-		strconv.Itoa(workerRank),
-		strconv.Itoa(clientID),
-		strconv.Itoa(globalClientRank),
-		strconv.Itoa(startIdx),
-		strconv.Itoa(endIdx),
-		strconv.FormatBool(localExists),
-		strconv.FormatBool(globalExists),
-		strconv.FormatFloat(loopDuration, 'g', -1, 64),
-		strconv.FormatFloat(waitDuration, 'g', -1, 64),
-		strconv.FormatFloat(clientTotalToSearchable, 'g', -1, 64),
-		strconv.FormatFloat(sharedWindow, 'g', -1, 64),
-	})
-
-	w1, _ := gonpy.NewFileWriter(fmt.Sprintf(RESULT_PATH+"/batch_construction_times_w%d_c%d.npy", workerRank, clientID))
-	_ = w1.WriteFloat64(convertDurations)
-
-	w2, _ := gonpy.NewFileWriter(fmt.Sprintf(RESULT_PATH+"/upload_times_w%d_c%d.npy", workerRank, clientID))
-	_ = w2.WriteFloat64(uploadDurations)
-
-	w3, _ := gonpy.NewFileWriter(fmt.Sprintf(RESULT_PATH+"/op_times_w%d_c%d.npy", workerRank, clientID))
-	_ = w3.WriteFloat64(totalDurations)
 }
 
 func main() {
@@ -674,6 +697,11 @@ func main() {
 	if activeTask == "" && task == "" {
 		log.Fatal("ACTIVE_TASK and TASK environment variables are not set")
 	}
+	if activeTask == "" {
+		activeTask = task
+	}
+
+	fmt.Printf("Active task: %s (TASK=%s)\n", activeTask, task)
 
 	clientsEnv := fmt.Sprintf("%s_CLIENTS_PER_PROXY", activeTask)
 	clientsStr := os.Getenv(clientsEnv)
@@ -697,16 +725,46 @@ func main() {
 
 	batchEnv := fmt.Sprintf("%s_BATCH_SIZE", activeTask)
 	batchSizeStr := os.Getenv(batchEnv)
-	BATCH_SIZE, err := strconv.Atoi(batchSizeStr)
-	if err != nil || BATCH_SIZE <= 0 {
-		log.Fatalf("invalid %s=%q", batchEnv, batchSizeStr)
+	batchSizes, err := parseBatchSizes(batchSizeStr)
+	if err != nil {
+		log.Fatalf("invalid %s=%q: %v", batchEnv, batchSizeStr, err)
+	}
+
+	resultPath := os.Getenv("RESULT_PATH")
+	if resultPath == "" {
+		log.Fatalf("invalid RESULT_PATH=%q", resultPath)
+	}
+
+	sweeps := make([]SweepConfig, 0, len(batchSizes))
+	if len(batchSizes) == 1 {
+		sweeps = append(sweeps, SweepConfig{
+			BatchSize:  batchSizes[0],
+			ResultPath: resultPath,
+			Label:      fmt.Sprintf("batch_%d", batchSizes[0]),
+		})
+	} else {
+		if strings.ToUpper(activeTask) != "QUERY" {
+			log.Fatalf("%s only supports batch size lists for QUERY", batchEnv)
+		}
+
+		for idx, batchSize := range batchSizes {
+			subdir := fmt.Sprintf("%s/query_batch_%d_run_%02d", resultPath, batchSize, idx)
+			if err := os.MkdirAll(subdir, 0755); err != nil {
+				log.Fatalf("failed to create result dir %s: %v", subdir, err)
+			}
+			sweeps = append(sweeps, SweepConfig{
+				BatchSize:  batchSize,
+				ResultPath: subdir,
+				Label:      fmt.Sprintf("batch_%d_run_%02d", batchSize, idx),
+			})
+		}
 	}
 
 	totalClients := nWorkers * clientsPerWorker
 
 	fmt.Printf(
-		"CORPUS_SIZE=%d nProxies=%d clientsPerProxy=%d totalClients=%d DATA_FILEPATH=%s\n",
-		CORPUS_SIZE, nWorkers, clientsPerWorker, totalClients, DATA_PATH,
+		"CORPUS_SIZE=%d nProxies=%d clientsPerProxy=%d totalClients=%d DATA_FILEPATH=%s batch_sweeps=%v\n",
+		CORPUS_SIZE, nWorkers, clientsPerWorker, totalClients, DATA_PATH, batchSizes,
 	)
 
 	tracing := os.Getenv("TRACING")
@@ -749,13 +807,17 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
-	barrier := NewBarrier(totalClients)
-	sharedTiming := NewSharedTiming(totalClients)
+	barriers := make([]*Barrier, len(sweeps))
+	sharedTimings := make([]*SharedTiming, len(sweeps))
+	for i := range sweeps {
+		barriers[i] = NewBarrier(totalClients)
+		sharedTimings[i] = NewSharedTiming(totalClients)
+	}
 
 	for w := 0; w < nWorkers; w++ {
 		for c := 0; c < clientsPerWorker; c++ {
 			wg.Add(1)
-			go clientWorker(&wg, barrier, sharedTiming, w, c, clientsPerWorker, CORPUS_SIZE, matrix)
+			go clientWorker(&wg, w, c, clientsPerWorker, CORPUS_SIZE, matrix, sweeps, barriers, sharedTimings)
 		}
 	}
 
