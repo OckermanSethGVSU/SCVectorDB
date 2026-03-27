@@ -3,6 +3,7 @@ import json
 import time
 import requests
 from pymilvus import MilvusClient
+import time
 
 def wait_for_milvus(host, port):
     print(f"Waiting for Milvus at {host}:{port}...")
@@ -37,6 +38,33 @@ client = MilvusClient(f"http://{MILVUS_HOST}:{MILVUS_GRPC_PORT}", token=MILVUS_T
 collection_name = "standalone"
 client.load_collection("standalone")
 
+timeout = 20 * 60
+start = time.time()
+last_print = 0  # track last time we printed
+
+while True:
+    res = client.get_load_state(
+        collection_name=collection_name
+    )
+
+    state = res.get("state", "")
+
+    now = time.time()
+
+    # print once per minute
+    if now - last_print >= 60:
+        elapsed = int(now - start)
+        print(f"[{elapsed}s] Load state: {state}", flush=True)
+        last_print = now
+
+    if "Loaded" in str(state):
+        print(f"[{int(now - start)}s] Collection fully loaded",flush=True)
+        break
+
+    if now - start > timeout:
+        raise TimeoutError("Collection did not finish loading",flush=True)
+
+    time.sleep(3)
 
 
 
@@ -74,11 +102,6 @@ while True:
     else:
         time.sleep(10)
 
-
-
-
-client.load_collection("standalone")
-
 while True:
     res = client.get_load_state(collection_name=collection_name)
     if "Loaded" in str(res.get("state", "")):
@@ -86,10 +109,8 @@ while True:
     time.sleep(5)
 
 
-res = client.describe_collection(
-    collection_name="standalone"
-)
+res = client.describe_collection(collection_name="standalone")
+index_status = client.describe_index(collection_name, 'vector')
 
 print(res,flush=True)
-index_status = client.describe_index(collection_name, 'vector')
 print(index_status, flush=True)
