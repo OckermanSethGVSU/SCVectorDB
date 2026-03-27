@@ -224,8 +224,6 @@ if [[ "$TASK" == "MIXED" ]]; then
     export ACTIVE_TASK="MIXED"
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixedRunner
 
-    python3 multi_client_summary.py
-
     MIXED_TIMELINE_METRIC="dot"
     if [[ "$DISTANCE_METRIC" == "COSINE" ]]; then
         MIXED_TIMELINE_METRIC="cosine"
@@ -237,12 +235,17 @@ if [[ "$TASK" == "MIXED" ]]; then
         mixed_timeline.py
         --log-dir "$RESULT_PATH"
         --insert-vectors "$MIXED_DATA_FILEPATH"
+        --insert-max-rows "$MIXED_CORPUS_SIZE"
         --query-vectors "$QUERY_FILEPATH"
+        --query-max-rows "$QUERY_CORPUS_SIZE"
         --metric "$MIXED_TIMELINE_METRIC"
         --insert-id-offset "$INSERT_START_ID"
     )
     if [[ -z "$RESTORE_DIR" ]]; then
-        MIXED_TIMELINE_ARGS+=(--init-vectors "$INSERT_FILEPATH")
+        MIXED_TIMELINE_ARGS+=(
+            --init-vectors "$INSERT_FILEPATH"
+            --init-max-rows "$INSERT_CORPUS_SIZE"
+        )
     fi
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 "${MIXED_TIMELINE_ARGS[@]}"
 

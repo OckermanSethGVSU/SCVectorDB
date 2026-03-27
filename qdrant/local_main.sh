@@ -286,12 +286,17 @@ run_mixed_timeline() {
         ./mixed_timeline.py
         --log-dir "$RESULT_PATH"
         --insert-vectors "$MIXED_DATA_FILEPATH"
+        --insert-max-rows "$MIXED_CORPUS_SIZE"
         --query-vectors "$QUERY_FILEPATH"
+        --query-max-rows "$QUERY_CORPUS_SIZE"
         --metric "$mixed_timeline_metric"
         --insert-id-offset "$INSERT_START_ID"
     )
     if [[ -z "$RESTORE_DIR" ]]; then
-        mixed_timeline_args+=(--init-vectors "$INSERT_FILEPATH")
+        mixed_timeline_args+=(
+            --init-vectors "$INSERT_FILEPATH"
+            --init-max-rows "$INSERT_CORPUS_SIZE"
+        )
     fi
 
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
