@@ -5,6 +5,14 @@ import requests
 from pymilvus import MilvusClient
 
 
+"""
+IMPORTANT NOTE: this sequence of dropping the collection on the vector field to rebuild an HNSW on the same vector field
+causes a bug that massively degrades query performance with Milvus 2.6.6. As of March 27th, 2026, the bug is not resolved. 
+This script should not be used in production, but it is kept for archival purposes because it was used for our indexing experiments.
+"""
+
+
+
 
 def create_index_with_fallback_poll(
     client,
@@ -177,7 +185,8 @@ if GPU_INDEX:
     params={
         "intermediate_graph_degree": 64,
         "graph_degree": 16,
-    }
+    },
+    mmap_enabled=False,
     )
 else: 
     index_params.add_index(
@@ -187,7 +196,8 @@ else:
         params={
             "M":16,
             "efConstruction": 100
-            }                 # FLAT doesn't need extra params
+            },                # FLAT doesn't need extra params
+        mmap_enabled=False,
     )
 
 # client.flush(collection_name)
