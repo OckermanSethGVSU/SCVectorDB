@@ -1,3 +1,4 @@
+import bisect
 import argparse
 import csv
 import json
@@ -6,6 +7,9 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
+
+DEFAULT_VISIBILITY_LAGS_MS = [0.0, 1.0, 5.0, 25.0, 100.0, 500.0, 1000.0, 5000.0, 10000.0]
+RECALL_CANDIDATE_CHUNK_SIZE = 16384
 
 
 @dataclass(frozen=True)
@@ -44,6 +48,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--query-vectors", required=True, help="Query vector matrix (.npy)")
     parser.add_argument("--init-vectors", default=None, help="Optional initial visible vector matrix (.npy)")
     parser.add_argument(
+        "--insert-max-rows",
+        type=int,
+        default=None,
+        help="Optional row limit for insert-vectors to match workload corpus slicing.",
+    )
+    parser.add_argument(
+        "--query-max-rows",
+        type=int,
+        default=None,
+        help="Optional row limit for query-vectors to match workload corpus slicing.",
+    )
+    parser.add_argument(
+        "--init-max-rows",
+        type=int,
+        default=None,
+        help="Optional row limit for init-vectors to match workload corpus slicing.",
+    )
+    parser.add_argument(
         "--metric",
         default="l2",
         choices=("dot", "cosine", "l2"),
@@ -53,8 +75,8 @@ def parse_args() -> argparse.Namespace:
         "--visibility-lag-ms",
         type=float,
         nargs="*",
-        default=[0.0],
-        help="Insert visibility lag assumptions in milliseconds. 0 means instant visibility.",
+        default=DEFAULT_VISIBILITY_LAGS_MS,
+        help="Insert visibility lag assumptions in milliseconds. Defaults to 0, 1, 5, 25, 100, 500, 1000, 5000, 10000.",
     )
     parser.add_argument(
         "--top-k",
@@ -339,6 +361,21 @@ def write_jsonl(path: Path, records: Iterable[dict]) -> None:
             handle.write("\n")
 
 
+def load_matrix(path: Path, label: str, max_rows: int | None) -> np.ndarray:
+    matrix = np.asarray(np.load(path.expanduser()), dtype=np.float32)
+    if matrix.ndim != 2:
+        raise SystemExit(f"{label} must be a 2D matrix")
+    if max_rows is None:
+        return matrix
+    if max_rows < 0:
+        raise SystemExit(f"{label} row limit must be non-negative")
+    if max_rows > matrix.shape[0]:
+        raise SystemExit(
+            f"{label} row limit {max_rows} exceeds available rows {matrix.shape[0]} in {path}"
+        )
+    return matrix[:max_rows]
+
+
 def normalize_rows(matrix: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms = np.where(norms == 0, 1.0, norms)
@@ -380,18 +417,127 @@ def infer_topk(query_events: List[QueryEvent]) -> int:
     raise ValueError("could not infer top-k from query logs")
 
 
-def build_visible_insert_rows(insert_events: List[InsertEvent], query_time_ns: int, lag_ns: int) -> np.ndarray:
-    visible_rows: List[int] = []
-    cutoff = query_time_ns - lag_ns
+def build_insert_visibility_index(insert_events: List[InsertEvent], insert_row_count: int) -> Tuple[List[int], np.ndarray, np.ndarray, np.ndarray]:
+    completed_times: List[int] = []
+    row_offsets = [0]
+    row_blocks: List[np.ndarray] = []
+    row_visibility_order = np.full((insert_row_count,), -1, dtype=np.int64)
+
     for event in insert_events:
         if event.status != "ok":
             continue
-        if event.completed_at_ns > cutoff:
-            break
-        visible_rows.extend(range(event.batch_start_row, event.batch_end_row))
-    if not visible_rows:
-        return np.empty((0,), dtype=np.int64)
-    return np.asarray(visible_rows, dtype=np.int64)
+        completed_times.append(event.completed_at_ns)
+        # Mixed inserts advance through the insert matrix in row order, so each event contributes
+        # one contiguous block. Keeping the blocks in completion order lets later queries take a
+        # prefix of "all visible rows" for any visibility lag assumption.
+        block = np.arange(event.batch_start_row, event.batch_end_row, dtype=np.int64)
+        row_blocks.append(block)
+        start_order = row_offsets[-1]
+        row_visibility_order[block] = np.arange(start_order, start_order + block.size, dtype=np.int64)
+        row_offsets.append(row_offsets[-1] + (event.batch_end_row - event.batch_start_row))
+
+    all_rows = np.concatenate(row_blocks) if row_blocks else np.empty((0,), dtype=np.int64)
+    return completed_times, np.asarray(row_offsets, dtype=np.int64), all_rows, row_visibility_order
+
+
+def build_visible_insert_rows(
+    completed_times: List[int],
+    row_offsets: np.ndarray,
+    all_rows: np.ndarray,
+    query_time_ns: int,
+    lag_ns: int,
+) -> np.ndarray:
+    cutoff = query_time_ns - lag_ns
+    visible_event_count = bisect.bisect_right(completed_times, cutoff)
+    visible_row_count = int(row_offsets[visible_event_count])
+    return all_rows[:visible_row_count]
+
+
+def visible_insert_count(completed_times: List[int], row_offsets: np.ndarray, query_time_ns: int, lag_ns: int) -> int:
+    cutoff = query_time_ns - lag_ns
+    visible_event_count = bisect.bisect_right(completed_times, cutoff)
+    return int(row_offsets[visible_event_count])
+
+
+def init_topk_state(metric: str, n_queries: int, top_k: int) -> Tuple[np.ndarray, np.ndarray]:
+    fill_value = np.inf if metric == "l2" else -np.inf
+    scores = np.full((n_queries, top_k), fill_value, dtype=np.float32)
+    ids = np.full((n_queries, top_k), -1, dtype=np.int64)
+    return scores, ids
+
+
+def merge_topk(
+    metric: str,
+    current_scores: np.ndarray,
+    current_ids: np.ndarray,
+    candidate_scores: np.ndarray,
+    candidate_ids: np.ndarray,
+    top_k: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    if candidate_scores.shape[1] == 0:
+        return current_scores, current_ids
+
+    # Keep only the best top-k seen so far by merging the current running winners with the
+    # winners from the next candidate chunk.
+    combined_scores = np.concatenate((current_scores, candidate_scores), axis=1)
+    combined_ids = np.concatenate((current_ids, candidate_ids), axis=1)
+    if metric == "l2":
+        order = np.argsort(combined_scores, axis=1)[:, :top_k]
+    else:
+        order = np.argsort(-combined_scores, axis=1)[:, :top_k]
+    return (
+        np.take_along_axis(combined_scores, order, axis=1),
+        np.take_along_axis(combined_ids, order, axis=1),
+    )
+
+
+def update_topk_with_candidates(
+    metric: str,
+    query_batch: np.ndarray,
+    candidate_vectors: np.ndarray,
+    candidate_ids: np.ndarray,
+    current_scores: np.ndarray,
+    current_ids: np.ndarray,
+    top_k: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    if candidate_vectors.shape[0] == 0:
+        return current_scores, current_ids
+
+    # Score only this chunk, reduce it to chunk-local top-k, then merge with the running top-k.
+    # This avoids materializing a full query x visible_corpus score matrix.
+    scores = score_vectors(metric, query_batch, candidate_vectors)
+    chunk_topk = topk_indices(metric, scores, top_k)
+    top_scores = np.take_along_axis(scores, chunk_topk, axis=1)
+    top_ids = np.take_along_axis(np.broadcast_to(candidate_ids, scores.shape), chunk_topk, axis=1)
+    return merge_topk(metric, current_scores, current_ids, top_scores, top_ids, top_k)
+
+
+def topk_state_to_lists(scores: np.ndarray, ids: np.ndarray) -> Tuple[List[List[int]], List[List[float]]]:
+    valid = ids >= 0
+    all_ids: List[List[int]] = []
+    all_scores: List[List[float]] = []
+    for row_valid, row_ids, row_scores in zip(valid, ids, scores):
+        all_ids.append([int(value) for value in row_ids[row_valid]])
+        all_scores.append([float(value) for value in row_scores[row_valid]])
+    return all_ids, all_scores
+
+
+def is_id_visible_under_lag(
+    point_id: int,
+    init_id_offset: int,
+    init_count: int,
+    insert_id_offset: int,
+    insert_row_count: int,
+    insert_visible_count: int,
+    row_visibility_order: np.ndarray,
+) -> bool:
+    if init_count > 0 and init_id_offset <= point_id < init_id_offset + init_count:
+        return True
+    insert_row = point_id - insert_id_offset
+    if insert_row < 0 or insert_row >= insert_row_count:
+        return False
+    visible_order = int(row_visibility_order[insert_row])
+    return visible_order >= 0 and visible_order < insert_visible_count
 
 
 def compute_recall_details(
@@ -407,7 +553,12 @@ def compute_recall_details(
     insert_id_offset: int,
 ) -> List[dict]:
     lag_specs = [(lag_ms, int(round(lag_ms * 1_000_000.0))) for lag_ms in sorted(set(visibility_lags_ms))]
+    completed_times, row_offsets, all_visible_rows, row_visibility_order = build_insert_visibility_index(
+        insert_events,
+        insert_vectors.shape[0],
+    )
 
+    init_count = 0 if init_vectors is None else init_vectors.shape[0]
     init_ids = np.arange(init_id_offset, init_id_offset + (0 if init_vectors is None else init_vectors.shape[0]), dtype=np.int64)
     insert_ids = np.arange(insert_id_offset, insert_id_offset + insert_vectors.shape[0], dtype=np.int64)
 
@@ -430,33 +581,51 @@ def compute_recall_details(
             "queries": [],
         }
 
-        visible_rows_cache: Dict[int, np.ndarray] = {}
+        visible_count_cache: Dict[int, int] = {}
         exact_cache: Dict[int, Tuple[List[List[int]], List[List[float]]]] = {}
+        lag_targets = []
         for lag_ms, lag_ns in lag_specs:
-            visible_insert_rows = build_visible_insert_rows(insert_events, event.completed_at_ns, lag_ns)
-            visible_rows_cache[lag_ns] = visible_insert_rows
+            visible_count = visible_insert_count(completed_times, row_offsets, event.issued_at_ns, lag_ns)
+            visible_count_cache[lag_ns] = visible_count
+            lag_targets.append((visible_count, lag_ns))
+        # Larger lags expose fewer completed inserts. Sorting by visible prefix length means we can
+        # extend one running top-k state instead of recomputing each lag from scratch.
+        lag_targets.sort(key=lambda item: item[0])
 
-            candidate_blocks = []
-            candidate_ids_blocks = []
-            if init_vectors is not None and init_vectors.shape[0] > 0:
-                candidate_blocks.append(init_vectors)
-                candidate_ids_blocks.append(init_ids)
-            if visible_insert_rows.size > 0:
-                candidate_blocks.append(insert_vectors[visible_insert_rows])
-                candidate_ids_blocks.append(insert_ids[visible_insert_rows])
+        running_scores, running_ids = init_topk_state(metric, query_batch.shape[0], top_k)
+        if init_vectors is not None and init_vectors.shape[0] > 0:
+            # Init vectors are visible for every lag assumption, so incorporate them once up front.
+            for start in range(0, init_vectors.shape[0], RECALL_CANDIDATE_CHUNK_SIZE):
+                end = min(start + RECALL_CANDIDATE_CHUNK_SIZE, init_vectors.shape[0])
+                running_scores, running_ids = update_topk_with_candidates(
+                    metric,
+                    query_batch,
+                    init_vectors[start:end],
+                    init_ids[start:end],
+                    running_scores,
+                    running_ids,
+                    top_k,
+                )
 
-            if candidate_blocks:
-                candidate_vectors = np.vstack(candidate_blocks)
-                candidate_ids = np.concatenate(candidate_ids_blocks)
-                scores = score_vectors(metric, query_batch, candidate_vectors)
-                topk = topk_indices(metric, scores, top_k)
-                exact_ids = [[int(candidate_ids[idx]) for idx in row] for row in topk]
-                exact_scores = [[float(scores[q_idx, idx]) for idx in row] for q_idx, row in enumerate(topk)]
-            else:
-                exact_ids = [[] for _ in range(query_batch.shape[0])]
-                exact_scores = [[] for _ in range(query_batch.shape[0])]
+        processed_visible_count = 0
+        for target_visible_count, lag_ns in lag_targets:
+            # Each lag only adds the newly visible suffix beyond the previous lag's prefix.
+            while processed_visible_count < target_visible_count:
+                next_count = min(processed_visible_count + RECALL_CANDIDATE_CHUNK_SIZE, target_visible_count)
+                visible_chunk_rows = all_visible_rows[processed_visible_count:next_count]
+                running_scores, running_ids = update_topk_with_candidates(
+                    metric,
+                    query_batch,
+                    insert_vectors[visible_chunk_rows],
+                    insert_ids[visible_chunk_rows],
+                    running_scores,
+                    running_ids,
+                    top_k,
+                )
+                processed_visible_count = next_count
 
-            exact_cache[lag_ns] = (exact_ids, exact_scores)
+            # Snapshot the running exact top-k once this lag's visibility boundary has been reached.
+            exact_cache[lag_ns] = topk_state_to_lists(running_scores.copy(), running_ids.copy())
 
         for local_idx, query_row in enumerate(event.query_row_indices):
             query_entry = {
@@ -469,30 +638,64 @@ def compute_recall_details(
             for lag_ms, lag_ns in lag_specs:
                 exact_ids, exact_scores = exact_cache[lag_ns]
                 expected = exact_ids[local_idx]
+                visible_actual_pairs = [
+                    (int(point_id), float(score))
+                    for point_id, score in zip(actual_ids[local_idx][:top_k], actual_scores[local_idx][:top_k])
+                    if is_id_visible_under_lag(
+                        int(point_id),
+                        init_id_offset,
+                        init_count,
+                        insert_id_offset,
+                        insert_vectors.shape[0],
+                        visible_count_cache[lag_ns],
+                        row_visibility_order,
+                    )
+                ]
+                visible_actual_ids = [point_id for point_id, _score in visible_actual_pairs]
+                visible_actual_scores = [_score for _point_id, _score in visible_actual_pairs]
+                visible_actual_set = set(visible_actual_ids)
                 overlap = len(actual_set.intersection(expected[:top_k]))
+                visible_overlap = len(visible_actual_set.intersection(expected[:top_k]))
                 denom = min(top_k, len(expected)) if expected else top_k
                 recall = float(overlap / denom) if denom > 0 else 1.0
+                visible_precision = (
+                    float(visible_overlap / len(visible_actual_ids))
+                    if visible_actual_ids
+                    else None
+                )
                 assumption_name = f"lag_ms_{lag_ms:g}"
                 query_entry["assumptions"][assumption_name] = {
-                    "visible_insert_count": int(visible_rows_cache[lag_ns].size),
+                    "visible_insert_count": visible_count_cache[lag_ns],
                     "expected_result_ids": expected,
                     "expected_result_scores": exact_scores[local_idx],
                     "recall_at_k": recall,
                     "overlap_count": overlap,
+                    "visible_actual_result_ids": visible_actual_ids,
+                    "visible_actual_result_scores": visible_actual_scores,
+                    "visible_overlap_count": visible_overlap,
+                    "visible_precision_at_k": visible_precision,
+                    "actual_too_new_count": len(actual_ids[local_idx][:top_k]) - len(visible_actual_ids),
+                    "expected_missing_count": max(len(expected[:top_k]) - visible_overlap, 0),
                 }
             record["queries"].append(query_entry)
         details.append(record)
     return details
 
 
-def write_recall_summary(path: Path, details: List[dict], observed_rates: dict) -> None:
-    assumption_totals: Dict[str, List[float]] = {}
+def write_recall_summary(path: Path, details: List[dict]) -> None:
+    assumption_recalls: Dict[str, List[float]] = {}
+    assumption_visible_precisions: Dict[str, List[float]] = {}
+    assumption_too_new_counts: Dict[str, List[int]] = {}
     query_count = 0
     for event in details:
         for query in event["queries"]:
             query_count += 1
             for assumption_name, payload in query["assumptions"].items():
-                assumption_totals.setdefault(assumption_name, []).append(payload["recall_at_k"])
+                assumption_recalls.setdefault(assumption_name, []).append(payload["recall_at_k"])
+                visible_precision = payload["visible_precision_at_k"]
+                if visible_precision is not None:
+                    assumption_visible_precisions.setdefault(assumption_name, []).append(visible_precision)
+                assumption_too_new_counts.setdefault(assumption_name, []).append(payload["actual_too_new_count"])
 
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
@@ -500,34 +703,20 @@ def write_recall_summary(path: Path, details: List[dict], observed_rates: dict) 
             "assumption",
             "query_count",
             "mean_recall_at_k",
-            "min_recall_at_k",
-            "max_recall_at_k",
-            "observed_duration_s",
-            "total_query_ops",
-            "total_query_vectors",
-            "total_insert_ops",
-            "total_insert_vectors",
-            "achieved_query_ops_per_sec",
-            "achieved_query_vectors_per_sec",
-            "achieved_insert_ops_per_sec",
-            "achieved_insert_vectors_per_sec",
+            "mean_visible_precision_at_k",
+            "mean_actual_too_new_count",
+            "total_actual_too_new_count",
         ])
-        for assumption_name, recalls in sorted(assumption_totals.items()):
+        for assumption_name, recalls in sorted(assumption_recalls.items()):
+            visible_precisions = assumption_visible_precisions.get(assumption_name, [])
+            too_new_counts = assumption_too_new_counts[assumption_name]
             writer.writerow([
                 assumption_name,
                 query_count,
                 float(np.mean(recalls)) if recalls else 0.0,
-                float(np.min(recalls)) if recalls else 0.0,
-                float(np.max(recalls)) if recalls else 0.0,
-                observed_rates["observed_duration_s"],
-                observed_rates["total_query_ops"],
-                observed_rates["total_query_vectors"],
-                observed_rates["total_insert_ops"],
-                observed_rates["total_insert_vectors"],
-                observed_rates["achieved_query_ops_per_sec"],
-                observed_rates["achieved_query_vectors_per_sec"],
-                observed_rates["achieved_insert_ops_per_sec"],
-                observed_rates["achieved_insert_vectors_per_sec"],
+                float(np.mean(visible_precisions)) if visible_precisions else 0.0,
+                float(np.mean(too_new_counts)) if too_new_counts else 0.0,
+                int(np.sum(too_new_counts)) if too_new_counts else 0,
             ])
 
 
@@ -570,16 +759,11 @@ def main() -> None:
     if not insert_events and not query_events:
         raise SystemExit(f"no mixed runner logs found in {log_dir}")
 
-    insert_vectors = np.asarray(np.load(Path(args.insert_vectors).expanduser()), dtype=np.float32)
-    query_vectors = np.asarray(np.load(Path(args.query_vectors).expanduser()), dtype=np.float32)
+    insert_vectors = load_matrix(Path(args.insert_vectors), "insert-vectors", args.insert_max_rows)
+    query_vectors = load_matrix(Path(args.query_vectors), "query-vectors", args.query_max_rows)
     init_vectors = None
     if args.init_vectors:
-        init_vectors = np.asarray(np.load(Path(args.init_vectors).expanduser()), dtype=np.float32)
-
-    if insert_vectors.ndim != 2 or query_vectors.ndim != 2:
-        raise SystemExit("insert-vectors and query-vectors must be 2D matrices")
-    if init_vectors is not None and init_vectors.ndim != 2:
-        raise SystemExit("init-vectors must be a 2D matrix")
+        init_vectors = load_matrix(Path(args.init_vectors), "init-vectors", args.init_max_rows)
 
     top_k = args.top_k if args.top_k is not None else infer_topk(query_events)
 
@@ -587,6 +771,7 @@ def main() -> None:
     write_jsonl(timeline_out, timeline)
     observed_rates = compute_observed_rates(insert_events, query_events)
     throughput_rows = compute_throughput_rows(insert_events, query_events)
+    write_throughput_summary(throughput_summary_out, throughput_rows)
 
     details = compute_recall_details(
         insert_events=insert_events,
@@ -601,13 +786,12 @@ def main() -> None:
         insert_id_offset=args.insert_id_offset,
     )
     write_jsonl(recall_detail_out, details)
-    write_recall_summary(recall_summary_out, details, observed_rates)
-    write_throughput_summary(throughput_summary_out, throughput_rows)
+    write_recall_summary(recall_summary_out, details)
 
     print(f"Wrote timeline to {timeline_out}")
+    print(f"Wrote throughput summary to {throughput_summary_out}")
     print(f"Wrote recall details to {recall_detail_out}")
     print(f"Wrote recall summary to {recall_summary_out}")
-    print(f"Wrote throughput summary to {throughput_summary_out}")
 
 
 if __name__ == "__main__":
