@@ -2,14 +2,16 @@ import bisect
 import argparse
 import csv
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 
-DEFAULT_VISIBILITY_LAGS_MS = [0.0, 1.0, 5.0, 25.0, 100.0, 500.0, 1000.0, 5000.0, 10000.0]
+DEFAULT_VISIBILITY_LAGS_MS = [0.0, 1.0, 5.0, 25.0, 100.0]
 RECALL_CANDIDATE_CHUNK_SIZE = 16384
+POST_QUERY_THROUGHPUT_INTERVAL_S = 3.0
 
 
 @dataclass(frozen=True)
@@ -115,6 +117,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="ID offset for insert vectors. Defaults to 0, matching the current mixed runner.",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=32,
+        help="Worker threads for recall reconstruction. Query events are processed independently.",
     )
     return parser.parse_args()
 
@@ -262,6 +270,30 @@ def compute_observed_rates(insert_events: List[InsertEvent], query_events: List[
     }
 
 
+def last_successful_query_issue_ns(query_events: List[QueryEvent]) -> int | None:
+    successful_issues = [event.issued_at_ns for event in query_events if event.status == "ok"]
+    if not successful_issues:
+        return None
+    return max(successful_issues)
+
+
+def recall_insert_row_limit(insert_events: List[InsertEvent], query_events: List[QueryEvent], visibility_lags_ms: List[float]) -> int:
+    last_query_issue_ns = last_successful_query_issue_ns(query_events)
+    if last_query_issue_ns is None:
+        return 0
+
+    min_lag_ns = int(round(min(visibility_lags_ms or [0.0]) * 1_000_000.0))
+    visibility_cutoff_ns = last_query_issue_ns - min_lag_ns
+
+    max_visible_row = 0
+    for event in insert_events:
+        if event.status != "ok":
+            continue
+        if event.completed_at_ns <= visibility_cutoff_ns:
+            max_visible_row = max(max_visible_row, event.batch_end_row)
+    return max_visible_row
+
+
 def _compute_rate_row(
     scope: str,
     role_name: str,
@@ -269,8 +301,14 @@ def _compute_rate_row(
     timestamps: List[int],
     op_count: int,
     vector_count: int,
+    window_start_ns: int | None = None,
+    window_end_ns: int | None = None,
+    window_label: str | None = None,
+    duration_override_s: float | None = None,
 ) -> dict:
-    if timestamps:
+    if duration_override_s is not None:
+        duration_s = max(duration_override_s, 0.0)
+    elif timestamps:
         duration_s = max((max(timestamps) - min(timestamps)) / 1_000_000_000.0, 0.0)
     else:
         duration_s = 0.0
@@ -286,6 +324,9 @@ def _compute_rate_row(
         "scope": scope,
         "role": role_name,
         "client_id": client_id,
+        "window_label": window_label if window_label is not None else scope,
+        "window_start_ns": window_start_ns,
+        "window_end_ns": window_end_ns,
         "observed_duration_s": duration_s,
         "op_count": op_count,
         "vector_count": vector_count,
@@ -299,6 +340,11 @@ def compute_throughput_rows(insert_events: List[InsertEvent], query_events: List
 
     insert_ok = [event for event in insert_events if event.status == "ok"]
     query_ok = [event for event in query_events if event.status == "ok"]
+    last_query_completed_ns = max((event.completed_at_ns for event in query_ok), default=None)
+    first_mixed_completed_ns = min(
+        [event.completed_at_ns for event in insert_ok] + [event.completed_at_ns for event in query_ok],
+        default=None,
+    )
 
     rows.append(
         _compute_rate_row(
@@ -320,6 +366,72 @@ def compute_throughput_rows(insert_events: List[InsertEvent], query_events: List
             sum(event.query_end_row - event.query_start_row for event in query_ok),
         )
     )
+
+    if last_query_completed_ns is not None:
+        mixed_insert = [event for event in insert_ok if event.completed_at_ns <= last_query_completed_ns]
+        rows.append(
+            _compute_rate_row(
+                "mixed_window",
+                "insert",
+                "all",
+                [event.completed_at_ns for event in mixed_insert],
+                len(mixed_insert),
+                sum(event.batch_end_row - event.batch_start_row for event in mixed_insert),
+                window_start_ns=first_mixed_completed_ns,
+                window_end_ns=last_query_completed_ns,
+                window_label="before_last_query_completion",
+                duration_override_s=(
+                    max((last_query_completed_ns - first_mixed_completed_ns) / 1_000_000_000.0, 0.0)
+                    if first_mixed_completed_ns is not None
+                    else None
+                ),
+            )
+        )
+
+        post_query_insert = [event for event in insert_ok if event.completed_at_ns > last_query_completed_ns]
+        interval_ns = int(round(POST_QUERY_THROUGHPUT_INTERVAL_S * 1_000_000_000.0))
+        interval_index = 0
+        interval_start_ns = last_query_completed_ns
+        last_post_query_insert_ns = max((event.completed_at_ns for event in post_query_insert), default=None)
+        while last_post_query_insert_ns is not None and interval_start_ns < last_post_query_insert_ns:
+            interval_end_ns = interval_start_ns + interval_ns
+            interval_events = [
+                event
+                for event in post_query_insert
+                if interval_start_ns < event.completed_at_ns <= interval_end_ns
+            ]
+            if interval_events:
+                rows.append(
+                    _compute_rate_row(
+                        "post_query_interval",
+                        "insert",
+                        "all",
+                        [event.completed_at_ns for event in interval_events],
+                        len(interval_events),
+                        sum(event.batch_end_row - event.batch_start_row for event in interval_events),
+                        window_start_ns=interval_start_ns,
+                        window_end_ns=interval_end_ns,
+                        window_label=f"post_query_{interval_index}",
+                        duration_override_s=POST_QUERY_THROUGHPUT_INTERVAL_S,
+                    )
+                )
+            else:
+                rows.append(
+                    _compute_rate_row(
+                        "post_query_interval",
+                        "insert",
+                        "all",
+                        [],
+                        0,
+                        0,
+                        window_start_ns=interval_start_ns,
+                        window_end_ns=interval_end_ns,
+                        window_label=f"post_query_{interval_index}",
+                        duration_override_s=POST_QUERY_THROUGHPUT_INTERVAL_S,
+                    )
+                )
+            interval_index += 1
+            interval_start_ns = interval_end_ns
 
     insert_by_client: Dict[int, List[InsertEvent]] = {}
     for event in insert_ok:
@@ -551,6 +663,7 @@ def compute_recall_details(
     visibility_lags_ms: List[float],
     init_id_offset: int,
     insert_id_offset: int,
+    threads: int = 1,
 ) -> List[dict]:
     lag_specs = [(lag_ms, int(round(lag_ms * 1_000_000.0))) for lag_ms in sorted(set(visibility_lags_ms))]
     completed_times, row_offsets, all_visible_rows, row_visibility_order = build_insert_visibility_index(
@@ -562,10 +675,9 @@ def compute_recall_details(
     init_ids = np.arange(init_id_offset, init_id_offset + (0 if init_vectors is None else init_vectors.shape[0]), dtype=np.int64)
     insert_ids = np.arange(insert_id_offset, insert_id_offset + insert_vectors.shape[0], dtype=np.int64)
 
-    details: List[dict] = []
-    for event in query_events:
+    def process_query_event(event: QueryEvent) -> dict | None:
         if event.status != "ok":
-            continue
+            return None
 
         query_batch = query_vectors[event.query_start_row:event.query_end_row]
         actual_ids = [list(row) for row in event.result_ids]
@@ -678,7 +790,17 @@ def compute_recall_details(
                     "expected_missing_count": max(len(expected[:top_k]) - visible_overlap, 0),
                 }
             record["queries"].append(query_entry)
-        details.append(record)
+        return record
+
+    successful_events = [event for event in query_events if event.status == "ok"]
+    if threads <= 1 or len(successful_events) <= 1:
+        return [detail for detail in (process_query_event(event) for event in query_events) if detail is not None]
+
+    details: List[dict] = []
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        for detail in executor.map(process_query_event, successful_events):
+            if detail is not None:
+                details.append(detail)
     return details
 
 
@@ -727,6 +849,9 @@ def write_throughput_summary(path: Path, throughput_rows: List[dict]) -> None:
             "scope",
             "role",
             "client_id",
+            "window_label",
+            "window_start_ns",
+            "window_end_ns",
             "observed_duration_s",
             "op_count",
             "vector_count",
@@ -738,6 +863,9 @@ def write_throughput_summary(path: Path, throughput_rows: List[dict]) -> None:
                 row["scope"],
                 row["role"],
                 row["client_id"],
+                row["window_label"],
+                row["window_start_ns"],
+                row["window_end_ns"],
                 row["observed_duration_s"],
                 row["op_count"],
                 row["vector_count"],
@@ -759,7 +887,20 @@ def main() -> None:
     if not insert_events and not query_events:
         raise SystemExit(f"no mixed runner logs found in {log_dir}")
 
-    insert_vectors = load_matrix(Path(args.insert_vectors), "insert-vectors", args.insert_max_rows)
+    recall_insert_max_rows = recall_insert_row_limit(insert_events, query_events, args.visibility_lag_ms)
+
+    requested_insert_max_rows = args.insert_max_rows
+    if requested_insert_max_rows is None:
+        effective_insert_max_rows = recall_insert_max_rows
+    else:
+        effective_insert_max_rows = min(requested_insert_max_rows, recall_insert_max_rows)
+
+    recall_insert_events = [
+        event for event in insert_events
+        if event.status != "ok" or event.batch_start_row < effective_insert_max_rows
+    ]
+
+    insert_vectors = load_matrix(Path(args.insert_vectors), "insert-vectors", effective_insert_max_rows)
     query_vectors = load_matrix(Path(args.query_vectors), "query-vectors", args.query_max_rows)
     init_vectors = None
     if args.init_vectors:
@@ -774,7 +915,7 @@ def main() -> None:
     write_throughput_summary(throughput_summary_out, throughput_rows)
 
     details = compute_recall_details(
-        insert_events=insert_events,
+        insert_events=recall_insert_events,
         query_events=query_events,
         insert_vectors=insert_vectors,
         query_vectors=query_vectors,
@@ -784,6 +925,7 @@ def main() -> None:
         visibility_lags_ms=args.visibility_lag_ms,
         init_id_offset=args.init_id_offset,
         insert_id_offset=args.insert_id_offset,
+        threads=args.threads,
     )
     write_jsonl(recall_detail_out, details)
     write_recall_summary(recall_summary_out, details)
