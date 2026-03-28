@@ -238,14 +238,14 @@ func parseFlags() (config, error) {
 	flag.Int64Var(&cfg.insertStartID, "insert-start-id", getenvInt64Default("INSERT_START_ID", 0), "Starting ID offset for inserted vectors")
 	flag.StringVar(&cfg.insertVectors, "insert-vectors", getenvDefault("INSERT_DATA_FILEPATH", ""), "Path to insert vectors .npy")
 	flag.StringVar(&cfg.queryVectors, "query-vectors", getenvDefault("QUERY_DATA_FILEPATH", ""), "Path to query vectors .npy")
-	flag.StringVar(&cfg.outputDir, "output-dir", getenvDefault("RESULT_PATH", ""), "Directory for per-client JSONL logs")
+	flag.StringVar(&cfg.outputDir, "output-dir", getenvDefault("MIXED_RESULT_PATH", getenvDefault("RESULT_PATH", "")), "Directory for per-client JSONL logs")
 	flag.IntVar(&cfg.insertCorpusSize, "insert-corpus-size", getenvIntDefault("INSERT_CORPUS_SIZE", 0), "Rows to read from the insert matrix; 0 means all rows")
 	flag.IntVar(&cfg.queryCorpusSize, "query-corpus-size", getenvIntDefault("QUERY_CORPUS_SIZE", 0), "Rows to read from the query matrix; 0 means all rows")
 	flag.IntVar(&cfg.insertClients, "insert-clients", getenvIntDefault("INSERT_CLIENTS", 1), "Number of dedicated insert clients")
 	flag.IntVar(&cfg.queryClients, "query-clients", getenvIntDefault("QUERY_CLIENTS", 1), "Number of dedicated query clients")
 	flag.IntVar(&cfg.topK, "top-k", getenvIntDefault("TOP_K", 10), "Top-k results per query vector")
 	flag.IntVar(&cfg.ef, "ef", getenvIntDefault("EFSearch", 64), "Search ef parameter")
-	flag.StringVar(&mode, "mode", getenvDefault("MODE", string(modeMax)), "Execution mode: max or rate")
+	flag.StringVar(&mode, "mode", string(modeMax), "Execution mode: max or rate")
 	flag.StringVar((*string)(&cfg.insertMode), "insert-mode", getenvDefault("INSERT_MODE", ""), "Per-role insert mode override: max or rate")
 	flag.StringVar((*string)(&cfg.queryMode), "query-mode", getenvDefault("QUERY_MODE", ""), "Per-role query mode override: max or rate")
 	flag.Float64Var(&cfg.insertOpsPerSec, "insert-ops-per-sec", getenvFloatDefault("INSERT_OPS_PER_SEC", 0), "Direct insert ops/sec cap across all insert clients")
@@ -263,7 +263,9 @@ func parseFlags() (config, error) {
 	flag.Parse()
 
 	// The top-level mode acts as a default unless a role-specific mode overrides it.
-	cfg.mode = runMode(mode)
+	cfg.mode = normalizeRunMode(mode)
+	cfg.insertMode = normalizeRunMode(string(cfg.insertMode))
+	cfg.queryMode = normalizeRunMode(string(cfg.queryMode))
 	if cfg.insertMode == "" {
 		cfg.insertMode = cfg.mode
 	}
@@ -276,6 +278,10 @@ func parseFlags() (config, error) {
 		return config{}, err
 	}
 	return cfg, nil
+}
+
+func normalizeRunMode(value string) runMode {
+	return runMode(strings.ToLower(strings.TrimSpace(value)))
 }
 
 func validateConfig(cfg config) error {

@@ -50,8 +50,9 @@ VOLUMES_DIR="${MILVUS_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/milvus}"
 EMBED_ETCD_FILE="$RUN_DIR/embedEtcd.yaml"
 USER_CONFIG_FILE="$RUN_DIR/user.yaml"
 STANDARD_BINARY_PATH="${STANDARD_BINARY_PATH:-}"
+MIXED_BINARY_PATH="${MIXED_BINARY_PATH:-}"
 
-mkdir -p "$RUN_DIR" "$RESULT_PATH" "$RUN_DIR/workerOut" "$VOLUMES_DIR"
+mkdir -p "$RUN_DIR" "$RUN_DIR/workerOut" "$VOLUMES_DIR"
 
 pick_binary() {
     local override="$1"
@@ -78,6 +79,11 @@ STANDARD_BINARY_PATH="$(pick_binary \
     "$ROOT_DIR/goCode/multiClientOP/multiClientOP" \
     "$ROOT_DIR/multiClientOP")"
 
+MIXED_BINARY_PATH="$(pick_binary \
+    "$MIXED_BINARY_PATH" \
+    "$ROOT_DIR/goCode/mixedRunner/mixedRunner" \
+    "$ROOT_DIR/mixedRunner")"
+
 ensure_runtime_tools() {
     if command -v docker >/dev/null 2>&1; then
         CONTAINER_RUNTIME="docker"
@@ -91,9 +97,16 @@ ensure_runtime_tools() {
     command -v curl >/dev/null 2>&1 || { echo "curl is required." >&2; exit 1; }
     command -v python3 >/dev/null 2>&1 || { echo "python3 is required." >&2; exit 1; }
 
-    if [[ ! -x "$STANDARD_BINARY_PATH" ]]; then
-        echo "Missing multiClientOP binary at $STANDARD_BINARY_PATH" >&2
-        exit 1
+    if [[ "$TASK" == "MIXED" ]]; then
+        if [[ ! -x "$MIXED_BINARY_PATH" ]]; then
+            echo "Missing mixedrunner binary at $MIXED_BINARY_PATH" >&2
+            exit 1
+        fi
+    else
+        if [[ ! -x "$STANDARD_BINARY_PATH" ]]; then
+            echo "Missing multiClientOP binary at $STANDARD_BINARY_PATH" >&2
+            exit 1
+        fi
     fi
 }
 
@@ -187,7 +200,7 @@ run_insert() {
 run_index() {
     export ACTIVE_TASK="INDEX"
     touch ./workerOut/workflow_start.txt
-    env "${PYTHON_ENV_VARS[@]}" python3 ./index_data.py
+    env "${PYTHON_ENV_VARS[@]}" python3 ./index.py
 }
 
 run_query() {
@@ -199,6 +212,74 @@ run_query() {
     export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:?QUERY_BATCH_SIZE is required}"
 
     env "${PYTHON_ENV_VARS[@]}" "$STANDARD_BINARY_PATH"
+}
+
+run_mixed() {
+    export ACTIVE_TASK="MIXED"
+    export MIXED_RESULT_PATH="${MIXED_RESULT_PATH:-mixed_logs}"
+    export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
+    export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:?INSERT_CORPUS_SIZE is required}"
+    export QUERY_DATA_FILEPATH="${QUERY_DATA_FILEPATH:?QUERY_DATA_FILEPATH is required}"
+    export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:?QUERY_CORPUS_SIZE is required}"
+    export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
+    export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:?QUERY_BATCH_SIZE is required}"
+    export INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:?INSERT_BALANCE_STRATEGY is required}"
+    export QUERY_BALANCE_STRATEGY="${QUERY_BALANCE_STRATEGY:?QUERY_BALANCE_STRATEGY is required}"
+    export INSERT_MODE="${INSERT_MODE:-max}"
+    export INSERT_OPS_PER_SEC="${INSERT_OPS_PER_SEC:-}"
+    export QUERY_MODE="${QUERY_MODE:-max}"
+    export QUERY_OPS_PER_SEC="${QUERY_OPS_PER_SEC:-}"
+    export INSERT_CLIENTS="${MIXED_INSERT_CLIENTS_PER_PROXY:-$INSERT_CLIENTS_PER_PROXY}"
+    export QUERY_CLIENTS="${MIXED_QUERY_CLIENTS_PER_PROXY:-$QUERY_CLIENTS_PER_PROXY}"
+    export MIXED_QUERY_CLIENTS_PER_PROXY="${MIXED_QUERY_CLIENTS_PER_PROXY:-}"
+    export MIXED_INSERT_CLIENTS_PER_PROXY="${MIXED_INSERT_CLIENTS_PER_PROXY:-}"
+    export MIXED_CORPUS_SIZE="${MIXED_CORPUS_SIZE:-$INSERT_CORPUS_SIZE}"
+    export MIXED_DATA_FILEPATH="${MIXED_DATA_FILEPATH:-$INSERT_DATA_FILEPATH}"
+    export COLLECTION_NAME="${COLLECTION_NAME:-standalone}"
+    export VECTOR_FIELD="${VECTOR_FIELD:-vector}"
+    export ID_FIELD="${ID_FIELD:-id}"
+    export TOP_K="${TOP_K:-10}"
+    export QUERY_EF_SEARCH="${QUERY_EF_SEARCH:-64}"
+    export EFSearch="${EFSearch:-$QUERY_EF_SEARCH}"
+    export SEARCH_CONSISTENCY="${SEARCH_CONSISTENCY:-bounded}"
+    export RPC_TIMEOUT="${RPC_TIMEOUT:-10m}"
+    export INSERT_BATCH_MIN="${INSERT_BATCH_MIN:-}"
+    export INSERT_BATCH_MAX="${INSERT_BATCH_MAX:-}"
+    export QUERY_BATCH_MIN="${QUERY_BATCH_MIN:-}"
+    export QUERY_BATCH_MAX="${QUERY_BATCH_MAX:-}"
+    export INSERT_START_ID="${INSERT_START_ID:?INSERT_START_ID is required}"
+
+    mkdir -p "$MIXED_RESULT_PATH"
+    env "${PYTHON_ENV_VARS[@]}" "$MIXED_BINARY_PATH"
+}
+
+run_mixed_timeline() {
+    local mixed_timeline_metric="dot"
+    if [[ "$DISTANCE_METRIC" == "COSINE" ]]; then
+        mixed_timeline_metric="cosine"
+    elif [[ "$DISTANCE_METRIC" == "L2" ]]; then
+        mixed_timeline_metric="l2"
+    fi
+
+    local mixed_timeline_args=(
+        ./mixed_timeline.py
+        --log-dir "$MIXED_RESULT_PATH"
+        --insert-vectors "$MIXED_DATA_FILEPATH"
+        --insert-max-rows "$MIXED_CORPUS_SIZE"
+        --query-vectors "$QUERY_DATA_FILEPATH"
+        --query-max-rows "$QUERY_CORPUS_SIZE"
+        --metric "$mixed_timeline_metric"
+        --insert-id-offset "$INSERT_START_ID"
+    )
+
+    if [[ -z "$RESTORE_DIR" ]]; then
+        mixed_timeline_args+=(
+            --init-vectors "$INSERT_DATA_FILEPATH"
+            --init-max-rows "$INSERT_CORPUS_SIZE"
+        )
+    fi
+
+    env "${PYTHON_ENV_VARS[@]}" python3 "${mixed_timeline_args[@]}"
 }
 
 summarize_insert() {
@@ -239,6 +320,7 @@ main() {
 
     if [[ -z "$RESTORE_DIR" ]]; then
         run_setup_collection
+
         run_insert
 
         if [[ "$TASK" == "INSERT" ]]; then
@@ -247,7 +329,7 @@ main() {
 
         summarize_insert
 
-        if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
+        if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
             run_index
 
             if [[ "$TASK" == "INDEX" ]]; then
@@ -268,7 +350,13 @@ main() {
         return 0
     fi
 
-    if [[ "$TASK" != "INSERT" && "$TASK" != "INDEX" && "$TASK" != "QUERY" ]]; then
+    if [[ "$TASK" == "MIXED" ]]; then
+        run_mixed
+        run_mixed_timeline
+        return 0
+    fi
+
+    if [[ "$TASK" != "INSERT" && "$TASK" != "INDEX" && "$TASK" != "QUERY" && "$TASK" != "MIXED" ]]; then
         echo "Unsupported TASK '$TASK' for local_main.sh" >&2
         exit 1
     fi

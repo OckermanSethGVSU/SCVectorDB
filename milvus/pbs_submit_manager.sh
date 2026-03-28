@@ -66,6 +66,28 @@ apply_overrides() {
     apply_override_value QUERY_DATA_FILEPATH QUERY_DATA_FILEPATH_OVERRIDE
     apply_override_array QUERY_BATCH_SIZE QUERY_BATCH_SIZE_OVERRIDE
 
+    apply_override_value MIXED_RESULT_PATH MIXED_RESULT_PATH_OVERRIDE
+    apply_override_value INSERT_MODE INSERT_MODE_OVERRIDE
+    apply_override_value INSERT_OPS_PER_SEC INSERT_OPS_PER_SEC_OVERRIDE
+    apply_override_value QUERY_MODE QUERY_MODE_OVERRIDE
+    apply_override_value QUERY_OPS_PER_SEC QUERY_OPS_PER_SEC_OVERRIDE
+    apply_override_value MIXED_CORPUS_SIZE MIXED_CORPUS_SIZE_OVERRIDE
+    apply_override_value MIXED_DATA_FILEPATH MIXED_DATA_FILEPATH_OVERRIDE
+    apply_override_value MIXED_QUERY_CLIENTS_PER_PROXY MIXED_QUERY_CLIENTS_PER_PROXY_OVERRIDE
+    apply_override_value MIXED_INSERT_CLIENTS_PER_PROXY MIXED_INSERT_CLIENTS_PER_PROXY_OVERRIDE
+    apply_override_value INSERT_START_ID INSERT_START_ID_OVERRIDE
+    apply_override_value COLLECTION_NAME COLLECTION_NAME_OVERRIDE
+    apply_override_value VECTOR_FIELD VECTOR_FIELD_OVERRIDE
+    apply_override_value ID_FIELD ID_FIELD_OVERRIDE
+    apply_override_value TOP_K TOP_K_OVERRIDE
+    apply_override_value QUERY_EF_SEARCH QUERY_EF_SEARCH_OVERRIDE
+    apply_override_value SEARCH_CONSISTENCY SEARCH_CONSISTENCY_OVERRIDE
+    apply_override_value RPC_TIMEOUT RPC_TIMEOUT_OVERRIDE
+    apply_override_value INSERT_BATCH_MIN INSERT_BATCH_MIN_OVERRIDE
+    apply_override_value INSERT_BATCH_MAX INSERT_BATCH_MAX_OVERRIDE
+    apply_override_value QUERY_BATCH_MIN QUERY_BATCH_MIN_OVERRIDE
+    apply_override_value QUERY_BATCH_MAX QUERY_BATCH_MAX_OVERRIDE
+
     apply_override_value RESTORE_DIR RESTORE_DIR_OVERRIDE
     apply_override_value EXPECTED_CORPUS_SIZE EXPECTED_CORPUS_SIZE_OVERRIDE
 
@@ -123,6 +145,41 @@ print_config_summary() {
             echo "Restore Dir:              ${RESTORE_DIR:-<unset>}"
             echo "Expected Corpus Size:     $EXPECTED_CORPUS_SIZE"
             ;;
+        MIXED)
+            echo "Insert Corpus Size:       $INSERT_CORPUS_SIZE"
+            echo "Insert Data File:         $INSERT_DATA_FILEPATH"
+            echo "Insert Batch Sizes:       ${INSERT_BATCH_SIZE[*]}"
+            echo "Insert Clients/Proxy:     $INSERT_CLIENTS_PER_PROXY"
+            echo "Insert Balance:           $INSERT_BALANCE_STRATEGY"
+            echo "Query Corpus Size:        $QUERY_CORPUS_SIZE"
+            echo "Query Data File:          $QUERY_DATA_FILEPATH"
+            echo "Query Batch Sizes:        ${QUERY_BATCH_SIZE[*]}"
+            echo "Query Clients/Proxy:      $QUERY_CLIENTS_PER_PROXY"
+            echo "Query Balance:            $QUERY_BALANCE_STRATEGY"
+            echo "Mixed Corpus Size:        $MIXED_CORPUS_SIZE"
+            echo "Mixed Data File:          $MIXED_DATA_FILEPATH"
+            echo "Mixed Insert Clients:     $MIXED_INSERT_CLIENTS_PER_PROXY"
+            echo "Mixed Query Clients:      $MIXED_QUERY_CLIENTS_PER_PROXY"
+            echo "Insert Mode:              $INSERT_MODE"
+            echo "Insert Ops/Sec:           ${INSERT_OPS_PER_SEC:-<unset>}"
+            echo "Query Mode:               $QUERY_MODE"
+            echo "Query Ops/Sec:            ${QUERY_OPS_PER_SEC:-<unset>}"
+            echo "Mixed Result Path:        $MIXED_RESULT_PATH"
+            echo "Insert Start ID:          $INSERT_START_ID"
+            echo "Collection Name:          $COLLECTION_NAME"
+            echo "Vector Field:             $VECTOR_FIELD"
+            echo "ID Field:                 $ID_FIELD"
+            echo "Top K:                    $TOP_K"
+            echo "Query EF Search:          ${QUERY_EF_SEARCH:-<unset>}"
+            echo "Search Consistency:       $SEARCH_CONSISTENCY"
+            echo "RPC Timeout:              $RPC_TIMEOUT"
+            echo "Insert Batch Min:         ${INSERT_BATCH_MIN:-<unset>}"
+            echo "Insert Batch Max:         ${INSERT_BATCH_MAX:-<unset>}"
+            echo "Query Batch Min:          ${QUERY_BATCH_MIN:-<unset>}"
+            echo "Query Batch Max:          ${QUERY_BATCH_MAX:-<unset>}"
+            echo "Restore Dir:              ${RESTORE_DIR:-<unset>}"
+            echo "Expected Corpus Size:     $EXPECTED_CORPUS_SIZE"
+            ;;
     esac
 
     if [[ "$MODE" == "DISTRIBUTED" ]]; then
@@ -172,8 +229,8 @@ MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the di
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
-TASK="QUERY" # [INSERT, INDEX, QUERY]
-RUN_MODE="PBS" # [PBS, local]
+TASK="MIXED" # [INSERT, INDEX, QUERY, MIXED]
+RUN_MODE="local" # [PBS, local]
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
@@ -184,7 +241,7 @@ DEBUG="False" # [True, False]
 BASE_DIR="$(pwd)"
 
 ### Insertion Variables ### 
-INSERT_CORPUS_SIZE=10000000 # total data to insert
+INSERT_CORPUS_SIZE=1000 # total data to insert
 INSERT_CLIENTS_PER_PROXY=4
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 # Aurora
@@ -197,7 +254,8 @@ INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
     #     Yandex: /eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
-INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
+# INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
+INSERT_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
@@ -211,10 +269,10 @@ INIT_FLAT_INDEX="FALSE" # [TRUE, FALSE]
 
 ### QUERY Variables ###
 # QUERY_CORPUS_SIZE=22723  # queries
-QUERY_CORPUS_SIZE=100000  # queries
+QUERY_CORPUS_SIZE=100  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
-QUERY_BATCH_SIZE=(512)
+QUERY_BATCH_SIZE=(1)
 
 # Aurora
     # * Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy
@@ -223,8 +281,34 @@ QUERY_BATCH_SIZE=(512)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
 # QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
 # QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
-QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
+QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 
+
+# Mixed Insert/Query Variables
+MIXED_RESULT_PATH="mixed_logs"
+INSERT_MODE="max" # [max, rate]
+INSERT_OPS_PER_SEC=""
+QUERY_MODE="max" # [max, rate]
+QUERY_OPS_PER_SEC=""
+MIXED_CORPUS_SIZE=1000
+MIXED_QUERY_CLIENTS_PER_PROXY=1
+MIXED_INSERT_CLIENTS_PER_PROXY=1
+MIXED_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+
+# Optional but useful
+COLLECTION_NAME=""
+VECTOR_FIELD=""
+ID_FIELD=""
+TOP_K=""
+QUERY_EF_SEARCH=""
+SEARCH_CONSISTENCY=""
+RPC_TIMEOUT=""
+
+# only relevant if you want random batch sizes 
+INSERT_BATCH_MIN=""
+INSERT_BATCH_MAX=""
+QUERY_BATCH_MIN=""
+QUERY_BATCH_MAX=""
 
 # Polaris: TODO
 # Aurora: 
@@ -249,6 +333,18 @@ NUM_PROXIES_PER_CN=4
 DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
 
 apply_overrides
+
+compute_insert_start_id() {
+    if [[ -n "$INSERT_START_ID" ]]; then
+        printf '%s\n' "$INSERT_START_ID"
+    elif [[ -n "$RESTORE_DIR" ]]; then
+        printf '%s\n' "$EXPECTED_CORPUS_SIZE"
+    else
+        printf '%s\n' "$INSERT_CORPUS_SIZE"
+    fi
+}
+
+INSERT_START_ID="$(compute_insert_start_id)"
 
 
 print_config_summary
@@ -316,8 +412,20 @@ do
                     else
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_${query_bs}_${DATE}"
                     fi
+                elif [[ "$TASK" == "MIXED" ]]; then
+                    if [[ -n "$RESTORE_DIR" ]]; then
+                        corpus_size_for_dir=$EXPECTED_CORPUS_SIZE
+                    else
+                        corpus_size_for_dir=$INSERT_CORPUS_SIZE
+                    fi
+
+                    if [[ "$MODE" == "DISTRIBUTED" ]]; then
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_IBS${upload_bs}_QBS${query_bs}_CS${corpus_size_for_dir}_${DATE}"
+                    else
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_IBS${upload_bs}_QBS${query_bs}_CS${corpus_size_for_dir}_${DATE}"
+                    fi
                 else
-                    echo "Unknown task: $TASK: valid options include INSERT, INDEX, QUERY"
+                    echo "Unknown task: $TASK: valid options include INSERT, INDEX, QUERY, MIXED"
                     exit
                 fi
 
@@ -345,6 +453,28 @@ do
                 echo "QUERY_CORPUS_SIZE=${QUERY_CORPUS_SIZE}" >> $target_file
                 echo "QUERY_BATCH_SIZE=${query_bs}" >> $target_file
                 echo "QUERY_CLIENTS_PER_PROXY=${QUERY_CLIENTS_PER_PROXY}" >> $target_file
+
+                echo "MIXED_RESULT_PATH=${MIXED_RESULT_PATH}" >> $target_file
+                echo "INSERT_MODE=${INSERT_MODE}" >> $target_file
+                echo "INSERT_OPS_PER_SEC=${INSERT_OPS_PER_SEC}" >> $target_file
+                echo "QUERY_MODE=${QUERY_MODE}" >> $target_file
+                echo "QUERY_OPS_PER_SEC=${QUERY_OPS_PER_SEC}" >> $target_file
+                echo "MIXED_CORPUS_SIZE=${MIXED_CORPUS_SIZE}" >> $target_file
+                echo "MIXED_DATA_FILEPATH=${MIXED_DATA_FILEPATH}" >> $target_file
+                echo "MIXED_QUERY_CLIENTS_PER_PROXY=${MIXED_QUERY_CLIENTS_PER_PROXY}" >> $target_file
+                echo "MIXED_INSERT_CLIENTS_PER_PROXY=${MIXED_INSERT_CLIENTS_PER_PROXY}" >> $target_file
+                echo "INSERT_START_ID=${INSERT_START_ID}" >> $target_file
+                echo "COLLECTION_NAME=${COLLECTION_NAME}" >> $target_file
+                echo "VECTOR_FIELD=${VECTOR_FIELD}" >> $target_file
+                echo "ID_FIELD=${ID_FIELD}" >> $target_file
+                echo "TOP_K=${TOP_K}" >> $target_file
+                echo "QUERY_EF_SEARCH=${QUERY_EF_SEARCH}" >> $target_file
+                echo "SEARCH_CONSISTENCY=${SEARCH_CONSISTENCY}" >> $target_file
+                echo "RPC_TIMEOUT=${RPC_TIMEOUT}" >> $target_file
+                echo "INSERT_BATCH_MIN=${INSERT_BATCH_MIN}" >> $target_file
+                echo "INSERT_BATCH_MAX=${INSERT_BATCH_MAX}" >> $target_file
+                echo "QUERY_BATCH_MIN=${QUERY_BATCH_MIN}" >> $target_file
+                echo "QUERY_BATCH_MAX=${QUERY_BATCH_MAX}" >> $target_file
                 
                 echo "VECTOR_DIM=${VECTOR_DIM}" >> $target_file
                 echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
@@ -387,11 +517,16 @@ do
                     cp ./goCode/multiClientOP/multiClientOP $dir/
                     cp ./goCode/multiClientOP/main.go $dir/multiClient.go
                     cp ./generalPython/multi_client_summary.py "$dir/"
+                    if [[ "$TASK" == "MIXED" ]]; then
+                        cp ./goCode/mixedRunner/mixedRunner "$dir/"
+                        cp ./goCode/mixedRunner/main.go "$dir/mixed_main.go"
+                        cp ../qdrant/generalPython/mixed_timeline.py "$dir/"
+                    fi
 
                     if [[ -z "$RESTORE_DIR" ]]; then
-                        cp ./generalPython/query_setup_collection.py "$dir/"
+                        cp ./generalPython/setup_collection.py "$dir/"
 
-                        if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
+                        if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
                             cp ./generalPython/index.py "$dir/"
                         fi
                     else
@@ -435,11 +570,16 @@ do
                     # all tasks need go code
                     cp ./goCode/multiClientOP/multiClientOP $dir/
                     cp ./goCode/multiClientOP/main.go $dir/multiClient.go
+                    if [[ "$TASK" == "MIXED" ]]; then
+                        cp ./goCode/mixedrunner/mixedrunner "$dir/"
+                        cp ./goCode/mixedrunner/main.go "$dir/mixed_main.go"
+                        cp ../qdrant/generalPython/mixed_timeline.py "$dir/"
+                    fi
 
                     if [[ -z "$RESTORE_DIR" ]]; then
                         cp ./generalPython/setup_collection.py "$dir/"
 
-                        if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
+                        if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
                             cp ./generalPython/index.py "$dir/"
                         fi
                     else

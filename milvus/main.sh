@@ -75,7 +75,13 @@ cd $BASE_DIR/$myDIR
 
 export BASE_DIR=$BASE_DIR
 export myDIR=$myDIR
-export RESULT_PATH=$BASE_DIR/$myDIR
+if [[ -z "${RESULT_PATH:-}" ]]; then
+    export RESULT_PATH="$BASE_DIR/$myDIR"
+elif [[ "$RESULT_PATH" != /* ]]; then
+    export RESULT_PATH="$BASE_DIR/$myDIR/$RESULT_PATH"
+else
+    export RESULT_PATH="$RESULT_PATH"
+fi
 
 export PLATFORM=$PLATFORM
 export CORES=$CORES
@@ -318,7 +324,7 @@ if [ -z "$RESTORE_DIR" ]; then
     mkdir -p uploadNPY
     mv *.npy uploadNPY
 
-    if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" ]]; then
+    if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
         export ACTIVE_TASK="INDEX"
         if [[ "$TASK" == "INDEX" ]]; then
             touch ./workerOut/workflow_start.txt
@@ -363,6 +369,78 @@ if [[ "$TASK" == "QUERY" ]]; then
     mv *.npy queryNPY
 
 fi 
+
+if [[ "$TASK" == "MIXED" ]]; then
+    if [[ -z "${MIXED_RESULT_PATH:-}" ]]; then
+        export MIXED_RESULT_PATH="$BASE_DIR/$myDIR/mixed_logs"
+    elif [[ "$MIXED_RESULT_PATH" != /* ]]; then
+        export MIXED_RESULT_PATH="$BASE_DIR/$myDIR/$MIXED_RESULT_PATH"
+    else
+        export MIXED_RESULT_PATH="$MIXED_RESULT_PATH"
+    fi
+
+    export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
+    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
+    export QUERY_DATA_FILEPATH=$QUERY_DATA_FILEPATH
+    export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
+    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
+    export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
+    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
+    export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
+    export INSERT_START_ID=$INSERT_START_ID
+    export INSERT_MODE=${INSERT_MODE:-max}
+    export INSERT_OPS_PER_SEC=$INSERT_OPS_PER_SEC
+    export QUERY_MODE=${QUERY_MODE:-max}
+    export QUERY_OPS_PER_SEC=$QUERY_OPS_PER_SEC
+    export MIXED_CORPUS_SIZE=$MIXED_CORPUS_SIZE
+    export MIXED_DATA_FILEPATH=$MIXED_DATA_FILEPATH
+    export MIXED_QUERY_CLIENTS_PER_PROXY=$MIXED_QUERY_CLIENTS_PER_PROXY
+    export MIXED_INSERT_CLIENTS_PER_PROXY=$MIXED_INSERT_CLIENTS_PER_PROXY
+    export COLLECTION_NAME=$COLLECTION_NAME
+    export VECTOR_FIELD=$VECTOR_FIELD
+    export ID_FIELD=$ID_FIELD
+    export TOP_K=$TOP_K
+    export QUERY_EF_SEARCH=$QUERY_EF_SEARCH
+    export EFSearch=$QUERY_EF_SEARCH
+    export SEARCH_CONSISTENCY=$SEARCH_CONSISTENCY
+    export RPC_TIMEOUT=$RPC_TIMEOUT
+    export INSERT_BATCH_MIN=$INSERT_BATCH_MIN
+    export INSERT_BATCH_MAX=$INSERT_BATCH_MAX
+    export QUERY_BATCH_MIN=$QUERY_BATCH_MIN
+    export QUERY_BATCH_MAX=$QUERY_BATCH_MAX
+    export INSERT_CLIENTS=${MIXED_INSERT_CLIENTS_PER_PROXY:-$INSERT_CLIENTS_PER_PROXY}
+    export QUERY_CLIENTS=${MIXED_QUERY_CLIENTS_PER_PROXY:-$QUERY_CLIENTS_PER_PROXY}
+    mkdir -p "$MIXED_RESULT_PATH"
+
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixedRunner
+
+    MIXED_TIMELINE_METRIC="dot"
+    if [[ "$DISTANCE_METRIC" == "COSINE" ]]; then
+        MIXED_TIMELINE_METRIC="cosine"
+    elif [[ "$DISTANCE_METRIC" == "L2" ]]; then
+        MIXED_TIMELINE_METRIC="l2"
+    fi
+
+    MIXED_TIMELINE_ARGS=(
+        mixed_timeline.py
+        --log-dir "$MIXED_RESULT_PATH"
+        --insert-vectors "$MIXED_DATA_FILEPATH"
+        --insert-max-rows "$MIXED_CORPUS_SIZE"
+        --query-vectors "$QUERY_DATA_FILEPATH"
+        --query-max-rows "$QUERY_CORPUS_SIZE"
+        --metric "$MIXED_TIMELINE_METRIC"
+        --insert-id-offset "$INSERT_START_ID"
+    )
+
+    if [[ -z "$RESTORE_DIR" ]]; then
+        MIXED_TIMELINE_ARGS+=(
+            --init-vectors "$INSERT_DATA_FILEPATH"
+            --init-max-rows "$INSERT_CORPUS_SIZE"
+        )
+    fi
+
+    env "${PYTHON_ENV_VARS[@]}" python3 "${MIXED_TIMELINE_ARGS[@]}"
+fi
 
 if [[ "$TRACING" == "True" ]]; then
         python3 analyze_traces.py > analysis.txt
