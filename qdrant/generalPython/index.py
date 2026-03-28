@@ -44,6 +44,9 @@ def mark_perf_event(filename):
     os.makedirs(perf_dir, exist_ok=True)
     open(os.path.join(perf_dir, filename), "a").close()
 
+def is_mixed_task():
+    return os.getenv("TASK", "").strip().lower() == "mixed"
+
 # ---------- Main ----------
 def main():
     
@@ -93,6 +96,17 @@ def main():
             break
         time.sleep(0.01)
 
+    if is_mixed_task():
+        # Restore the regular indexing threshold after the forced rebuild finishes.
+        client.update_collection(
+            collection_name=collection_name,
+            optimizers_config=models.OptimizersConfigDiff(indexing_threshold=10_000),
+        )
+        while True:
+            info = client.get_collection(collection_name)
+            if info.status == models.CollectionStatus.GREEN:
+                break
+            time.sleep(0.01)
 
     print(info, flush=True)
     with open(f"index_time.txt", "w") as f:
