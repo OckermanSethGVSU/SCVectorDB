@@ -49,6 +49,8 @@ impl ActiveTask {
 struct RunConfig {
     active_task: ActiveTask,
     n_workers: usize,
+    total_clients: usize,
+    explicit_total_clients: bool,
     clients_per_worker: usize,
     corpus_size: usize,
     batch_size: usize,
@@ -129,6 +131,28 @@ pub fn range_for_rank(
     let start = w_start + c_off_start;
     let end = w_start + c_off_end;
     (start, end)
+}
+
+#[inline]
+pub fn range_for_rank_total_clients(rank: usize, total_clients: usize, n_rows_total: usize) -> (usize, usize) {
+    even_chunk(rank, total_clients, n_rows_total)
+}
+
+#[inline]
+pub fn worker_for_rank(rank: usize, n_workers: usize, clients_per_worker: usize) -> anyhow::Result<usize> {
+    if clients_per_worker == 0 {
+        bail!("clients_per_worker must be positive");
+    }
+    let worker_id = rank / clients_per_worker;
+    if worker_id >= n_workers {
+        bail!(
+            "rank {} maps to worker {}, but only {} workers are available",
+            rank,
+            worker_id,
+            n_workers
+        );
+    }
+    Ok(worker_id)
 }
 
 fn read_endpoint_line(path: &str, line_num: usize) -> io::Result<Option<Endpoint>> {
@@ -225,38 +249,37 @@ fn load_config() -> anyhow::Result<RunConfig> {
     let batch_key = format!("{}_BATCH_SIZE", active_task.as_env_prefix());
     let balance_key = format!("{}_BALANCE_STRATEGY", active_task.as_env_prefix());
 
-    let clients_per_worker = match active_task {
+    let (total_clients, explicit_total_clients, clients_per_worker) = match active_task {
         ActiveTask::Upload => {
-            parse_required_usize(&[clients_key.as_str()], "clients_per_worker")?
+            let clients_per_worker =
+                parse_required_usize(&[clients_key.as_str()], "clients_per_worker")?;
+            (n_workers * clients_per_worker, false, clients_per_worker)
         }
         ActiveTask::Query => {
+            let configured_clients_per_worker =
+                parse_optional_usize(&[clients_key.as_str()])?;
             if let Some(total_query_clients) = parse_optional_usize(&["TOTAL_QUERY_CLIENTS"])? {
+                let clients_per_worker = configured_clients_per_worker.context(
+                    "QUERY_CLIENTS_PER_WORKER is required when TOTAL_QUERY_CLIENTS is set",
+                )?;
                 if total_query_clients == 0 {
                     bail!("TOTAL_QUERY_CLIENTS must be positive");
                 }
-                if total_query_clients % n_workers != 0 {
+                if clients_per_worker == 0 {
+                    bail!("QUERY_CLIENTS_PER_WORKER must be positive");
+                }
+                if total_query_clients > n_workers * clients_per_worker {
                     bail!(
-                        "TOTAL_QUERY_CLIENTS={} must split evenly across N_WORKERS={}",
+                        "TOTAL_QUERY_CLIENTS={} exceeds capacity N_WORKERS * QUERY_CLIENTS_PER_WORKER = {}",
                         total_query_clients,
-                        n_workers
+                        n_workers * clients_per_worker
                     );
                 }
-                let derived_clients_per_worker = total_query_clients / n_workers;
-                if let Some(configured_clients_per_worker) =
-                    parse_optional_usize(&[clients_key.as_str()])?
-                {
-                    if configured_clients_per_worker != derived_clients_per_worker {
-                        bail!(
-                            "TOTAL_QUERY_CLIENTS={} implies QUERY_CLIENTS_PER_WORKER={}, but got {}",
-                            total_query_clients,
-                            derived_clients_per_worker,
-                            configured_clients_per_worker
-                        );
-                    }
-                }
-                derived_clients_per_worker
+                (total_query_clients, true, clients_per_worker)
             } else {
-                parse_required_usize(&[clients_key.as_str()], "clients_per_worker")?
+                let clients_per_worker = configured_clients_per_worker
+                    .context("missing environment variable for clients_per_worker: tried [\"QUERY_CLIENTS_PER_WORKER\"]")?;
+                (n_workers * clients_per_worker, false, clients_per_worker)
             }
         }
     };
@@ -300,6 +323,8 @@ fn load_config() -> anyhow::Result<RunConfig> {
     Ok(RunConfig {
         active_task,
         n_workers,
+        total_clients,
+        explicit_total_clients,
         clients_per_worker,
         corpus_size,
         batch_size,
@@ -313,14 +338,13 @@ fn load_config() -> anyhow::Result<RunConfig> {
 }
 
 fn resolve_qdrant_url(
-    rank: usize,
-    clients_per_worker: usize,
+    target: usize,
     balance_strategy: &str,
 ) -> anyhow::Result<(usize, String)> {
     // Choose the target registry entry based on the requested balancing strategy.
     let target = match balance_strategy {
         "NO_BALANCE" => 0,
-        "WORKER_BALANCE" => rank / clients_per_worker,
+        "WORKER_BALANCE" => target,
         _ => bail!("unknown balance strategy: {balance_strategy}"),
     };
 
@@ -608,7 +632,7 @@ fn merge_query_result_chunks(
 async fn main() -> anyhow::Result<()> {
     // Create shared process-wide coordination primitives up front.
     let config = Arc::new(load_config()?);
-    let barrier = Arc::new(Barrier::new(config.n_workers * config.clients_per_worker));
+    let barrier = Arc::new(Barrier::new(config.total_clients));
     let lock = Arc::new(Mutex::new(()));
     let mut handles = Vec::new();
 
@@ -646,17 +670,16 @@ async fn main() -> anyhow::Result<()> {
     let mut query_chunks: Vec<(usize, Array2<i64>)> = Vec::new();
 
     // Spawn one async task per logical client, skipping empty slices.
-    for rank in 0..(config.n_workers * config.clients_per_worker) {
+    for rank in 0..config.total_clients {
         let barrier = Arc::clone(&barrier);
         let lock = Arc::clone(&lock);
         let input_data = Arc::clone(&input);
         let config = Arc::clone(&config);
-        let (start, end) = range_for_rank(
-            rank,
-            config.n_workers,
-            config.clients_per_worker,
-            n_rows_total,
-        );
+        let (start, end) = if config.explicit_total_clients {
+            range_for_rank_total_clients(rank, config.total_clients, n_rows_total)
+        } else {
+            range_for_rank(rank, config.n_workers, config.clients_per_worker, n_rows_total)
+        };
         if start == end {
             continue;
         }
@@ -689,15 +712,15 @@ async fn worker(
     lock: Arc<Mutex<()>>,
 ) -> anyhow::Result<QueryResultChunk> {
     // Each async task computes its own slice and target endpoint from the global config.
+    let target_worker = worker_for_rank(rank, config.n_workers, config.clients_per_worker)?;
     let (target, qdrant_url) =
-        resolve_qdrant_url(rank, config.clients_per_worker, &config.balance_strategy)?;
+        resolve_qdrant_url(target_worker, &config.balance_strategy)?;
     let (n_rows_total, dim) = input_data.dims();
-    let (start_slice, end_slice) = range_for_rank(
-        rank,
-        config.n_workers,
-        config.clients_per_worker,
-        n_rows_total,
-    );
+    let (start_slice, end_slice) = if config.explicit_total_clients {
+        range_for_rank_total_clients(rank, config.total_clients, n_rows_total)
+    } else {
+        range_for_rank(rank, config.n_workers, config.clients_per_worker, n_rows_total)
+    };
 
     let client = Qdrant::from_url(&qdrant_url)
         .timeout(Duration::from_secs(9999))
@@ -1634,6 +1657,20 @@ mod tests {
     }
 
     #[test]
+    fn range_for_rank_total_clients_splits_across_only_active_clients() {
+        let ranges: Vec<(usize, usize)> =
+            (0..2).map(|rank| range_for_rank_total_clients(rank, 2, 10)).collect();
+        assert_eq!(ranges, vec![(0, 5), (5, 10)]);
+    }
+
+    #[test]
+    fn worker_for_rank_uses_clients_per_worker_as_worker_capacity() {
+        assert_eq!(worker_for_rank(0, 4, 1).expect("rank 0"), 0);
+        assert_eq!(worker_for_rank(1, 4, 1).expect("rank 1"), 1);
+        assert_eq!(worker_for_rank(2, 4, 2).expect("rank 2"), 1);
+    }
+
+    #[test]
     fn parse_npy_metadata_reads_shape_and_payload_offset() {
         let path = unique_test_path("metadata");
         let data = array![[1.0_f32, 2.0, 3.0], [4.0, 5.0, 6.0]];
@@ -1727,6 +1764,8 @@ mod tests {
         let config = RunConfig {
             active_task: ActiveTask::Upload,
             n_workers: 1,
+            total_clients: 1,
+            explicit_total_clients: false,
             clients_per_worker: 1,
             corpus_size: 11,
             batch_size: 1,
