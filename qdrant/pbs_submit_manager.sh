@@ -29,6 +29,7 @@ print_config_summary() {
         echo "Query Corpus Size:        $QUERY_CORPUS_SIZE"
         echo "Query Batch Size:         ${QUERY_BATCH_SIZE[*]}"
         echo "Query Clients/Worker:     $QUERY_CLIENTS_PER_WORKER"
+        echo "Total Query Clients:      $TOTAL_QUERY_CLIENTS"
         echo "Query Balance:            $QUERY_BALANCE_STRATEGY"
         echo "Query Streaming:          $QUERY_STREAMING"
     elif [[ "$TASK" == "INDEX" ]]; then
@@ -101,6 +102,7 @@ apply_overrides() {
     apply_scalar_override QUERY_CORPUS_SIZE
     apply_scalar_override QUERY_BALANCE_STRATEGY
     apply_scalar_override QUERY_CLIENTS_PER_WORKER
+    apply_scalar_override TOTAL_QUERY_CLIENTS
     apply_scalar_override QUERY_STREAMING
     apply_scalar_override PLATFORM
     apply_scalar_override QDRANT_EXECUTABLE
@@ -168,6 +170,7 @@ QUERY_CORPUS_SIZE=100 # total data to QUERY
 QUERY_BALANCE_STRATEGY="NO_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 QUERY_CLIENTS_PER_WORKER=1
+TOTAL_QUERY_CLIENTS=""
 QUERY_STREAMING=""
 
 
@@ -318,6 +321,7 @@ do
                     echo "QUERY_FILEPATH=${QUERY_FILEPATH}" >> $target_file
                     echo "QUERY_CORPUS_SIZE=${QUERY_CORPUS_SIZE}" >> $target_file
                     echo "QUERY_CLIENTS_PER_WORKER=${QUERY_CLIENTS_PER_WORKER}" >> $target_file
+                    echo "TOTAL_QUERY_CLIENTS=${TOTAL_QUERY_CLIENTS}" >> $target_file
                     echo "QUERY_BALANCE_STRATEGY=${QUERY_BALANCE_STRATEGY}" >> $target_file
                     echo "QUERY_STREAMING=${QUERY_STREAMING}" >> $target_file
                     

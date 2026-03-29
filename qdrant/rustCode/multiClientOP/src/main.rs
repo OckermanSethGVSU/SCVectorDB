@@ -225,7 +225,41 @@ fn load_config() -> anyhow::Result<RunConfig> {
     let batch_key = format!("{}_BATCH_SIZE", active_task.as_env_prefix());
     let balance_key = format!("{}_BALANCE_STRATEGY", active_task.as_env_prefix());
 
-    let clients_per_worker = parse_required_usize(&[clients_key.as_str()], "clients_per_worker")?;
+    let clients_per_worker = match active_task {
+        ActiveTask::Upload => {
+            parse_required_usize(&[clients_key.as_str()], "clients_per_worker")?
+        }
+        ActiveTask::Query => {
+            if let Some(total_query_clients) = parse_optional_usize(&["TOTAL_QUERY_CLIENTS"])? {
+                if total_query_clients == 0 {
+                    bail!("TOTAL_QUERY_CLIENTS must be positive");
+                }
+                if total_query_clients % n_workers != 0 {
+                    bail!(
+                        "TOTAL_QUERY_CLIENTS={} must split evenly across N_WORKERS={}",
+                        total_query_clients,
+                        n_workers
+                    );
+                }
+                let derived_clients_per_worker = total_query_clients / n_workers;
+                if let Some(configured_clients_per_worker) =
+                    parse_optional_usize(&[clients_key.as_str()])?
+                {
+                    if configured_clients_per_worker != derived_clients_per_worker {
+                        bail!(
+                            "TOTAL_QUERY_CLIENTS={} implies QUERY_CLIENTS_PER_WORKER={}, but got {}",
+                            total_query_clients,
+                            derived_clients_per_worker,
+                            configured_clients_per_worker
+                        );
+                    }
+                }
+                derived_clients_per_worker
+            } else {
+                parse_required_usize(&[clients_key.as_str()], "clients_per_worker")?
+            }
+        }
+    };
     let corpus_size = match active_task {
         ActiveTask::Upload => {
             parse_required_usize(&["INSERT_CORPUS_SIZE"], "insert corpus size")?
