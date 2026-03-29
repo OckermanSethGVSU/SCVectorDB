@@ -72,11 +72,11 @@ BASE_DIR="$(pwd)"
 
 ### Loop variables ###
 NODES=(1)
-WORKERS_PER_NODE=(1)
+WORKERS_PER_NODE=(4)
 
 # For query_core sweep: edit CORES manually each run among:
 # 1 2 4 8 16 32 64 128 208
-CORES=(2)
+CORES=(112)
 
 # For query_bs sweep: edit QUERY_BATCH_SIZE manually each run among:
 # 32 64 128 256 512 1024 2048 4096 8192
@@ -90,7 +90,7 @@ queue="debug-scaling"   # debug for query sweeps
 
 ### Runtime variables ###
 # TASK: [insert, index, query_bs, query_core]
-TASK="query_core"
+TASK="insert"
 
 # Keep these to preserve structure
 UPLOAD_CLIENTS_PER_WORKER=(16)
@@ -114,12 +114,12 @@ QUERY_TOPK=10
 QUERY_EF=64
 
 # Build this once with TASK=index and SAVE_SNAPSHOT=true, then reuse it for query runs.
-SNAPSHOT_DIR="/flare/radix-io/songoh/SCVectorDB/weaivate/snapshots/pes2o"
+# SNAPSHOT_DIR="/flare/radix-io/songoh/SCVectorDB/weaivate/snapshots/pes2o"
 
 PLATFORM="AURORA"
 
 # Go client source directory
-GO_CLIENT_SRC="/flare/radix-io/songoh/weaviate/multi_node/go_client"
+# GO_CLIENT_SRC="/flare/radix-io/songoh/weaviate/multi_node/go_client"
 
 # For one-time snapshot creation only
 SAVE_SNAPSHOT="false"   # set true only on the one indexing run used to create the snapshot
@@ -152,7 +152,7 @@ for num_nodes in "${NODES[@]}"; do
                         fi
 
                         mkdir -p "$dir"
-                        mkdir -p "$dir/go_client"
+                        mkdir -p "$dir/"
 
                         rm -f "$target_file"
 
@@ -201,43 +201,44 @@ for num_nodes in "${NODES[@]}"; do
                             echo "QUERY_WORKLOAD=${QUERY_WORKLOAD}"
                             echo "QUERY_TOPK=${QUERY_TOPK}"
                             echo "QUERY_EF=${QUERY_EF}"
-                            echo "SNAPSHOT_DIR=${SNAPSHOT_DIR}"
-                            echo "SAVE_SNAPSHOT=${SAVE_SNAPSHOT}"
-                            echo "RESTORE_SNAPSHOT=${RESTORE_SNAPSHOT}"
+                            # echo "SNAPSHOT_DIR=${SNAPSHOT_DIR}"
+                            # echo "SAVE_SNAPSHOT=${SAVE_SNAPSHOT}"
+                            # echo "RESTORE_SNAPSHOT=${RESTORE_SNAPSHOT}"
                             echo
 
                             cat main.sh
                         } > "$target_file"
 
                         cp weaviateSetup/launchWeaviateNode.sh "$dir/"
-                        cp mapping.py "$dir/"
-                        cp weaviate_latest.sif "$dir/"
+                        cp weaviateSetup/mapping.py "$dir/"
+                        # cp weaviate_latest.sif "$dir/"
+                        cp ./goCode/test/test "$dir/"
                         if [[ -d perf ]]; then
                             cp -r perf "$dir/"
                         fi
 
-                        cp "${GO_CLIENT_SRC}/index_pes2o.go" "$dir/go_client/"
-                        cp "${GO_CLIENT_SRC}/index_pes2o_ef64.go" "$dir/go_client/"
-                        cp "${GO_CLIENT_SRC}/index_pes2o_ef64" "$dir/go_client/" 2>/dev/null || true
+                        # cp "${GO_CLIENT_SRC}/index_pes2o.go" "$dir/go_client/"
+                        # cp "${GO_CLIENT_SRC}/index_pes2o_ef64.go" "$dir/go_client/"
+                        # cp "${GO_CLIENT_SRC}/index_pes2o_ef64" "$dir/go_client/" 2>/dev/null || true
                         
-                        cp "${GO_CLIENT_SRC}/insert_nclients.go" "$dir/go_client/"
-                        cp "${GO_CLIENT_SRC}/query.go" "$dir/go_client/"
-                        cp "${GO_CLIENT_SRC}/go.mod" "$dir/go_client/" 2>/dev/null || true
-                        cp "${GO_CLIENT_SRC}/go.sum" "$dir/go_client/" 2>/dev/null || true
+                        # cp "${GO_CLIENT_SRC}/insert_nclients.go" "$dir/go_client/"
+                        # cp "${GO_CLIENT_SRC}/query.go" "$dir/go_client/"
+                        # cp "${GO_CLIENT_SRC}/go.mod" "$dir/go_client/" 2>/dev/null || true
+                        # cp "${GO_CLIENT_SRC}/go.sum" "$dir/go_client/" 2>/dev/null || true
 
-                        cp "${GO_CLIENT_SRC}/index_pes2o" "$dir/go_client/" 2>/dev/null || true
-                        cp "${GO_CLIENT_SRC}/insert_nclients" "$dir/go_client/" 2>/dev/null || true
-                        cp "${GO_CLIENT_SRC}/query_yandex" "$dir/go_client/" 2>/dev/null || true
+                        # cp "${GO_CLIENT_SRC}/index_pes2o" "$dir/go_client/" 2>/dev/null || true
+                        # cp "${GO_CLIENT_SRC}/insert_nclients" "$dir/go_client/" 2>/dev/null || true
+                        # cp "${GO_CLIENT_SRC}/query_yandex" "$dir/go_client/" 2>/dev/null || true
 
-                        chmod +x "$dir/go_client/index_pes2o" "$dir/go_client/insert_nclients" "$dir/go_client/query_yandex" 2>/dev/null || true
-                        chmod +x "$dir/go_client/index_pes2o_ef64" 2>/dev/null || true
+                        # chmod +x "$dir/go_client/index_pes2o" "$dir/go_client/insert_nclients" "$dir/go_client/query_yandex" 2>/dev/null || true
+                        # chmod +x "$dir/go_client/index_pes2o_ef64" 2>/dev/null || true
                         mv "$target_file" "$dir/"
-                        chmod -R g+w "$dir"
-                        chmod +x "$dir/submit.sh" "$dir/launchWeaviateNode.sh"
+                        # chmod -R g+w "$dir"
+                        # chmod +x "$dir/submit.sh" "$dir/launchWeaviateNode.sh"
 
                         cd "$dir"
                         echo "[SUBMIT] $(pwd)/submit.sh"
-                        qsub submit.sh
+                        # qsub submit.sh
                         sleep 5
                         cd "$BASE_DIR"
 

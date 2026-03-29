@@ -20,6 +20,7 @@ fi
 
 RANK=$((RANK))
 TOTAL=$((TOTAL))
+NODE_NAME="node${RANK}"
 mkdir -p ./perf
 
 # ------------------------------------------------------------
@@ -53,9 +54,7 @@ RAFT_INTERNAL_RPC_PORT=$((HTTP_PORT + 6))
 
 RAFT_JOIN=$(
     for r in $(seq 0 $((TOTAL - 1))); do
-        this_http=$((8080 + r * 100))
-        this_raft=$((this_http + 5))
-        printf "node%d:%d," "$r" "$this_raft"
+        printf "node%d:%d," "$r" "$((8085 + r * 100))"
     done
 )
 RAFT_JOIN=${RAFT_JOIN%,}
@@ -73,24 +72,25 @@ fi
 sleep 1
 
 
-# rank,ip,http,gossip,data,raft,raft_internal
-echo "${RANK},${IP_ADDR},${HTTP_PORT},${CLUSTER_GOSSIP_BIND_PORT},${CLUSTER_DATA_BIND_PORT},${RAFT_PORT},${RAFT_INTERNAL_RPC_PORT}" >> "$OUTPUT_FILE"
+# rank,node,ip,http,gossip,data,raft,raft_internal
+echo "${RANK},${NODE_NAME},${IP_ADDR},${HTTP_PORT},${CLUSTER_GOSSIP_BIND_PORT},${CLUSTER_DATA_BIND_PORT},${RAFT_PORT},${RAFT_INTERNAL_RPC_PORT}" >> "$OUTPUT_FILE"
 
 while true; do
-    REG_COUNT=$(awk -F, 'NF >= 7 {seen[$1]=1} END {print length(seen)}' "$OUTPUT_FILE")
+    REG_COUNT=$(awk -F, 'NF >= 8 {seen[$1]=1} END {print length(seen)}' "$OUTPUT_FILE")
     if [[ "${REG_COUNT}" -ge "${TOTAL}" ]]; then
         break
     fi
     sleep 0.1
 done
 
-BOOTSTRAP_IP=$(awk -F, '$1 == 0 {print $2; exit}' "$OUTPUT_FILE")
-BOOTSTRAP_HTTP_PORT=$(awk -F, '$1 == 0 {print $3; exit}' "$OUTPUT_FILE")
-BOOTSTRAP_GOSSIP_PORT=$(awk -F, '$1 == 0 {print $4; exit}' "$OUTPUT_FILE")
-BOOTSTRAP_DATA_PORT=$(awk -F, '$1 == 0 {print $5; exit}' "$OUTPUT_FILE")
-BOOTSTRAP_RAFT_PORT=$(awk -F, '$1 == 0 {print $6; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_NODE_NAME=$(awk -F, '$1 == 0 {print $2; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_IP=$(awk -F, '$1 == 0 {print $3; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_HTTP_PORT=$(awk -F, '$1 == 0 {print $4; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_GOSSIP_PORT=$(awk -F, '$1 == 0 {print $5; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_DATA_PORT=$(awk -F, '$1 == 0 {print $6; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_RAFT_PORT=$(awk -F, '$1 == 0 {print $7; exit}' "$OUTPUT_FILE")
 
-if [[ -z "${BOOTSTRAP_IP}" || -z "${BOOTSTRAP_GOSSIP_PORT}" || -z "${BOOTSTRAP_RAFT_PORT}" ]]; then
+if [[ -z "${BOOTSTRAP_NODE_NAME}" || -z "${BOOTSTRAP_IP}" || -z "${BOOTSTRAP_GOSSIP_PORT}" || -z "${BOOTSTRAP_RAFT_PORT}" ]]; then
     echo "Error: failed to read rank 0 bootstrap info from '$OUTPUT_FILE'" >&2
     cat "$OUTPUT_FILE" >&2
     exit 1
@@ -162,7 +162,10 @@ COMMON_ARGS=(
     --env GO_PROFILING_PORT="${GO_PROFILING_PORT}"
     --env GRPC_PORT="${GRPC_PORT}"
 
-    --env CLUSTER_HOSTNAME="node${RANK}"
+    # This mode is required whenever multiple Weaviate nodes share a host.
+    # It makes Weaviate honor the explicit name:raftPort mapping from RAFT_JOIN.
+    --env CLUSTER_IN_LOCALHOST=true
+    --env CLUSTER_HOSTNAME="${NODE_NAME}"
     --env CLUSTER_ADVERTISE_ADDR="${IP_ADDR}"
     --env CLUSTER_GOSSIP_BIND_PORT="${CLUSTER_GOSSIP_BIND_PORT}"
     --env CLUSTER_DATA_BIND_PORT="${CLUSTER_DATA_BIND_PORT}"
@@ -170,7 +173,6 @@ COMMON_ARGS=(
     --env RAFT_PORT="${RAFT_PORT}"
     --env RAFT_INTERNAL_RPC_PORT="${RAFT_INTERNAL_RPC_PORT}"
     --env RAFT_JOIN="${RAFT_JOIN}"
-    --env RAFT_BOOTSTRAP_EXPECT="${TOTAL}"
     --env RAFT_BOOTSTRAP_TIMEOUT=180
     --env NO_PROXY="" 
     --env no_proxy="" 
@@ -189,15 +191,28 @@ WEAVIATE_CMD=(
     --raft-internal-rpc-port "${RAFT_INTERNAL_RPC_PORT}"
 )
 
+wait_for_ready() {
+    local host="$1"
+    local port="$2"
+
+    until NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+        curl -sf "http://${host}:${port}/v1/.well-known/ready" >/dev/null; do
+        sleep 1
+    done
+}
+
 if [[ $RANK -eq 0 ]]; then
-    echo "Launching founding node"
+    echo "Launching founding node ${NODE_NAME}"
 
     apptainer exec \
         "${COMMON_ARGS[@]}" \
         "${APPTAINER_ARGS[@]}" \
+        --env RAFT_BOOTSTRAP_EXPECT=1 \
         "${IMAGE}" \
         "${WEAVIATE_CMD[@]}" \
         > "rank${RANK}.out" 2>&1 &
+
+    wait_for_ready "${IP_ADDR}" "${HTTP_PORT}"
 else
     until bash -c "exec 3<>/dev/tcp/${BOOTSTRAP_IP}/${BOOTSTRAP_GOSSIP_PORT}" 2>/dev/null; do
         sleep 0.2
@@ -207,9 +222,7 @@ else
         sleep 0.2
     done
 
-    sleep 3
-
-    echo "Launching follower node"
+    echo "Launching follower node ${NODE_NAME} via ${BOOTSTRAP_NODE_NAME}@${BOOTSTRAP_IP}:${BOOTSTRAP_GOSSIP_PORT}"
 
     apptainer exec \
         "${COMMON_ARGS[@]}" \
@@ -218,9 +231,10 @@ else
         "${IMAGE}" \
         "${WEAVIATE_CMD[@]}" \
         > "rank${RANK}.out" 2>&1 &
+
+    wait_for_ready "${IP_ADDR}" "${HTTP_PORT}"
 fi
 
-sleep 5
 touch "./perf/weaviate_running${RANK}.txt"
 
 wait

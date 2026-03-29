@@ -19,7 +19,7 @@ elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
     module load frameworks
     source /lus/flare/projects/radix-io/sockerman/qdrant/qEnv/bin/activate
-    cd /lus/flare/projects/radix-io/sockerman/temp/weaviate/$myDIR
+    cd /lus/flare/projects/radix-io/sockerman/temp/weaivate/$myDIR
 fi
 
 
@@ -57,3 +57,29 @@ else
     mpirun -n $TOTAL --ppn $WORKERS_PER_NODE -d $CORES --cpu-bind depth --host "$WORKER_HOSTS" \
         ./launchWeaviateNode.sh $STORAGE_MEDIUM $USEPERF $TOTAL &
 fi
+
+
+# wait for the cluster to signal that it is up
+TARGET="./perf/weaviate_running${MAX_RANK}.txt"
+while [ ! -e "$TARGET" ]; do
+  sleep 0.1
+done
+
+REGISTRY_FILE="ip_registry.txt"
+if [[ ! -f "$REGISTRY_FILE" ]]; then
+    echo "Error: expected registry file '$REGISTRY_FILE' not found" >&2
+    exit 1
+fi
+
+WEAVIATE_IP=$(awk -F, '$1 == 0 {print $3; exit}' "$REGISTRY_FILE")
+WEAVIATE_HTTP_PORT=$(awk -F, '$1 == 0 {print $4; exit}' "$REGISTRY_FILE")
+if [[ -z "$WEAVIATE_IP" || -z "$WEAVIATE_HTTP_PORT" ]]; then
+    echo "Error: failed to read rank 0 HTTP endpoint from '$REGISTRY_FILE'" >&2
+    cat "$REGISTRY_FILE" >&2
+    exit 1
+fi
+
+export WEAVIATE_SCHEME="http"
+export WEAVIATE_HOST="${WEAVIATE_IP}:${WEAVIATE_HTTP_PORT}"
+echo "WEAVIATE_HOST=${WEAVIATE_HOST}"
+NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./test
