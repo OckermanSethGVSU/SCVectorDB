@@ -1,5 +1,6 @@
 import csv
 import os
+import re
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +11,13 @@ def env_required(name: str) -> str:
     if value is None or value.strip() == "":
         raise RuntimeError(f"missing required environment variable: {name}")
     return value.strip()
+
+
+def env_optional_int(name: str) -> int | None:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return None
+    return int(value.strip())
 
 
 def get_active_task() -> str:
@@ -49,14 +57,46 @@ def extract_total_time(csv_path: Path) -> float:
     raise RuntimeError(f"rank 0 total not found in {csv_path}")
 
 
+def expected_client_count(task: str) -> int:
+    if task == "QUERY":
+        total_clients = env_optional_int("TOTAL_QUERY_CLIENTS")
+        if total_clients is not None:
+            return total_clients
+
+    n_workers = int(env_required("N_WORKERS"))
+    clients_per_worker = int(env_required(f"{task}_CLIENTS_PER_WORKER"))
+    return n_workers * clients_per_worker
+
+
+def discover_ranks(prefix: str, main_prefix: str, expected_clients: int) -> list[int]:
+    patterns = [
+        re.compile(rf"{re.escape(prefix)}_batch_construction_times_rank_(\d+)\.npy$"),
+        re.compile(rf"{re.escape(prefix)}_{re.escape(main_prefix)}_rank_(\d+)\.npy$"),
+        re.compile(rf"{re.escape(prefix)}_op_times_rank_(\d+)\.npy$"),
+    ]
+    rank_sets: list[set[int]] = []
+
+    for pattern in patterns:
+        ranks = set()
+        for path in Path(".").glob("*.npy"):
+            match = pattern.fullmatch(path.name)
+            if match:
+                ranks.add(int(match.group(1)))
+        rank_sets.append(ranks)
+
+    common_ranks = set.intersection(*rank_sets)
+    if common_ranks:
+        return sorted(rank for rank in common_ranks if rank < expected_clients)
+
+    return list(range(expected_clients))
+
+
 def main():
     task = get_active_task()
     prefix = task.lower()
     batch_size = int(env_required(f"{task}_BATCH_SIZE"))
     corpus_size = int(env_required(f"{task}_CORPUS_SIZE"))
-    n_workers = int(env_required("N_WORKERS"))
-    clients_per_worker = int(env_required(f"{task}_CLIENTS_PER_WORKER"))
-    clients = n_workers * clients_per_worker
+    clients = expected_client_count(task)
 
     if task == "INSERT":
         main_name = "insert"
@@ -77,7 +117,13 @@ def main():
     all_main = []
     all_op = []
 
-    for rank in range(clients):
+    ranks = discover_ranks(prefix, main_prefix, clients)
+    if not ranks:
+        raise RuntimeError(
+            f"no rank timing files found for task={task} (expected up to {clients} ranks)"
+        )
+
+    for rank in ranks:
         prep, prep_arr = summarize_npy(Path(f"{prefix}_batch_construction_times_rank_{rank}.npy"), rank, "prep", batch_size)
         main_stats, main_arr = summarize_npy(Path(f"{prefix}_{main_prefix}_rank_{rank}.npy"), rank, main_name, batch_size)
         op, op_arr = summarize_npy(Path(f"{prefix}_op_times_rank_{rank}.npy"), rank, "op", batch_size)
