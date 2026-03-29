@@ -93,6 +93,10 @@ def get_dml_channels() -> str:
     return "16" if value == "" else value
 
 
+def get_minio_mode() -> str:
+    return os.environ.get("MINIO_MODE", "off").strip().lower()
+
+
 def load_unified_template() -> str:
     return Path("configs/unified_milvus.yaml").read_text()
 
@@ -146,13 +150,22 @@ def finalize_text(text: str, replacements: Dict[str, str]) -> str:
 
 def build_standalone_config(wal: str) -> str:
     worker_ip = Path("worker.ip").read_text().strip()
+    standalone_minio_mode = get_minio_mode()
+    minio_ip = worker_ip
+
+    if standalone_minio_mode == "single":
+        minio_ip = get_ip_by_rank("minio_registry.txt", 0)
+    elif standalone_minio_mode != "off":
+        raise ValueError(
+            f"Unsupported MINIO_MODE='{standalone_minio_mode}' for standalone. Expected 'off' or 'single'."
+        )
 
     text = load_unified_template()
     text = finalize_text(
         text,
         {
             "<ETCD0>:2379,<ETCD1>:2379,<ETCD2>:2379": f"{worker_ip}:2379",
-            "<MINIO>": worker_ip,
+            "<MINIO>": minio_ip,
             "<WAL>": wal,
             "<MQ>": worker_ip,
             "<DML>": "16",
@@ -164,6 +177,8 @@ def build_standalone_config(wal: str) -> str:
             "<TLS_SNI>": "localhost",
         },
     )
+    storage_type = "remote" if standalone_minio_mode == "single" else "local"
+    text = text.replace("storageType: remote", f"storageType: {storage_type}")
     text = apply_tracing_config(text)
     text = apply_debug_config(text)
     text = apply_common_tuning(text)

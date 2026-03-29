@@ -85,6 +85,36 @@ cp -r ./configs/ $TARGET_BASE/
 
 PROXY_PORT=20001
 METRICS_PORT=9091
+STANDALONE_STORAGE_TYPE="local"
+MINIO_ENV_ARGS=()
+
+if [[ "$MINIO_MODE" == "single" ]]; then
+    MINIO_IP=""
+    for _ in $(seq 1 60); do
+        if [[ -f minio_registry.txt ]]; then
+            MINIO_IP=$(awk -F, '$1 == "0" { print $2; exit }' minio_registry.txt)
+            if [[ -n "$MINIO_IP" ]]; then
+                break
+            fi
+        fi
+        sleep 1
+    done
+
+    if [[ -z "$MINIO_IP" ]]; then
+        echo "Timed out waiting for minio_registry.txt to contain rank 0" >&2
+        exit 1
+    fi
+
+    STANDALONE_STORAGE_TYPE="remote"
+    MINIO_ENV_ARGS+=(
+        --env MINIO_ADDRESS=${MINIO_IP}:9000
+        --env MINIO_ACCESS_KEY_ID=minioadmin
+        --env MINIO_SECRET_ACCESS_KEY=minioadmin
+    )
+elif [[ "$MINIO_MODE" != "off" ]]; then
+    echo "Unsupported MINIO_MODE '$MINIO_MODE' for standalone" >&2
+    exit 1
+fi
 
 # create proxy registry for the go insert
 echo "0,${IP_ADDR},${PROXY_PORT},${METRICS_PORT}" > PROXY_registry.txt
@@ -139,7 +169,7 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env ETCD_USE_EMBED=true \
     $ETCD_FLAG \
     --env ETCD_CONFIG_PATH=/milvus/configs/embedEtcd.yaml \
-    --env COMMON_STORAGETYPE=local \
+    --env COMMON_STORAGETYPE=$STANDALONE_STORAGE_TYPE \
     --env DEPLOY_MODE=STANDALONE \
     --env TYPE=$TYPE \
     --env PERF=$PERF \
@@ -157,6 +187,7 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     "${POLARIS_BINDS[@]}" \
     "${GPU_ARGS[@]}" \
     "${CPU_ARGS[@]}" \
+    "${MINIO_ENV_ARGS[@]}" \
     milvus.sif bash app_execute.sh standalone > standalone.out 2>&1
 
 # apptainer shell --no-home --fakeroot --writable-tmpfs --nv \
