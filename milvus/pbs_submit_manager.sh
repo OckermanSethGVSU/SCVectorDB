@@ -53,6 +53,7 @@ apply_overrides() {
     apply_override_value INSERT_CORPUS_SIZE INSERT_CORPUS_SIZE_OVERRIDE
     apply_override_value INSERT_CLIENTS_PER_PROXY INSERT_CLIENTS_PER_PROXY_OVERRIDE
     apply_override_value INSERT_BALANCE_STRATEGY INSERT_BALANCE_STRATEGY_OVERRIDE
+    apply_override_value INSERT_STREAMING INSERT_STREAMING_OVERRIDE
     apply_override_value INSERT_DATA_FILEPATH INSERT_DATA_FILEPATH_OVERRIDE
     apply_override_array INSERT_BATCH_SIZE INSERT_BATCH_SIZE_OVERRIDE
 
@@ -63,6 +64,7 @@ apply_overrides() {
     apply_override_value QUERY_CORPUS_SIZE QUERY_CORPUS_SIZE_OVERRIDE
     apply_override_value QUERY_CLIENTS_PER_PROXY QUERY_CLIENTS_PER_PROXY_OVERRIDE
     apply_override_value QUERY_BALANCE_STRATEGY QUERY_BALANCE_STRATEGY_OVERRIDE
+    apply_override_value QUERY_STREAMING QUERY_STREAMING_OVERRIDE
     apply_override_value QUERY_DATA_FILEPATH QUERY_DATA_FILEPATH_OVERRIDE
     apply_override_array QUERY_BATCH_SIZE QUERY_BATCH_SIZE_OVERRIDE
 
@@ -130,6 +132,7 @@ print_config_summary() {
             echo "Insert Batch Sizes:       ${INSERT_BATCH_SIZE[*]}"
             echo "Insert Clients/Proxy:     $INSERT_CLIENTS_PER_PROXY"
             echo "Insert Balance:           $INSERT_BALANCE_STRATEGY"
+            echo "Insert Streaming:         $INSERT_STREAMING"
             ;;
         INDEX)
             echo "Index Corpus Size:        $INSERT_CORPUS_SIZE"
@@ -142,6 +145,7 @@ print_config_summary() {
             echo "Query Batch Sizes:        ${QUERY_BATCH_SIZE[*]}"
             echo "Query Clients/Proxy:      $QUERY_CLIENTS_PER_PROXY"
             echo "Query Balance:            $QUERY_BALANCE_STRATEGY"
+            echo "Query Streaming:          $QUERY_STREAMING"
             echo "Restore Dir:              ${RESTORE_DIR:-<unset>}"
             echo "Expected Corpus Size:     $EXPECTED_CORPUS_SIZE"
             ;;
@@ -151,11 +155,13 @@ print_config_summary() {
             echo "Insert Batch Sizes:       ${INSERT_BATCH_SIZE[*]}"
             echo "Insert Clients/Proxy:     $INSERT_CLIENTS_PER_PROXY"
             echo "Insert Balance:           $INSERT_BALANCE_STRATEGY"
+            echo "Insert Streaming:         $INSERT_STREAMING"
             echo "Query Corpus Size:        $QUERY_CORPUS_SIZE"
             echo "Query Data File:          $QUERY_DATA_FILEPATH"
             echo "Query Batch Sizes:        ${QUERY_BATCH_SIZE[*]}"
             echo "Query Clients/Proxy:      $QUERY_CLIENTS_PER_PROXY"
             echo "Query Balance:            $QUERY_BALANCE_STRATEGY"
+            echo "Query Streaming:          $QUERY_STREAMING"
             echo "Mixed Corpus Size:        $MIXED_CORPUS_SIZE"
             echo "Mixed Data File:          $MIXED_DATA_FILEPATH"
             echo "Mixed Insert Clients:     $MIXED_INSERT_CLIENTS_PER_PROXY"
@@ -193,6 +199,8 @@ print_config_summary() {
         echo "DML Channels:             $DML_CHANNELS"
     else
         echo "WAL Mode:                 $WAL"
+        echo "MinIO Mode:               $MINIO_MODE"
+        echo "MinIO Medium:             $MINIO_MEDIUM"
         case "$TASK" in
             INSERT)
                 echo "Standalone Cores:         ${CORES[*]}"
@@ -229,7 +237,7 @@ MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the di
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
-TASK="MIXED" # [INSERT, INDEX, QUERY, MIXED]
+TASK="QUERY" # [INSERT, INDEX, QUERY, MIXED]
 RUN_MODE="local" # [PBS, local]
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
@@ -239,11 +247,14 @@ GPU_INDEX="False" # [True, False]
 TRACING="False" 
 DEBUG="False" # [True, False]
 BASE_DIR="$(pwd)"
+MINIO_MODE="" # standalone: [off, single], distributed: [single, stripped]
+MINIO_MEDIUM="lustre" # [lustre] (can be memory if running single) - DAOS is broken
 
 ### Insertion Variables ### 
 INSERT_CORPUS_SIZE=1000 # total data to insert
 INSERT_CLIENTS_PER_PROXY=4
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
+INSERT_STREAMING="TRUE" # [True, False]
 # Aurora
     # 10 million 
     #    HPC-Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
@@ -272,6 +283,7 @@ INIT_FLAT_INDEX="FALSE" # [TRUE, FALSE]
 QUERY_CORPUS_SIZE=100  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
+QUERY_STREAMING="False" # [True, False]
 QUERY_BATCH_SIZE=(1)
 
 # Aurora
@@ -323,8 +335,6 @@ EXPECTED_CORPUS_SIZE=10000000
 
 
 ### Distributed Variables ###
-MINIO_MODE="stripped" # [single, stripped]
-MINIO_MEDIUM="lustre" # [lustre] (can be memory if running single) - DAOS is broken
 ETCD_MODE="replicated" # [single, replicated]
 STREAMING_NODES=8
 STREAMING_NODES_PER_CN=4
@@ -333,6 +343,14 @@ NUM_PROXIES_PER_CN=4
 DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
 
 apply_overrides
+
+if [[ -z "$MINIO_MODE" ]]; then
+    if [[ "$MODE" == "DISTRIBUTED" ]]; then
+        MINIO_MODE="stripped"
+    else
+        MINIO_MODE="off"
+    fi
+fi
 
 compute_insert_start_id() {
     if [[ -n "$INSERT_START_ID" ]]; then
@@ -444,12 +462,14 @@ do
 
                 echo "INSERT_DATA_FILEPATH=${INSERT_DATA_FILEPATH}" >> $target_file
                 echo "INSERT_BALANCE_STRATEGY=${INSERT_BALANCE_STRATEGY}" >> $target_file
+                echo "INSERT_STREAMING=${INSERT_STREAMING}" >> $target_file
                 echo "INSERT_CORPUS_SIZE=${INSERT_CORPUS_SIZE}" >> $target_file
                 echo "INSERT_BATCH_SIZE=${upload_bs}" >> $target_file
                 echo "INSERT_CLIENTS_PER_PROXY=${INSERT_CLIENTS_PER_PROXY}" >> $target_file
                 
                 echo "QUERY_DATA_FILEPATH=${QUERY_DATA_FILEPATH}" >> $target_file
                 echo "QUERY_BALANCE_STRATEGY=${QUERY_BALANCE_STRATEGY}" >> $target_file
+                echo "QUERY_STREAMING=${QUERY_STREAMING}" >> $target_file
                 echo "QUERY_CORPUS_SIZE=${QUERY_CORPUS_SIZE}" >> $target_file
                 echo "QUERY_BATCH_SIZE=${query_bs}" >> $target_file
                 echo "QUERY_CLIENTS_PER_PROXY=${QUERY_CLIENTS_PER_PROXY}" >> $target_file
@@ -490,16 +510,16 @@ do
                 
                 
 
+                echo "MINIO_MODE=${MINIO_MODE}" >> $target_file
+                echo "MINIO_MEDIUM=${MINIO_MEDIUM}" >> $target_file
 
                 if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                    echo "MINIO_MODE=${MINIO_MODE}" >> $target_file
                     echo "ETCD_MODE=${ETCD_MODE}" >> $target_file
                     echo "STREAMING_NODES=${STREAMING_NODES}" >> $target_file
                     echo "STREAMING_NODES_PER_CN=${STREAMING_NODES_PER_CN}" >> $target_file
                     echo "NUM_PROXIES=${NUM_PROXIES}" >> $target_file
                     echo "NUM_PROXIES_PER_CN=${NUM_PROXIES_PER_CN}" >> $target_file
                     echo "DML_CHANNELS=${DML_CHANNELS}" >> $target_file
-                    echo "MINIO_MEDIUM=${MINIO_MEDIUM}" >> $target_file
                 else
                     echo "NUM_PROXIES=1" >> $target_file
                     echo "NUM_PROXIES_PER_CN=1" >> $target_file

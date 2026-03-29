@@ -23,6 +23,8 @@ export MODE="${MODE:-STANDALONE}"
 export TASK="${TASK:-INSERT}"
 export WAL="${WAL:-woodpecker}"
 export DML_CHANNELS="${DML_CHANNELS:-16}"
+export MINIO_MODE="${MINIO_MODE:-off}"
+export MINIO_MEDIUM="${MINIO_MEDIUM:-lustre}"
 
 export NUM_PROXIES="${NUM_PROXIES:-1}"
 export NUM_PROXIES_PER_CN="${NUM_PROXIES_PER_CN:-1}"
@@ -147,6 +149,11 @@ wait_for_milvus() {
 start_local_milvus() {
     write_local_configs
 
+    if [[ "$MINIO_MODE" != "off" ]]; then
+        echo "Local mode does not yet support MINIO_MODE='${MINIO_MODE}'. Use off." >&2
+        exit 1
+    fi
+
     if "$CONTAINER_RUNTIME" ps --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
         echo "Milvus container '$CONTAINER_NAME' is already running."
     else
@@ -193,6 +200,7 @@ run_insert() {
 	export INSERT_CLIENTS_PER_PROXY="${INSERT_CLIENTS_PER_PROXY:?INSERT_CLIENTS_PER_PROXY is required}"
 	export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
 	export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
+	export INSERT_STREAMING="${INSERT_STREAMING:-}"
 
 	env GOGC="${LOCAL_INSERT_GOGC:-25}" "${PYTHON_ENV_VARS[@]}" "$STANDARD_BINARY_PATH"
 }
@@ -210,6 +218,7 @@ run_query() {
     export QUERY_CLIENTS_PER_PROXY="${QUERY_CLIENTS_PER_PROXY:?QUERY_CLIENTS_PER_PROXY is required}"
     export QUERY_DATA_FILEPATH="${QUERY_DATA_FILEPATH:?QUERY_DATA_FILEPATH is required}"
     export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:?QUERY_BATCH_SIZE is required}"
+    export QUERY_STREAMING="${QUERY_STREAMING:-}"
 
     env "${PYTHON_ENV_VARS[@]}" "$STANDARD_BINARY_PATH"
 }
@@ -223,6 +232,8 @@ run_mixed() {
     export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:?QUERY_CORPUS_SIZE is required}"
     export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
     export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:?QUERY_BATCH_SIZE is required}"
+    export INSERT_STREAMING="${INSERT_STREAMING:-}"
+    export QUERY_STREAMING="${QUERY_STREAMING:-}"
     export INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:?INSERT_BALANCE_STRATEGY is required}"
     export QUERY_BALANCE_STRATEGY="${QUERY_BALANCE_STRATEGY:?QUERY_BALANCE_STRATEGY is required}"
     export INSERT_MODE="${INSERT_MODE:-max}"

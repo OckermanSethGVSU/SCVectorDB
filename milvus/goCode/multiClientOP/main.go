@@ -3,9 +3,12 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/binary"
 	"encoding/csv"
 	"fmt"
+	"io"
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -65,6 +68,19 @@ type SweepConfig struct {
 	BatchSize  int
 	ResultPath string
 	Label      string
+}
+
+type NpyMetadata struct {
+	DataOffset int64
+	Rows       int
+	Cols       int
+}
+
+type InputData struct {
+	Streaming bool
+	Matrix    [][]float32
+	Meta      *NpyMetadata
+	Path      string
 }
 
 func getNodeByRank(filename string, targetRank int) (*NodeInfo, error) {
@@ -329,13 +345,219 @@ func crossedInsertMilestones(batchStart, batchEnd, interval int) []int {
 	return milestones
 }
 
+func parseNpyMetadata(path string) (*NpyMetadata, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	magic := make([]byte, 6)
+	if _, err := io.ReadFull(file, magic); err != nil {
+		return nil, err
+	}
+	if string(magic) != "\x93NUMPY" {
+		return nil, fmt.Errorf("%s is not a valid .npy file", path)
+	}
+
+	version := make([]byte, 2)
+	if _, err := io.ReadFull(file, version); err != nil {
+		return nil, err
+	}
+
+	var headerLen int
+	switch version[0] {
+	case 1:
+		var length uint16
+		if err := binary.Read(file, binary.LittleEndian, &length); err != nil {
+			return nil, err
+		}
+		headerLen = int(length)
+	case 2, 3:
+		var length uint32
+		if err := binary.Read(file, binary.LittleEndian, &length); err != nil {
+			return nil, err
+		}
+		headerLen = int(length)
+	default:
+		return nil, fmt.Errorf("unsupported npy version %d.%d", version[0], version[1])
+	}
+
+	headerBytes := make([]byte, headerLen)
+	if _, err := io.ReadFull(file, headerBytes); err != nil {
+		return nil, err
+	}
+	header := strings.TrimSpace(string(headerBytes))
+
+	descr, err := parseNpyHeaderString(header, "descr")
+	if err != nil {
+		return nil, err
+	}
+	if descr != "<f4" && descr != "=f4" && descr != "f4" {
+		return nil, fmt.Errorf("unsupported npy dtype %q; expected float32", descr)
+	}
+
+	fortranOrder, err := parseNpyHeaderBool(header, "fortran_order")
+	if err != nil {
+		return nil, err
+	}
+	if fortranOrder {
+		return nil, fmt.Errorf("unsupported npy layout; only C-order arrays are supported")
+	}
+
+	shapeRaw, err := parseNpyHeaderTuple(header, "shape")
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.Split(shapeRaw, ",")
+	dims := make([]int, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		value, err := strconv.Atoi(part)
+		if err != nil {
+			return nil, fmt.Errorf("invalid npy shape component %q: %w", part, err)
+		}
+		dims = append(dims, value)
+	}
+	if len(dims) != 2 {
+		return nil, fmt.Errorf("expected a 2D npy array, got shape %v", dims)
+	}
+
+	offset, err := file.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, err
+	}
+
+	return &NpyMetadata{
+		DataOffset: offset,
+		Rows:       dims[0],
+		Cols:       dims[1],
+	}, nil
+}
+
+func parseNpyHeaderString(header, key string) (string, error) {
+	needle := fmt.Sprintf("'%s'", key)
+	start := strings.Index(header, needle)
+	if start < 0 {
+		return "", fmt.Errorf("npy header missing %q", key)
+	}
+	rest := header[start+len(needle):]
+	colon := strings.Index(rest, ":")
+	if colon < 0 {
+		return "", fmt.Errorf("npy header missing ':' after %q", key)
+	}
+	rest = strings.TrimSpace(rest[colon+1:])
+	if len(rest) == 0 {
+		return "", fmt.Errorf("npy header missing value for %q", key)
+	}
+
+	quote := rest[0]
+	if quote != '\'' && quote != '"' {
+		return "", fmt.Errorf("npy header value for %q was not quoted", key)
+	}
+	rest = rest[1:]
+	end := strings.IndexByte(rest, quote)
+	if end < 0 {
+		return "", fmt.Errorf("unterminated string value for %q", key)
+	}
+	return rest[:end], nil
+}
+
+func parseNpyHeaderTuple(header, key string) (string, error) {
+	needle := fmt.Sprintf("'%s'", key)
+	start := strings.Index(header, needle)
+	if start < 0 {
+		return "", fmt.Errorf("npy header missing %q", key)
+	}
+	rest := header[start+len(needle):]
+	colon := strings.Index(rest, ":")
+	if colon < 0 {
+		return "", fmt.Errorf("npy header missing ':' after %q", key)
+	}
+	rest = strings.TrimSpace(rest[colon+1:])
+	open := strings.Index(rest, "(")
+	if open < 0 {
+		return "", fmt.Errorf("npy header missing tuple for %q", key)
+	}
+	rest = rest[open+1:]
+	closeIdx := strings.Index(rest, ")")
+	if closeIdx < 0 {
+		return "", fmt.Errorf("npy header missing ')' for %q", key)
+	}
+	return rest[:closeIdx], nil
+}
+
+func parseNpyHeaderBool(header, key string) (bool, error) {
+	needle := fmt.Sprintf("'%s'", key)
+	start := strings.Index(header, needle)
+	if start < 0 {
+		return false, fmt.Errorf("npy header missing %q", key)
+	}
+	rest := header[start+len(needle):]
+	colon := strings.Index(rest, ":")
+	if colon < 0 {
+		return false, fmt.Errorf("npy header missing ':' after %q", key)
+	}
+	rest = strings.TrimSpace(rest[colon+1:])
+	if strings.HasPrefix(rest, "True") {
+		return true, nil
+	}
+	if strings.HasPrefix(rest, "False") {
+		return false, nil
+	}
+	return false, fmt.Errorf("npy header %q value was not a boolean", key)
+}
+
+func readRowsFromNpy(file *os.File, meta *NpyMetadata, startRow, rowCount int) ([][]float32, error) {
+	if rowCount == 0 {
+		return nil, nil
+	}
+
+	bytesPerRow := meta.Cols * 4
+	byteOffset := int64(startRow * bytesPerRow)
+	offset := meta.DataOffset + byteOffset
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	buf := make([]byte, rowCount*bytesPerRow)
+	if _, err := io.ReadFull(file, buf); err != nil {
+		return nil, err
+	}
+
+	data := make([]float32, rowCount*meta.Cols)
+	for i := range data {
+		base := i * 4
+		data[i] = math.Float32frombits(binary.LittleEndian.Uint32(buf[base : base+4]))
+	}
+
+	rows := make([][]float32, rowCount)
+	for i := 0; i < rowCount; i++ {
+		start := i * meta.Cols
+		end := start + meta.Cols
+		rows[i] = data[start:end]
+	}
+	return rows, nil
+}
+
+func taskStreamingEnabled(activeTask string) bool {
+	prefix := strings.ToUpper(strings.TrimSpace(activeTask))
+	if prefix != "" && envEnabled(prefix+"_STREAMING") {
+		return true
+	}
+	return envEnabled("STREAMING")
+}
+
 func clientWorker(
 	wg *sync.WaitGroup,
 	workerRank int,
 	clientID int,
 	clientsPerWorker int,
 	totalRows int,
-	matrix [][]float32,
+	input *InputData,
 	sweeps []SweepConfig,
 	barriers []*Barrier,
 	sharedTimings []*SharedTiming,
@@ -372,11 +594,25 @@ func clientWorker(
 	startIdx := workerStart + clientStartOff
 	endIdx := workerStart + clientEndOff
 
-	local := matrix[startIdx:endIdx]
-	localRows := len(local)
+	localRows := endIdx - startIdx
+	var local [][]float32
 	mcols := 0
 	if localRows > 0 {
-		mcols = len(local[0])
+		if input.Streaming {
+			mcols = input.Meta.Cols
+		} else {
+			local = input.Matrix[startIdx:endIdx]
+			mcols = len(local[0])
+		}
+	}
+
+	var streamFile *os.File
+	if input.Streaming && localRows > 0 {
+		streamFile, err = os.Open(input.Path)
+		if err != nil {
+			log.Fatalf("failed to open npy file for streaming: %v", err)
+		}
+		defer streamFile.Close()
 	}
 
 	// ----- Target Milvus Proxy  -----
@@ -494,7 +730,15 @@ func clientWorker(
 			}
 
 			startTotal := time.Now()
-			batch := local[i:end]
+			var batch [][]float32
+			if input.Streaming {
+				batch, err = readRowsFromNpy(streamFile, input.Meta, startIdx+i, end-i)
+				if err != nil {
+					log.Fatalf("failed to read streamed batch worker=%d client=%d absRowStart=%d sweep=%s: %v", workerRank, clientID, startIdx+i, sweep.Label, err)
+				}
+			} else {
+				batch = local[i:end]
+			}
 
 			var milestones []int
 			if ldebugfEnabled {
@@ -512,7 +756,6 @@ func clientWorker(
 
 			opCtx, opCancel := context.WithTimeout(ctx, 30*time.Minute)
 
-			var err error
 			var queryResults []milvusclient.ResultSet
 			var startUpload time.Time
 
@@ -786,24 +1029,48 @@ func main() {
 		}()
 	}
 
-	r, err := gonpy.NewFileReader(DATA_PATH)
-	if err != nil {
-		panic(err)
+	streamingReads := taskStreamingEnabled(activeTask)
+	input := &InputData{
+		Streaming: streamingReads,
+		Path:      DATA_PATH,
 	}
-	shape := r.Shape
-	// rows := shape[0]
-	cols := shape[1]
-	data, err := r.GetFloat32()
-	if err != nil {
-		panic(err)
-	}
+	if streamingReads {
+		meta, err := parseNpyMetadata(DATA_PATH)
+		if err != nil {
+			log.Fatalf("failed to parse npy metadata for %s: %v", DATA_PATH, err)
+		}
+		if CORPUS_SIZE > meta.Rows {
+			log.Fatalf("corpus size %d exceeds npy row count %d", CORPUS_SIZE, meta.Rows)
+		}
+		meta.Rows = CORPUS_SIZE
+		input.Meta = meta
+		fmt.Printf("Input mode: streaming path=%s rows=%d cols=%d\n", DATA_PATH, meta.Rows, meta.Cols)
+	} else {
+		r, err := gonpy.NewFileReader(DATA_PATH)
+		if err != nil {
+			log.Fatalf("failed to open npy file %s: %v", DATA_PATH, err)
+		}
+		shape := r.Shape
+		if len(shape) != 2 {
+			log.Fatalf("expected 2D npy input, got shape=%v", shape)
+		}
+		if CORPUS_SIZE > shape[0] {
+			log.Fatalf("corpus size %d exceeds npy row count %d", CORPUS_SIZE, shape[0])
+		}
+		cols := shape[1]
+		data, err := r.GetFloat32()
+		if err != nil {
+			log.Fatalf("failed to read npy data from %s: %v", DATA_PATH, err)
+		}
 
-	// Build [][]float32 without copying
-	matrix := make([][]float32, CORPUS_SIZE)
-	for i := 0; i < CORPUS_SIZE; i++ {
-		start := i * cols
-		end := start + cols
-		matrix[i] = data[start:end]
+		matrix := make([][]float32, CORPUS_SIZE)
+		for i := 0; i < CORPUS_SIZE; i++ {
+			start := i * cols
+			end := start + cols
+			matrix[i] = data[start:end]
+		}
+		input.Matrix = matrix
+		fmt.Printf("Input mode: eager path=%s rows=%d cols=%d\n", DATA_PATH, CORPUS_SIZE, cols)
 	}
 
 	var wg sync.WaitGroup
@@ -817,7 +1084,7 @@ func main() {
 	for w := 0; w < nWorkers; w++ {
 		for c := 0; c < clientsPerWorker; c++ {
 			wg.Add(1)
-			go clientWorker(&wg, w, c, clientsPerWorker, CORPUS_SIZE, matrix, sweeps, barriers, sharedTimings)
+			go clientWorker(&wg, w, c, clientsPerWorker, CORPUS_SIZE, input, sweeps, barriers, sharedTimings)
 		}
 	}
 

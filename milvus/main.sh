@@ -89,6 +89,8 @@ export MODE=$MODE
 export TASK=$TASK
 export WAL=$WAL
 export DML_CHANNELS=$DML_CHANNELS
+export MINIO_MODE=$MINIO_MODE
+export MINIO_MEDIUM=$MINIO_MEDIUM
 
 export NUM_PROXIES=$NUM_PROXIES
 export NUM_PROXIES_PER_CN=$NUM_PROXIES_PER_CN
@@ -172,6 +174,14 @@ fi
 if [[ "$MODE" == "STANDALONE" ]]; then
     second_node=$(sed -n '2p' "$PBS_NODEFILE")
 
+    if [[ "$MINIO_MODE" == "single" ]]; then
+        echo "Launching standalone MinIO: single node on ${second_node}"
+        mpirun -n 1 --ppn 1 --no-vni --cpu-bind none --host "$second_node" ./launch_minio.sh "$MINIO_MEDIUM" &
+    elif [[ "$MINIO_MODE" != "off" ]]; then
+        echo "Unsupported MINIO_MODE='$MINIO_MODE' for standalone. Expected 'off' or 'single'." >&2
+        exit 1
+    fi
+
     if [[ "$CORES" -eq 112 ]]; then
         echo "Launching standalone: unrestricted cores"
 
@@ -195,7 +205,6 @@ if [[ "$MODE" == "STANDALONE" ]]; then
 
 
 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
-    export MINIO_MODE=$MINIO_MODE
     export ETCD_MODE=$ETCD_MODE
     
 
@@ -303,15 +312,16 @@ fi
 if [ -z "$RESTORE_DIR" ]; then
     env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
 
-    export ACTIVE_TASK="INSERT"
-    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
-    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
-    export INSERT_CLIENTS_PER_PROXY=$INSERT_CLIENTS_PER_PROXY
-    export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
-    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
+export ACTIVE_TASK="INSERT"
+export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
+export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
+export INSERT_CLIENTS_PER_PROXY=$INSERT_CLIENTS_PER_PROXY
+export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
+export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
+export INSERT_STREAMING=$INSERT_STREAMING
 
 
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
 
     if [[ "$TASK" == "INSERT" ]]; then
         touch flag.txt
@@ -344,6 +354,7 @@ else
     export QUERY_CLIENTS_PER_PROXY=$QUERY_CLIENTS_PER_PROXY
     export QUERY_DATA_FILEPATH=$QUERY_DATA_FILEPATH
     export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
+    export QUERY_STREAMING=$QUERY_STREAMING
     env "${PYTHON_ENV_VARS[@]}" python3 status.py
 
 fi
@@ -357,6 +368,7 @@ if [[ "$TASK" == "QUERY" ]]; then
     export QUERY_CLIENTS_PER_PROXY=$QUERY_CLIENTS_PER_PROXY
     export QUERY_DATA_FILEPATH=$QUERY_DATA_FILEPATH
     export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
+    export QUERY_STREAMING=$QUERY_STREAMING
 
 
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
@@ -385,6 +397,8 @@ if [[ "$TASK" == "MIXED" ]]; then
     export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
     export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
     export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
+    export INSERT_STREAMING=$INSERT_STREAMING
+    export QUERY_STREAMING=$QUERY_STREAMING
     export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
     export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
     export INSERT_START_ID=$INSERT_START_ID
