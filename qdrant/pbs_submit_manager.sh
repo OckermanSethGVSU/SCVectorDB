@@ -21,6 +21,7 @@ print_config_summary() {
         echo "Insert Batch Size:        ${INSERT_BATCH_SIZE[*]}"
         echo "Insert Clients/Worker:    $INSERT_CLIENTS_PER_WORKER"
         echo "Insert Balance:           $INSERT_BALANCE_STRATEGY"
+        echo "Insert Streaming:         $INSERT_STREAMING"
     fi
 
     if [[ "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
@@ -29,6 +30,7 @@ print_config_summary() {
         echo "Query Batch Size:         ${QUERY_BATCH_SIZE[*]}"
         echo "Query Clients/Worker:     $QUERY_CLIENTS_PER_WORKER"
         echo "Query Balance:            $QUERY_BALANCE_STRATEGY"
+        echo "Query Streaming:          $QUERY_STREAMING"
     elif [[ "$TASK" == "INDEX" ]]; then
         if [[ -n "$RESTORE_DIR" ]]; then
             echo "Index Corpus Size:        $EXPECTED_CORPUS_SIZE"
@@ -94,10 +96,12 @@ apply_overrides() {
     apply_scalar_override INSERT_CORPUS_SIZE
     apply_scalar_override INSERT_BALANCE_STRATEGY
     apply_scalar_override INSERT_CLIENTS_PER_WORKER
+    apply_scalar_override INSERT_STREAMING
     apply_scalar_override QUERY_FILEPATH
     apply_scalar_override QUERY_CORPUS_SIZE
     apply_scalar_override QUERY_BALANCE_STRATEGY
     apply_scalar_override QUERY_CLIENTS_PER_WORKER
+    apply_scalar_override QUERY_STREAMING
     apply_scalar_override PLATFORM
     apply_scalar_override QDRANT_EXECUTABLE
     apply_scalar_override RESTORE_DIR
@@ -148,6 +152,7 @@ INSERT_CORPUS_SIZE=1000 # total data to insert
 INSERT_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 INSERT_CLIENTS_PER_WORKER=4
+INSERT_STREAMING=""
 
 
 ### Query ### 
@@ -163,6 +168,7 @@ QUERY_CORPUS_SIZE=100 # total data to QUERY
 QUERY_BALANCE_STRATEGY="NO_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 QUERY_CLIENTS_PER_WORKER=1
+QUERY_STREAMING=""
 
 
 
@@ -305,6 +311,7 @@ do
                     echo "INSERT_CORPUS_SIZE=${INSERT_CORPUS_SIZE}" >> $target_file
                     echo "INSERT_CLIENTS_PER_WORKER=${INSERT_CLIENTS_PER_WORKER}" >> $target_file
                     echo "INSERT_BALANCE_STRATEGY=${INSERT_BALANCE_STRATEGY}" >> $target_file
+                    echo "INSERT_STREAMING=${INSERT_STREAMING}" >> $target_file
                     
                     
                     echo "QUERY_BATCH_SIZE=${query_bs}" >> $target_file
@@ -312,6 +319,7 @@ do
                     echo "QUERY_CORPUS_SIZE=${QUERY_CORPUS_SIZE}" >> $target_file
                     echo "QUERY_CLIENTS_PER_WORKER=${QUERY_CLIENTS_PER_WORKER}" >> $target_file
                     echo "QUERY_BALANCE_STRATEGY=${QUERY_BALANCE_STRATEGY}" >> $target_file
+                    echo "QUERY_STREAMING=${QUERY_STREAMING}" >> $target_file
                     
                     
                     ## Mixed vars

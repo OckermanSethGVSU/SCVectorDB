@@ -18,11 +18,13 @@ This directory contains the Rust client projects used by the Qdrant workflows in
 - Selects insert or query behavior via `ACTIVE_TASK=INSERT|QUERY`
 - Spawns `N_WORKERS * *_CLIENTS_PER_WORKER` async clients
 - Splits `.npy` rows evenly across logical clients
+- Defaults to eager `.npy` loading, with optional `INSERT_STREAMING=true` or `QUERY_STREAMING=true` batch-by-batch direct reads
 - Uses `ip_registry.txt` routing with:
   - `NO_BALANCE`
   - `WORKER_BALANCE`
 - Insert mode writes timing files consumed by the existing Python summary scripts
 - Query mode supports optional debug printing of returned results
+- Query mode writes `query_result_ids.npy` with shape `(QUERY_CORPUS_SIZE, top_k)` where each row stores the returned point ids for that global query row
 
 ### Environment variables consumed
 
@@ -35,6 +37,7 @@ Insert mode:
 - `INSERT_FILEPATH`
 - `INSERT_BATCH_SIZE`
 - `INSERT_BALANCE_STRATEGY`
+- `INSERT_STREAMING` or `STREAMING` (optional; `true` enables direct batch reads instead of eager full-file load)
 
 Query mode:
 
@@ -47,6 +50,8 @@ Query mode:
 - `QUERY_BALANCE_STRATEGY`
 - `QUERY_DEBUG_RESULTS` (optional)
 - `QUERY_EF_SEARCH` or `EF_SEARCH` (optional)
+- `QUERY_TOP_K` or `TOP_K` (optional; defaults to `10`)
+- `QUERY_STREAMING` or `STREAMING` (optional; `true` enables direct batch reads instead of eager full-file load)
 
 ## `multiClientUpload`
 
@@ -146,3 +151,37 @@ Expected binary paths after build:
 - `qdrant/rustCode/mixedrunner/mixedrunner`
 - `qdrant/rustCode/multiClientUpload/multiClientUpload`
 - `qdrant/rustCode/multiClientQuery/multiClientQuery`
+
+## Local Harness
+
+A small local integration harness lives under `qdrant/local_test_harness`:
+
+- `gen_test_npy.py`: writes a deterministic float32 `.npy`
+- `verify_qdrant_points.py`: checks that local Qdrant contains the expected ids and vectors
+- `verify_query_results.py`: checks `query_result_ids.npy` against brute-force expected top-k ids
+- `run_local_qdrant_test.sh`: launches a disposable Docker Qdrant, creates `singleShard`, runs `multiClientOP`, verifies inserted points, and optionally verifies query mode too
+
+Example:
+
+```bash
+cd qdrant
+./local_test_harness/run_local_qdrant_test.sh
+STREAMING=true ./local_test_harness/run_local_qdrant_test.sh
+```
+
+Useful overrides:
+
+- `RUST_BINARY=/path/to/multiClientOP`
+- `VECTOR_DIM=8`
+- `DISTANCE_METRIC=Dot`
+- `TEST_ROWS=16`
+- `INSERT_BATCH_SIZE=4`
+- `QUERY_BATCH_SIZE=4`
+- `QUERY_TOP_K=5`
+- `RUN_QUERY_TEST=true`
+- `RUN_MULTI_CLIENT_TEST=true`
+- `MULTI_N_WORKERS=2`
+- `MULTI_INSERT_CLIENTS_PER_WORKER=2`
+- `MULTI_QUERY_CLIENTS_PER_WORKER=2`
+- `STREAMING=true`
+- `QDRANT_REGISTRY_PORT=6335` (the local harness writes `ip_registry.txt` using the client's existing `port - 1` convention)

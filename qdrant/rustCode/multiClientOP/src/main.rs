@@ -248,7 +248,10 @@ fn load_config() -> anyhow::Result<RunConfig> {
 
     let debug_results = matches!(active_task, ActiveTask::Query)
         && parse_optional_bool(&["QUERY_DEBUG_RESULTS"]);
-    let streaming_reads = parse_optional_bool(&["STREAMING"]);
+    let streaming_reads = match active_task {
+        ActiveTask::Upload => parse_optional_bool(&["INSERT_STREAMING", "STREAMING"]),
+        ActiveTask::Query => parse_optional_bool(&["QUERY_STREAMING", "STREAMING"]),
+    };
     let ef_search = if matches!(active_task, ActiveTask::Query) {
         parse_optional_u64(&["QUERY_EF_SEARCH", "EF_SEARCH"])?.unwrap_or(64)
     } else {
