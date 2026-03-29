@@ -46,8 +46,8 @@ def parse_args() -> argparse.Namespace:
         description="Merge mixed Milvus logs into a single timeline and compute recall under visibility assumptions."
     )
     parser.add_argument("--log-dir", required=True, help="Directory containing mixed runner JSONL logs")
-    parser.add_argument("--insert-vectors", required=True, help="Insert vector matrix (.npy)")
-    parser.add_argument("--query-vectors", required=True, help="Query vector matrix (.npy)")
+    parser.add_argument("--insert-vectors", default=None, help="Insert vector matrix (.npy)")
+    parser.add_argument("--query-vectors", default=None, help="Query vector matrix (.npy)")
     parser.add_argument("--init-vectors", default=None, help="Optional initial visible vector matrix (.npy)")
     parser.add_argument(
         "--insert-max-rows",
@@ -124,7 +124,18 @@ def parse_args() -> argparse.Namespace:
         default=32,
         help="Worker threads for recall reconstruction. Query events are processed independently.",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--skip-recall",
+        action="store_true",
+        help="Skip recall reconstruction and .npy inputs; only write throughput and the global timeline.",
+    )
+    args = parser.parse_args()
+    if not args.skip_recall:
+        if not args.insert_vectors:
+            parser.error("--insert-vectors is required unless --skip-recall is set")
+        if not args.query_vectors:
+            parser.error("--query-vectors is required unless --skip-recall is set")
+    return args
 
 
 def load_jsonl(path: Path) -> List[dict]:
@@ -887,6 +898,17 @@ def main() -> None:
     if not insert_events and not query_events:
         raise SystemExit(f"no mixed runner logs found in {log_dir}")
 
+    timeline = build_timeline(insert_events, query_events)
+    write_jsonl(timeline_out, timeline)
+    observed_rates = compute_observed_rates(insert_events, query_events)
+    throughput_rows = compute_throughput_rows(insert_events, query_events)
+    write_throughput_summary(throughput_summary_out, throughput_rows)
+
+    print(f"Wrote timeline to {timeline_out}")
+    print(f"Wrote throughput summary to {throughput_summary_out}")
+    if args.skip_recall:
+        return
+
     recall_insert_max_rows = recall_insert_row_limit(insert_events, query_events, args.visibility_lag_ms)
 
     requested_insert_max_rows = args.insert_max_rows
@@ -908,12 +930,6 @@ def main() -> None:
 
     top_k = args.top_k if args.top_k is not None else infer_topk(query_events)
 
-    timeline = build_timeline(insert_events, query_events)
-    write_jsonl(timeline_out, timeline)
-    observed_rates = compute_observed_rates(insert_events, query_events)
-    throughput_rows = compute_throughput_rows(insert_events, query_events)
-    write_throughput_summary(throughput_summary_out, throughput_rows)
-
     details = compute_recall_details(
         insert_events=recall_insert_events,
         query_events=query_events,
@@ -930,8 +946,6 @@ def main() -> None:
     write_jsonl(recall_detail_out, details)
     write_recall_summary(recall_summary_out, details)
 
-    print(f"Wrote timeline to {timeline_out}")
-    print(f"Wrote throughput summary to {throughput_summary_out}")
     print(f"Wrote recall details to {recall_detail_out}")
     print(f"Wrote recall summary to {recall_summary_out}")
 
