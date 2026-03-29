@@ -468,3 +468,5 @@ if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
 elif [[ "$STORAGE_MEDIUM" == "lustre" || "$MODE" == "DISTRIBUTED" ]]; then
     rm -fr ./milvusDir/
 fi
+
+chmod -R g+rwX "$BASE_DIR/$myDIR"
