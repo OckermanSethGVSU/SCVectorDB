@@ -117,7 +117,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # fi
 
 ### Loop variables ###
-NODES=(16)
+NODES=(4)
 WORKERS_PER_NODE=(4)
 CORES=(112)
 INSERT_BATCH_SIZE=(512)

@@ -1,5 +1,4 @@
 
-
 export myDIR=$myDIR
 export VECTOR_DIM=$VECTOR_DIM
 export DISTANCE_METRIC=$DISTANCE_METRIC
@@ -45,6 +44,10 @@ TOTAL=$((NODES * WORKERS_PER_NODE))
 MAX_RANK=$((TOTAL - 1))
 export N_WORKERS=$TOTAL
 
+rm -f ip_registry.txt
+rm -rf ip_registry.d
+> ip_registry.txt
+
 tail -n +2 $PBS_NODEFILE > worker_nodefile.txt
 cat $PBS_NODEFILE > all_nodefile.txt
 
@@ -67,7 +70,7 @@ for ((i=0; i<NODES; i++)); do
         else
             mpirun -n 1 --ppn 1 -d $CORES --cpu-bind depth --host $entry ./launchQdrantNode.sh $index $STORAGE_MEDIUM &
         fi
-        sleep 3
+        sleep 0.5
     done
 done
 
@@ -94,11 +97,33 @@ for ((i=0; i<allNodes; i++)); do
 done
 
 # Wait until all of the Qdrant ranks are running
-TARGET="./perf/qdrant_running${MAX_RANK}.txt"
-while [ ! -e "$TARGET" ]; do
+while true; do
+  all_running=1
+  for ((rank=0; rank<=MAX_RANK; rank++)); do
+    if [ ! -e "./perf/qdrant_running${rank}.txt" ]; then
+      all_running=0
+      break
+    fi
+  done
+
+  if [[ "$all_running" -eq 1 ]]; then
+    break
+  fi
+
   sleep 0.1
 done
+
+while true; do
+  registry_count=$(find ./ip_registry.d -maxdepth 1 -type f | wc -l)
+  if [[ "$registry_count" -eq "$TOTAL" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+
+sort -t, -k1,1n ./ip_registry.d/* > ip_registry.txt
 echo "Qdrant Cluster setup"
+
 sleep 30
 
 

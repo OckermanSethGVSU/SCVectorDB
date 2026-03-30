@@ -12,8 +12,9 @@ IP_ADDR=$(jq -r '.hsn0.ipv4[0]' interfaces${group}.json)
 P2P_PORT=$((6335 + RANK * 100))
 
 # register IP,port into file
-OUTPUT_FILE="ip_registry.txt"
-echo "${RANK},${IP_ADDR},${P2P_PORT}" >> $OUTPUT_FILE
+OUTPUT_DIR="ip_registry.d"
+mkdir -p "$OUTPUT_DIR"
+printf '%s,%s,%s\n' "$RANK" "$IP_ADDR" "$P2P_PORT" > "${OUTPUT_DIR}/${RANK}"
 
 
 if [[ "$STORAGE_MEDIUM" == "memory" ]]; then
@@ -77,6 +78,7 @@ apptainer exec \
     --pwd /qdrant \
     --bind ./perf/:/perf/ \
     --bind ./ip_registry.txt:/ip_registry.txt \
+    --bind ./ip_registry.d:/qdrant/ip_registry.d \
     --bind ./launch.sh:/qdrant/launch.sh \
     --bind ${TARGET_BASE}/data/node$RANK:/qdrant/storage \
     --bind ${TARGET_BASE}/config/node$RANK:/qdrant/config \
