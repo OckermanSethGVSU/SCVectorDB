@@ -123,6 +123,8 @@ done
 
 sort -t, -k1,1n ./ip_registry.d/* > ip_registry.txt
 echo "Qdrant Cluster setup"
+mkdir interfaces
+mv interfaces*.json interfaces/
 
 sleep 30
 
@@ -205,6 +207,9 @@ if [[ "$TASK" == "QUERY" ]]; then
     sleep 30
     mkdir systemStats/
     mv *_system_*.csv systemStats/
+
+    mkdir -p queryNPY
+    mv *.npy queryNPY
 fi
 
 
@@ -291,3 +296,6 @@ if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     # techincally optional but still good to do
     clean-dfuse.sh  ${DAOS_POOL}:${DAOS_CONT}
 fi
+
+mkdir workerOut
+mv rank*.out workerOut

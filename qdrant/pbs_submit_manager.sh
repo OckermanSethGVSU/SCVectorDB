@@ -117,7 +117,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # fi
 
 ### Loop variables ###
-NODES=(4)
+NODES=(64)
 WORKERS_PER_NODE=(4)
 CORES=(112)
 INSERT_BATCH_SIZE=(512)
@@ -134,8 +134,8 @@ TASK="QUERY" # [INSERT, INDEX, QUERY, MIXED]
 RUN_MODE="PBS" # [PBS, local]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, TRACE]
-VECTOR_DIM=2560
-DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
+VECTOR_DIM=200
+DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 GPU_INDEX=False
 
 # Aurora
@@ -143,6 +143,7 @@ GPU_INDEX=False
     #    HPC-Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
     #    Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy
     # All Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/mergedData/embeddings_merged.npy
+    # All Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/yandex1B.npy
 
 # Polaris 
     # 10 million 
@@ -151,8 +152,10 @@ GPU_INDEX=False
 
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
-INSERT_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/mergedData/embeddings_merged.npy"
-INSERT_CORPUS_SIZE=88453763 # total data to insert
+INSERT_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/yandex1B.npy"
+
+# 88453763, 1000000000
+INSERT_CORPUS_SIZE=1000000000 # total data to insert
 INSERT_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 INSERT_CLIENTS_PER_WORKER=8
@@ -165,17 +168,15 @@ INSERT_STREAMING="True"
     # * Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
-QUERY_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
+QUERY_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
 
 # 22723, 100000
-QUERY_CORPUS_SIZE=22723 # total data to QUERY
+QUERY_CORPUS_SIZE=100000 # total data to QUERY
 QUERY_BALANCE_STRATEGY="NO_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 TOTAL_QUERY_CLIENTS=1
 QUERY_CLIENTS_PER_WORKER=1
 QUERY_STREAMING=""
-
-
 
 
 ### Mixed Insert/Query

@@ -7,8 +7,7 @@ STORAGE_MEDIUM=${2:?Usage: $0 <rank> <storage_medium>}
 
 # get ipv4
 python3 mapping.py --rank $RANK
-group=$(( RANK / 4 ))
-IP_ADDR=$(jq -r '.hsn0.ipv4[0]' interfaces${group}.json)
+IP_ADDR=$(jq -r '.hsn0.ipv4[0]' interfaces${RANK}.json)
 P2P_PORT=$((6335 + RANK * 100))
 
 # register IP,port into file

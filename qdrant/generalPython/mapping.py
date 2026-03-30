@@ -106,8 +106,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     rank = args.rank
 
-    if rank % 4 == 0:
-        mapping = get_running_interface_ips(include_loopback=False)
+   
+    mapping = get_running_interface_ips(include_loopback=False)
 
-        with open(f"interfaces{rank // 4}.json", "w") as f:
-            json.dump(mapping, f, indent=4)
+    with open(f"interfaces{rank}.json", "w") as f:
+        json.dump(mapping, f, indent=4)
