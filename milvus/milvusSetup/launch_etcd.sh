@@ -14,7 +14,7 @@ elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
     DAOS_CONT="vectorDBTesting"
     TARGET_BASE="/tmp/${DAOS_POOL}/${DAOS_CONT}/${myDIR}/milvusDir"
-    (( RANK == 0 )) && echo "ETCD using memory for persistence"
+    (( RANK == 0 )) && echo "ETCD using DAOS for persistence"
     APPTAINER_ARGS+=(
         --bind "/home/treewalker/daos_lib64:/opt/daos/lib64:ro"
         --env LD_LIBRARY_PATH=/opt/daos/lib64
@@ -26,12 +26,12 @@ elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
     TARGET_BASE="./milvusDir"
     ETCD_BASE=$TARGET_BASE
 
-    (( RANK == 0 )) && echo "ETCD using memory for persistence"
+    (( RANK == 0 )) && echo "ETCD using lustre for persistence"
 elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
     TARGET_BASE="/local/scratch/milvusDir"
     ETCD_BASE=$TARGET_BASE
 
-    (( RANK == 0 )) && echo "ETCD using memory for persistence"
+    (( RANK == 0 )) && echo "ETCD using SSD for persistence"
 
 else
     (( RANK == 0 )) && echo "Error: unknown STORAGE_MEDIUM '$STORAGE_MEDIUM'" >&2
@@ -128,9 +128,16 @@ fi
 
 # ----- Per-rank volume -----
 ETCD_VOL="$ETCD_BASE/volumes/etcd_volume_${RANK}"
-rm -rf "$ETCD_VOL"
+if [[ -z "$RESTORE_DIR" ]]; then
+  rm -rf "$ETCD_VOL"
+fi
 mkdir -p "$ETCD_VOL"
 ETCD_NAME="etcd-${RANK}"
+
+INITIAL_CLUSTER_STATE="new"
+if [[ -n "$RESTORE_DIR" ]]; then
+  INITIAL_CLUSTER_STATE="existing"
+fi
 
 
 
@@ -152,6 +159,6 @@ apptainer exec --fakeroot \
       --initial-advertise-peer-urls "http://${IP_ADDR}:${PEER_PORT}" \
       --listen-peer-urls "http://0.0.0.0:${PEER_PORT}" \
       --initial-cluster "${INITIAL_CLUSTER}" \
-      --initial-cluster-state new \
+      --initial-cluster-state "${INITIAL_CLUSTER_STATE}" \
       --data-dir /etcd \
   > "etcdFiles/etcd${RANK}.out" 2>&1

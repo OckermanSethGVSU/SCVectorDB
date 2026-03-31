@@ -87,7 +87,9 @@ if [[ "$MINIO_MODE" == "stripped" ]]; then
 
 
 
-    rm -fr $TARGET_BASE/volumes/minio_volume${RANK}
+    if [[ -z "$RESTORE_DIR" ]]; then
+        rm -fr $TARGET_BASE/volumes/minio_volume${RANK}
+    fi
     mkdir -p $TARGET_BASE/volumes/minio_volume${RANK}
     apptainer exec --fakeroot \
     --writable-tmpfs \
@@ -106,7 +108,9 @@ elif [[ "$MINIO_MODE" == "single" ]]; then
     OUTPUT_FILE="minio_registry.txt"
     echo "${RANK},${MY_IP_ADDR},9000" >> $OUTPUT_FILE
 
-    rm -fr $TARGET_BASE/volumes/minio_volume${RANK}
+    if [[ -z "$RESTORE_DIR" ]]; then
+        rm -fr $TARGET_BASE/volumes/minio_volume${RANK}
+    fi
     mkdir -p $TARGET_BASE/volumes/minio_volume${RANK}
     apptainer exec --fakeroot \
     --writable-tmpfs \

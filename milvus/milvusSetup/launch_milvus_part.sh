@@ -7,14 +7,12 @@ RANK="${PMI_RANK:-${PMIX_RANK:-${OMPI_COMM_WORLD_RANK:-}}}"
 
 if [[ "$STORAGE_MEDIUM" == "memory" ]]; then
     TARGET_BASE="/dev/shm/milvusDir"
-    (( RANK == 0 )) && echo "${TYPE} using memory for persistence"
 
 DAOS_ARGS=()
 elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
     DAOS_CONT="vectorDBTesting"
     TARGET_BASE="/tmp/${DAOS_POOL}/${DAOS_CONT}/${myDIR}/milvusDir"
-    (( RANK == 0 )) && echo "${TYPE} using DAOS for persistence"
     
     APPTAINER_ARGS+=(
         --bind "/home/treewalker/daos_lib64:/opt/daos/lib64:ro"
@@ -24,12 +22,8 @@ elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
 elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
     TARGET_BASE="./milvusDir"
 
-    (( RANK == 0 )) && echo "Minio using lustre for persistence"
 elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
     TARGET_BASE="/local/scratch/milvusDir"
-
-    (( RANK == 0 )) && echo "${TYPE} using SSD for persistence"
-
 else
     (( RANK == 0 )) && echo "Error: unknown STORAGE_MEDIUM '$STORAGE_MEDIUM'" >&2
     exit 1
@@ -74,11 +68,14 @@ echo "${RANK},${MY_IP_ADDR},${PORT},${METRICS_PORT}" >> $OUTPUT_FILE
 
 
 # create configuration for micro-service component (basically just set its IP in the config file)
-rm -fr $TARGET_BASE/${TYPE}${RANK}/
+if [[ -z "$RESTORE_DIR" ]]; then
+    rm -fr $TARGET_BASE/${TYPE}${RANK}/
+fi
 mkdir -p $TARGET_BASE/${TYPE}${RANK}/
 
 python3 replace_unified.py --mode ${TYPE} --rank $RANK
 cp -r ./configs/ $TARGET_BASE/${TYPE}${RANK}/
+cp $TARGET_BASE/${TYPE}${RANK}/configs/${TYPE}${RANK}.yaml $TARGET_BASE/${TYPE}${RANK}/configs/milvus.yaml
 
 mkdir -p ./workerOut/
 
@@ -125,7 +122,7 @@ apptainer exec --fakeroot \
   -B ./execute.sh:/milvus/app_execute.sh \
   -B ./workerOut/:/workerOut/ \
   -B $TARGET_BASE/${TYPE}${RANK}/:/var/lib/milvus \
-  -B $TARGET_BASE/${TYPE}${RANK}/configs/${TYPE}${RANK}.yaml:/milvus/configs/milvus.yaml \
+  -B $TARGET_BASE/${TYPE}${RANK}/configs/:/milvus/configs/ \
    "${BUILD_ARGS[@]}" \
    "${POLARIS_BINDS[@]}" \
   "${GPU_ARGS[@]}" \
