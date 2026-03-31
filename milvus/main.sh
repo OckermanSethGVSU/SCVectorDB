@@ -329,7 +329,6 @@ if [ -z "$RESTORE_DIR" ]; then
 
     if [[ "$TASK" == "IMPORT" ]]; then
         export ACTIVE_TASK="IMPORT"
-        export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
         export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
         export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
         export INSERT_STREAMING=$INSERT_STREAMING
@@ -337,6 +336,22 @@ if [ -z "$RESTORE_DIR" ]; then
         export COLLECTION_NAME=${COLLECTION_NAME:-standalone}
         export VECTOR_FIELD=${VECTOR_FIELD:-vector}
         export ID_FIELD=${ID_FIELD:-id}
+        bulk_request_args=()
+
+        if [[ -n "${BULK_IMPORT_LOAD_REQUEST:-}" ]]; then
+            bulk_request_args+=(--load-import-request "$BULK_IMPORT_LOAD_REQUEST")
+        else
+            export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
+            bulk_request_args+=(--input "$INSERT_DATA_FILEPATH")
+        fi
+
+        if [[ -n "${BULK_IMPORT_REQUEST_PATH:-}" ]]; then
+            bulk_request_args+=(--import-request-path "$BULK_IMPORT_REQUEST_PATH")
+        fi
+
+        if [[ "${BULK_IMPORT_PREPARE_ONLY:-}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
+            bulk_request_args+=(--prepare-only)
+        fi
 
         if [[ "${MINIO_MODE}" == "off" ]]; then
             echo "TASK=IMPORT requires remote MinIO storage; set MINIO_MODE to single or stripped." >&2
@@ -344,7 +359,6 @@ if [ -z "$RESTORE_DIR" ]; then
         fi
 
         env "${PYTHON_ENV_VARS[@]}" python3 bulk_upload_import.py \
-            --input "$INSERT_DATA_FILEPATH" \
             --writer-mode remote \
             --processes "$IMPORT_PROCESSES" \
             --corpus-size "$INSERT_CORPUS_SIZE" \
@@ -352,7 +366,8 @@ if [ -z "$RESTORE_DIR" ]; then
             --vector-field "$VECTOR_FIELD" \
             --id-field "$ID_FIELD" \
             --vector-dim "$VECTOR_DIM" \
-            --batch-rows "$INSERT_BATCH_SIZE"
+            --batch-rows "$INSERT_BATCH_SIZE" \
+            "${bulk_request_args[@]}"
         
         touch flag.txt
     

@@ -21,24 +21,24 @@ MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the di
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
-TASK="IMPORT" # [INSERT, IMPORT, INDEX, QUERY, MIXED]
-RUN_MODE="local" # [PBS, local]
-MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
-STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
+TASK="INDEX" # [INSERT, IMPORT, INDEX, QUERY, MIXED]
+RUN_MODE="PBS" # [PBS, local]
+MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
+STORAGE_MEDIUM="lustre" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
 WAL="woodpecker" # [woodpecker, default]
 GPU_INDEX="False" # [True, False]
 TRACING="False" 
 DEBUG="False" # [True, False]
 BASE_DIR="$(pwd)"
-MINIO_MODE="single" # standalone: [off, single], distributed: [single, stripped]
+MINIO_MODE="stripped" # standalone: [off, single], distributed: [single, stripped]
 MINIO_MEDIUM="lustre" # [lustre] (can be memory if running single) - DAOS is broken
 
 
 # 
 ### Insertion Variables ### 
-INSERT_CORPUS_SIZE=100000 # total data to insert
-INSERT_CLIENTS_PER_PROXY=32
+INSERT_CORPUS_SIZE=1000 # total data to insert
+INSERT_CLIENTS_PER_PROXY=1
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 INSERT_STREAMING="True" # [True, False]
 # Aurora
@@ -46,7 +46,8 @@ INSERT_STREAMING="True" # [True, False]
     #    HPC-Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
     #    Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy
                 # /lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part<1/2>.npy
-                # /lus/flare/projects/AuroraGPT/sockerman/text2image1B/yandex1B.npy 
+    # All Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/mergedData/embeddings_merged.npy
+    # All Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex1B.npy
 # Polaris 
     # 10 million 
     #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
@@ -55,13 +56,13 @@ INSERT_STREAMING="True" # [True, False]
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part1.npy"
-INSERT_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex1B.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 # best batch for 32 clients: 128
 INSERT_BATCH_SIZE=(512)
-IMPORT_PROCESSES=2 # If you are doing a bulk import
+IMPORT_PROCESSES=64 # If you are doing a bulk import
 
 
 # Index Variables
@@ -113,6 +114,12 @@ TOP_K=""
 QUERY_EF_SEARCH=""
 SEARCH_CONSISTENCY=""
 RPC_TIMEOUT=""
+
+# Bulk import handoff controls
+BULK_IMPORT_PREPARE_ONLY="True" #  [True, False] - generate bulk files + request JSON, but do not start bulk_import yet
+BULK_IMPORT_REQUEST_PATH=""  # path to write the reusable import-request JSON manifest
+BULK_IMPORT_LOAD_REQUEST="" # path to a previously written import-request JSON
+BULK_IMPORT_SUMMARY_PATH="" #  path to write the JSON summary for the prepare/import run
 
 # only relevant if you want random batch sizes 
 MIXED_INSERT_BATCH_MIN=""
@@ -281,6 +288,10 @@ do
                 echo "INSERT_BATCH_SIZE=${upload_bs}" >> $target_file
                 echo "INSERT_CLIENTS_PER_PROXY=${INSERT_CLIENTS_PER_PROXY}" >> $target_file
                 echo "IMPORT_PROCESSES=${IMPORT_PROCESSES}" >> $target_file
+                echo "BULK_IMPORT_PREPARE_ONLY=${BULK_IMPORT_PREPARE_ONLY}" >> $target_file
+                echo "BULK_IMPORT_REQUEST_PATH=${BULK_IMPORT_REQUEST_PATH}" >> $target_file
+                echo "BULK_IMPORT_LOAD_REQUEST=${BULK_IMPORT_LOAD_REQUEST}" >> $target_file
+                echo "BULK_IMPORT_SUMMARY_PATH=${BULK_IMPORT_SUMMARY_PATH}" >> $target_file
                 
                 echo "QUERY_DATA_FILEPATH=${QUERY_DATA_FILEPATH}" >> $target_file
                 echo "QUERY_BALANCE_STRATEGY=${QUERY_BALANCE_STRATEGY}" >> $target_file

@@ -357,7 +357,6 @@ run_insert() {
 
 run_bulk_upload() {
     export ACTIVE_TASK="IMPORT"
-    export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
     export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:?INSERT_CORPUS_SIZE is required}"
     export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
     export INSERT_STREAMING="${INSERT_STREAMING:-}"
@@ -366,6 +365,22 @@ run_bulk_upload() {
     export VECTOR_FIELD="${VECTOR_FIELD:-vector}"
     export ID_FIELD="${ID_FIELD:-id}"
     export MINIO_ENDPOINT="${MINIO_ENDPOINT:-${MINIO_HOST}:${MINIO_API_PORT}}"
+    local bulk_request_args=()
+
+    if [[ -n "${BULK_IMPORT_LOAD_REQUEST:-}" ]]; then
+        bulk_request_args+=(--load-import-request "$BULK_IMPORT_LOAD_REQUEST")
+    else
+        export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
+        bulk_request_args+=(--input "$INSERT_DATA_FILEPATH")
+    fi
+
+    if [[ -n "${BULK_IMPORT_REQUEST_PATH:-}" ]]; then
+        bulk_request_args+=(--import-request-path "$BULK_IMPORT_REQUEST_PATH")
+    fi
+
+    if [[ "${BULK_IMPORT_PREPARE_ONLY:-}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
+        bulk_request_args+=(--prepare-only)
+    fi
 
     if [[ "${MINIO_MODE}" != "single" ]]; then
         echo "TASK=IMPORT requires MINIO_MODE=single in local mode." >&2
@@ -373,7 +388,6 @@ run_bulk_upload() {
     fi
 
     env "${PYTHON_ENV_VARS[@]}" python3 ./bulk_upload_import.py \
-        --input "$INSERT_DATA_FILEPATH" \
         --writer-mode remote \
         --processes "$IMPORT_PROCESSES" \
         --corpus-size "$INSERT_CORPUS_SIZE" \
@@ -381,7 +395,8 @@ run_bulk_upload() {
         --vector-field "$VECTOR_FIELD" \
         --id-field "$ID_FIELD" \
         --vector-dim "$VECTOR_DIM" \
-        --batch-rows "$INSERT_BATCH_SIZE"
+        --batch-rows "$INSERT_BATCH_SIZE" \
+        "${bulk_request_args[@]}"
 }
 
 run_index() {
