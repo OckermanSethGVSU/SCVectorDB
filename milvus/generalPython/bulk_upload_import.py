@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import math
 import multiprocessing as mp
 import os
@@ -81,6 +82,11 @@ def ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def write_json(path: Path, payload: dict[str, Any]) -> None:
+    ensure_parent(path)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def extract_job_id(response_json: dict[str, Any]) -> str:
     data = response_json.get("data", {})
     job_id = data.get("jobId")
@@ -96,6 +102,44 @@ def normalize_progress(progress: Any) -> float | None:
     if value > 1.0:
         value /= 100.0
     return max(0.0, min(1.0, value))
+
+
+def format_progress_bar(progress: float | None, width: int = 32) -> str:
+    if progress is None:
+        return "[" + ("?" * width) + "]"
+    clamped = max(0.0, min(1.0, progress))
+    filled = int(round(clamped * width))
+    return "[" + ("#" * filled) + ("-" * (width - filled)) + "]"
+
+
+def print_progress_line(label: str, progress: float | None, detail: str = "") -> None:
+    progress_text = "n/a" if progress is None else f"{progress * 100.0:6.2f}%"
+    suffix = f" {detail}" if detail else ""
+    print(f"\r{label} {format_progress_bar(progress)} {progress_text}{suffix}", end="", flush=True)
+
+
+def finish_progress_line() -> None:
+    print("", flush=True)
+
+
+def configure_logging(verbose: bool) -> None:
+    level = logging.INFO if verbose else logging.WARNING
+    for logger_name in (
+        "pymilvus",
+        "pymilvus.bulk_writer",
+        "pymilvus.bulk_writer.buffer",
+        "pymilvus.bulk_writer.local_bulk_writer",
+        "pymilvus.bulk_writer.remote_bulk_writer",
+        "pymilvus.bulk_writer.bulk_import",
+        "pymilvus.bulk_writer.volume_file_manager",
+        "pymilvus.bulk_writer.volume_manager",
+        "EndpointResolver",
+        "bulk_writer",
+    ):
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(level)
+        if not verbose:
+            logger.propagate = False
 
 
 def worker_write(
@@ -120,6 +164,7 @@ def worker_write(
     remote_secure: bool,
     remote_path: str,
     use_mmap: bool,
+    shared_progress: Any,
     shared_results: Any,
 ) -> None:
     started_at = time.perf_counter()
@@ -138,6 +183,7 @@ def worker_write(
                 "status": "ok",
             }
         )
+        shared_progress[worker_index] = 0
         return
 
     data = load_matrix(input_path, use_mmap=use_mmap)
@@ -167,7 +213,7 @@ def worker_write(
         )
 
     rows_written = 0
-    next_progress_mark = progress_every_rows
+    shared_progress[worker_index] = 0
     try:
         for batch_start in range(start_row, stop_row, batch_row_count):
             batch_stop = min(batch_start + batch_row_count, stop_row)
@@ -180,13 +226,7 @@ def worker_write(
                 )
             writer.commit()
             rows_written += batch_stop - batch_start
-            if progress_every_rows > 0 and rows_written >= next_progress_mark:
-                print(
-                    f"[writer {worker_index}] wrote {rows_written}/{stop_row - start_row} rows",
-                    flush=True,
-                )
-                while rows_written >= next_progress_mark:
-                    next_progress_mark += progress_every_rows
+            shared_progress[worker_index] = rows_written
     except Exception as exc:
         shared_results.append(
             {
@@ -202,6 +242,7 @@ def worker_write(
         )
         raise
 
+    shared_progress[worker_index] = rows_written
     shared_results.append(
         {
             "worker_index": worker_index,
@@ -320,10 +361,32 @@ def parse_args() -> argparse.Namespace:
         help="Where to write the end-to-end timing and import summary JSON.",
     )
     parser.add_argument(
+        "--import-request-path",
+        default=os.getenv("BULK_IMPORT_REQUEST_PATH", "bulk_import_request.json"),
+        help="Where to write the reusable bulk-import request JSON after bulk files are generated.",
+    )
+    parser.add_argument(
+        "--load-import-request",
+        default=os.getenv("BULK_IMPORT_LOAD_REQUEST"),
+        help="Load a previously generated bulk-import request JSON and start the import job without regenerating files.",
+    )
+    parser.add_argument(
+        "--prepare-only",
+        action="store_true",
+        default=env_flag("BULK_IMPORT_PREPARE_ONLY", default=False),
+        help="Generate bulk files and the reusable import request JSON, but do not start bulk_import.",
+    )
+    parser.add_argument(
         "--progress-every-rows",
         type=int,
         default=env_int("BULK_UPLOAD_PROGRESS_EVERY_ROWS", 50000),
-        help="Per-process progress print interval; 0 disables progress prints.",
+        help="Deprecated per-process progress interval; retained for compatibility.",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        default=env_flag("BULK_IMPORT_VERBOSE", default=False),
+        help="Print verbose status logs and the full JSON summary to stdout.",
     )
     parser.add_argument(
         "--remote-endpoint",
@@ -403,12 +466,58 @@ def flatten_batch_files(results: list[dict[str, Any]]) -> list[list[str]]:
     return batch_files
 
 
+def build_import_request(
+    *,
+    input_path: Path,
+    milvus_url: str,
+    remote_endpoint: str | None,
+    args: argparse.Namespace,
+    row_count: int,
+    vector_dim: int,
+    batch_files: list[list[str]],
+) -> dict[str, Any]:
+    return {
+        "request_type": "milvus_bulk_import",
+        "request_version": 1,
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "input_path": str(input_path),
+        "collection": args.collection,
+        "db_name": args.db_name,
+        "milvus_url": milvus_url,
+        "stage_dir": str(Path(args.stage_dir).expanduser().resolve()),
+        "writer_mode": args.writer_mode,
+        "row_count": row_count,
+        "vector_dim": vector_dim,
+        "row_id_start": args.row_id_start,
+        "processes": args.processes,
+        "batch_rows": args.batch_rows,
+        "chunk_size_mb": args.chunk_size_mb,
+        "file_type": args.file_type,
+        "generated_batch_file_groups": len(batch_files),
+        "generated_batch_files": batch_files,
+        "remote_endpoint": remote_endpoint,
+        "remote_bucket": args.remote_bucket if args.writer_mode == "remote" else None,
+        "remote_path": args.remote_path if args.writer_mode == "remote" else None,
+    }
+
+
+def load_import_request(path: Path) -> dict[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("request_type") != "milvus_bulk_import":
+        raise ValueError(f"Unsupported import request type in {path}: {payload.get('request_type')}")
+    batch_files = payload.get("generated_batch_files")
+    if not isinstance(batch_files, list) or not batch_files:
+        raise ValueError(f"Import request {path} does not contain generated_batch_files")
+    return payload
+
+
 def poll_import_until_done(
     milvus_url: str,
     job_id: str,
     token: str,
     poll_interval: float,
     timeout_seconds: float,
+    verbose: bool,
 ) -> dict[str, Any]:
     poll_started_at = time.perf_counter()
     last_payload: dict[str, Any] | None = None
@@ -423,33 +532,145 @@ def poll_import_until_done(
         imported_rows = data.get("importedRows", data.get("importRows"))
         total_rows = data.get("totalRows")
 
-        progress_text = "n/a" if progress is None else f"{progress * 100.0:.1f}%"
-        print(
-            f"[import job {job_id}] state={data.get('state')} progress={progress_text} "
-            f"imported_rows={imported_rows} total_rows={total_rows}",
-            flush=True,
-        )
+        if verbose:
+            progress_text = "n/a" if progress is None else f"{progress * 100.0:.1f}%"
+            print(
+                f"[import job {job_id}] state={data.get('state')} progress={progress_text} "
+                f"imported_rows={imported_rows} total_rows={total_rows}",
+                flush=True,
+            )
+        else:
+            detail = f"state={data.get('state')} rows={imported_rows}/{total_rows}"
+            print_progress_line("Importing", progress, detail)
 
         if state in {"completed", "importcompleted"}:
+            if not verbose:
+                finish_progress_line()
             return payload
         if state in {"failed", "importfailed"}:
+            if not verbose:
+                finish_progress_line()
             reason = data.get("reason", "unknown failure")
             raise RuntimeError(f"bulk_import job {job_id} failed: {reason}")
 
         if timeout_seconds > 0 and (time.perf_counter() - poll_started_at) > timeout_seconds:
+            if not verbose:
+                finish_progress_line()
             raise TimeoutError(f"Timed out waiting for bulk_import job {job_id}: {last_payload}")
 
         time.sleep(poll_interval)
 
 
+def start_import_from_request(
+    *,
+    request_payload: dict[str, Any],
+    milvus_url: str,
+    token: str,
+    poll_interval: float,
+    timeout_seconds: float,
+    verbose: bool,
+) -> tuple[str, dict[str, Any], dict[str, Any], float]:
+    import_started_at = time.perf_counter()
+    import_response = bulk_import(
+        url=milvus_url,
+        collection_name=str(request_payload["collection"]),
+        db_name=str(request_payload["db_name"]),
+        files=request_payload["generated_batch_files"],
+        api_key=token,
+    )
+    import_payload = import_response.json()
+    job_id = extract_job_id(import_payload)
+    print(f"Started bulk_import job {job_id}", flush=True)
+
+    final_progress_payload = poll_import_until_done(
+        milvus_url=milvus_url,
+        job_id=job_id,
+        token=token,
+        poll_interval=poll_interval,
+        timeout_seconds=timeout_seconds,
+        verbose=verbose,
+    )
+    return job_id, import_payload, final_progress_payload, time.perf_counter() - import_started_at
+
+
+def monitor_writer_progress(
+    *,
+    processes: list[mp.Process],
+    shared_progress: Any,
+    row_count: int,
+    verbose: bool,
+) -> None:
+    if verbose:
+        for process in processes:
+            process.join()
+        return
+
+    while True:
+        total_written = sum(int(shared_progress.get(worker_index, 0)) for worker_index in range(len(processes)))
+        progress = 1.0 if row_count <= 0 else min(1.0, total_written / row_count)
+        print_progress_line("Writing  ", progress, f"rows={total_written}/{row_count}")
+        if all(not process.is_alive() for process in processes):
+            finish_progress_line()
+            break
+        time.sleep(0.5)
+
+    for process in processes:
+        process.join()
+
+
 def main() -> None:
     args = parse_args()
-    if not args.input:
-        raise ValueError("--input is required or set INSERT_DATA_FILEPATH")
+    configure_logging(args.verbose)
     if args.processes <= 0:
         raise ValueError("--processes must be positive")
     if args.batch_rows <= 0:
         raise ValueError("--batch-rows must be positive")
+
+    summary_path = Path(args.summary_path).expanduser().resolve()
+    request_path = Path(args.import_request_path).expanduser().resolve()
+    ensure_parent(summary_path)
+    ensure_parent(request_path)
+
+    milvus_url = resolve_milvus_url(args.milvus_url)
+    token = os.getenv("MILVUS_TOKEN", "root:Milvus")
+    overall_started_at = time.perf_counter()
+    started_at_utc = datetime.now(timezone.utc).isoformat()
+
+    if args.load_import_request:
+        loaded_request_path = Path(args.load_import_request).expanduser().resolve()
+        request_payload = load_import_request(loaded_request_path)
+        maybe_check_collection(milvus_url, token, str(request_payload["collection"]))
+        job_id, import_payload, final_progress_payload, import_seconds = start_import_from_request(
+            request_payload=request_payload,
+            milvus_url=milvus_url,
+            token=token,
+            poll_interval=args.poll_interval,
+            timeout_seconds=args.timeout_seconds,
+            verbose=args.verbose,
+        )
+        overall_finished_at = time.perf_counter()
+        summary = {
+            **request_payload,
+            "loaded_import_request_path": str(loaded_request_path),
+            "summary_path": str(summary_path),
+            "job_id": job_id,
+            "started_at_utc": started_at_utc,
+            "finished_at_utc": datetime.now(timezone.utc).isoformat(),
+            "write_seconds": 0.0,
+            "import_seconds": import_seconds,
+            "end_to_end_seconds": overall_finished_at - overall_started_at,
+            "worker_results": [],
+            "bulk_import_create_response": import_payload,
+            "bulk_import_final_progress": final_progress_payload,
+        }
+        write_json(summary_path, summary)
+        if args.verbose:
+            print(json.dumps(summary, indent=2), flush=True)
+        print(f"Wrote summary to {summary_path}", flush=True)
+        return
+
+    if not args.input:
+        raise ValueError("--input is required unless --load-import-request is provided")
 
     input_path = Path(args.input).expanduser().resolve()
     if not input_path.exists():
@@ -465,27 +686,21 @@ def main() -> None:
     row_count = total_rows if args.corpus_size <= 0 else min(args.corpus_size, total_rows)
     chunk_size_bytes = max(1, int(math.ceil(args.chunk_size_mb * 1024 * 1024)))
     stage_dir = Path(args.stage_dir).expanduser().resolve()
-    summary_path = Path(args.summary_path).expanduser().resolve()
-    ensure_parent(summary_path)
     if args.writer_mode == "local":
         stage_dir.mkdir(parents=True, exist_ok=True)
 
-    milvus_url = resolve_milvus_url(args.milvus_url)
-    token = os.getenv("MILVUS_TOKEN", "root:Milvus")
     remote_endpoint = resolve_remote_endpoint(args.remote_endpoint) if args.writer_mode == "remote" else None
 
     maybe_check_collection(milvus_url, token, args.collection)
 
     print(
-        f"Writing {row_count} rows from {input_path} across {args.processes} processes "
-        f"using writer_mode={args.writer_mode} load_mode={'mmap' if use_mmap else 'eager'}",
+        f"Preparing bulk files for {row_count} rows from {input_path} across {args.processes} processes",
         flush=True,
     )
 
-    started_at_utc = datetime.now(timezone.utc).isoformat()
-    overall_started_at = time.perf_counter()
     write_started_at = time.perf_counter()
     manager = mp.Manager()
+    shared_progress = manager.dict()
     shared_results = manager.list()
     processes: list[mp.Process] = []
 
@@ -514,14 +729,19 @@ def main() -> None:
                 args.remote_secure,
                 args.remote_path,
                 use_mmap,
+                shared_progress,
                 shared_results,
             ),
         )
         process.start()
         processes.append(process)
 
-    for process in processes:
-        process.join()
+    monitor_writer_progress(
+        processes=processes,
+        shared_progress=shared_progress,
+        row_count=row_count,
+        verbose=args.verbose,
+    )
 
     worker_results = sorted(list(shared_results), key=lambda item: item["worker_index"])
 
@@ -544,59 +764,68 @@ def main() -> None:
 
     print(f"Generated {len(batch_files)} batch file groups", flush=True)
 
-    import_started_at = time.perf_counter()
-    import_response = bulk_import(
-        url=milvus_url,
-        collection_name=args.collection,
-        db_name=args.db_name,
-        files=batch_files,
-        api_key=token,
-    )
-    import_payload = import_response.json()
-    job_id = extract_job_id(import_payload)
-    print(f"Started bulk_import job {job_id}", flush=True)
-
-    final_progress_payload = poll_import_until_done(
+    request_payload = build_import_request(
+        input_path=input_path,
         milvus_url=milvus_url,
-        job_id=job_id,
-        token=token,
-        poll_interval=args.poll_interval,
-        timeout_seconds=args.timeout_seconds,
+        remote_endpoint=remote_endpoint,
+        args=args,
+        row_count=row_count,
+        vector_dim=vector_dim,
+        batch_files=batch_files,
     )
-    overall_finished_at = time.perf_counter()
+    write_json(request_path, request_payload)
+    print(f"Wrote import request to {request_path}", flush=True)
 
     summary = {
-        "input_path": str(input_path),
-        "collection": args.collection,
-        "db_name": args.db_name,
-        "milvus_url": milvus_url,
-        "stage_dir": str(stage_dir),
-        "writer_mode": args.writer_mode,
-        "row_count": row_count,
-        "vector_dim": vector_dim,
-        "row_id_start": args.row_id_start,
-        "processes": args.processes,
-        "batch_rows": args.batch_rows,
-        "chunk_size_mb": args.chunk_size_mb,
-        "file_type": args.file_type,
-        "generated_batch_file_groups": len(batch_files),
-        "generated_batch_files": batch_files,
-        "remote_endpoint": remote_endpoint,
-        "remote_bucket": args.remote_bucket if args.writer_mode == "remote" else None,
-        "remote_path": args.remote_path if args.writer_mode == "remote" else None,
-        "job_id": job_id,
+        **request_payload,
+        "summary_path": str(summary_path),
+        "import_request_path": str(request_path),
         "started_at_utc": started_at_utc,
         "finished_at_utc": datetime.now(timezone.utc).isoformat(),
         "write_seconds": write_finished_at - write_started_at,
-        "import_seconds": overall_finished_at - import_started_at,
-        "end_to_end_seconds": overall_finished_at - overall_started_at,
         "worker_results": worker_results,
-        "bulk_import_create_response": import_payload,
-        "bulk_import_final_progress": final_progress_payload,
     }
 
-    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    print(json.dumps(summary, indent=2), flush=True)
+    if args.prepare_only:
+        overall_finished_at = time.perf_counter()
+        summary.update(
+            {
+                "job_id": None,
+                "import_seconds": 0.0,
+                "end_to_end_seconds": overall_finished_at - overall_started_at,
+                "bulk_import_create_response": None,
+                "bulk_import_final_progress": None,
+            }
+        )
+        write_json(summary_path, summary)
+        if args.verbose:
+            print(json.dumps(summary, indent=2), flush=True)
+        print(f"Wrote summary to {summary_path}", flush=True)
+        return
+
+    job_id, import_payload, final_progress_payload, import_seconds = start_import_from_request(
+        request_payload=request_payload,
+        milvus_url=milvus_url,
+        token=token,
+        poll_interval=args.poll_interval,
+        timeout_seconds=args.timeout_seconds,
+        verbose=args.verbose,
+    )
+    overall_finished_at = time.perf_counter()
+    summary.update(
+        {
+            "job_id": job_id,
+            "finished_at_utc": datetime.now(timezone.utc).isoformat(),
+            "import_seconds": import_seconds,
+            "end_to_end_seconds": overall_finished_at - overall_started_at,
+            "bulk_import_create_response": import_payload,
+            "bulk_import_final_progress": final_progress_payload,
+        }
+    )
+
+    write_json(summary_path, summary)
+    if args.verbose:
+        print(json.dumps(summary, indent=2), flush=True)
     print(f"Wrote summary to {summary_path}", flush=True)
 
 
