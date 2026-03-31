@@ -94,6 +94,12 @@ export MINIO_MEDIUM=$MINIO_MEDIUM
 
 export NUM_PROXIES=$NUM_PROXIES
 export NUM_PROXIES_PER_CN=$NUM_PROXIES_PER_CN
+export COORDINATOR_NODES=$COORDINATOR_NODES
+export COORDINATOR_NODES_PER_CN=$COORDINATOR_NODES_PER_CN
+export QUERY_NODES=$QUERY_NODES
+export QUERY_NODES_PER_CN=$QUERY_NODES_PER_CN
+export DATA_NODES=$DATA_NODES
+export DATA_NODES_PER_CN=$DATA_NODES_PER_CN
 
 export GPU_INDEX=$GPU_INDEX
 export VECTOR_DIM=$VECTOR_DIM
@@ -270,27 +276,36 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     rm ./configs/milvus.yaml
     python3 replace_unified.py --mode distributed
 
-    # Launch cordinator
-    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM COORDINATOR &
+    # Launch coordinator nodes
+    launch_role COORDINATOR "$COORDINATOR_NODES" "$COORDINATOR_NODES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
     
     # Launch streaming nodes
     launch_role STREAMING "$STREAMING_NODES" "$STREAMING_NODES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
 
     # Launch query nodes
-    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM QUERY &
+    launch_role QUERY "$QUERY_NODES" "$QUERY_NODES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
 
     # Launch data nodes
-    mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_milvus_part.sh $STORAGE_MEDIUM DATA &
+    launch_role DATA "$DATA_NODES" "$DATA_NODES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
     
     # Launch proxy
     launch_role PROXY "$NUM_PROXIES" "$NUM_PROXIES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
 
     # execute.sh only writes these markers after each component passes its health check.
     SIGNAL_FILES=(
-        "./workerOut/cord0_running.txt"
-        "./workerOut/query0_running.txt"
-        "./workerOut/data0_running.txt"
     )
+
+    for ((rank=0; rank<COORDINATOR_NODES; rank++)); do
+        SIGNAL_FILES+=("./workerOut/cord${rank}_running.txt")
+    done
+
+    for ((rank=0; rank<QUERY_NODES; rank++)); do
+        SIGNAL_FILES+=("./workerOut/query${rank}_running.txt")
+    done
+
+    for ((rank=0; rank<DATA_NODES; rank++)); do
+        SIGNAL_FILES+=("./workerOut/data${rank}_running.txt")
+    done
 
     for ((rank=0; rank<STREAMING_NODES; rank++)); do
         SIGNAL_FILES+=("./workerOut/streaming${rank}_running.txt")

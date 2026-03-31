@@ -136,6 +136,16 @@ EXPECTED_CORPUS_SIZE=10000000
 ETCD_MODE="replicated" # [single, replicated]
 STREAMING_NODES=1
 STREAMING_NODES_PER_CN=1
+
+QUERY_NODES=1
+QUERY_NODES_PER_CN=1
+
+DATA_NODES=1
+DATA_NODES_PER_CN=1
+
+COORDINATOR_NODES=1
+COORDINATOR_NODES_PER_CN=1
+
 NUM_PROXIES=1
 NUM_PROXIES_PER_CN=1
 DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
@@ -326,12 +336,26 @@ do
 
                 if [[ "$MODE" == "DISTRIBUTED" ]]; then
                     echo "ETCD_MODE=${ETCD_MODE}" >> $target_file
+                    echo "COORDINATOR_NODES=${COORDINATOR_NODES}" >> $target_file
+                    echo "COORDINATOR_NODES_PER_CN=${COORDINATOR_NODES_PER_CN}" >> $target_file
                     echo "STREAMING_NODES=${STREAMING_NODES}" >> $target_file
                     echo "STREAMING_NODES_PER_CN=${STREAMING_NODES_PER_CN}" >> $target_file
+                    echo "QUERY_NODES=${QUERY_NODES}" >> $target_file
+                    echo "QUERY_NODES_PER_CN=${QUERY_NODES_PER_CN}" >> $target_file
+                    echo "DATA_NODES=${DATA_NODES}" >> $target_file
+                    echo "DATA_NODES_PER_CN=${DATA_NODES_PER_CN}" >> $target_file
                     echo "NUM_PROXIES=${NUM_PROXIES}" >> $target_file
                     echo "NUM_PROXIES_PER_CN=${NUM_PROXIES_PER_CN}" >> $target_file
                     echo "DML_CHANNELS=${DML_CHANNELS}" >> $target_file
                 else
+                    echo "COORDINATOR_NODES=1" >> $target_file
+                    echo "COORDINATOR_NODES_PER_CN=1" >> $target_file
+                    echo "STREAMING_NODES=1" >> $target_file
+                    echo "STREAMING_NODES_PER_CN=1" >> $target_file
+                    echo "QUERY_NODES=1" >> $target_file
+                    echo "QUERY_NODES_PER_CN=1" >> $target_file
+                    echo "DATA_NODES=1" >> $target_file
+                    echo "DATA_NODES_PER_CN=1" >> $target_file
                     echo "NUM_PROXIES=1" >> $target_file
                     echo "NUM_PROXIES_PER_CN=1" >> $target_file
                 fi

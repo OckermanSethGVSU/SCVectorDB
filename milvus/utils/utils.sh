@@ -97,8 +97,16 @@ apply_overrides() {
     apply_override_value MINIO_MODE MINIO_MODE_OVERRIDE
     apply_override_value MINIO_MEDIUM MINIO_MEDIUM_OVERRIDE
     apply_override_value ETCD_MODE ETCD_MODE_OVERRIDE
+    apply_override_value COORDINATOR_NODES COORDINATOR_NODES_OVERRIDE
+    apply_override_value COORDINATOR_NODES_PER_CN COORDINATOR_NODES_PER_CN_OVERRIDE
+    apply_override_value COORDINATOR_NODES CORD_NODES_OVERRIDE
+    apply_override_value COORDINATOR_NODES_PER_CN CORD_NODES_PER_CN_OVERRIDE
     apply_override_value STREAMING_NODES STREAMING_NODES_OVERRIDE
     apply_override_value STREAMING_NODES_PER_CN STREAMING_NODES_PER_CN_OVERRIDE
+    apply_override_value QUERY_NODES QUERY_NODES_OVERRIDE
+    apply_override_value QUERY_NODES_PER_CN QUERY_NODES_PER_CN_OVERRIDE
+    apply_override_value DATA_NODES DATA_NODES_OVERRIDE
+    apply_override_value DATA_NODES_PER_CN DATA_NODES_PER_CN_OVERRIDE
     apply_override_value NUM_PROXIES NUM_PROXIES_OVERRIDE
     apply_override_value NUM_PROXIES_PER_CN NUM_PROXIES_PER_CN_OVERRIDE
     apply_override_value DML_CHANNELS DML_CHANNELS_OVERRIDE
@@ -201,8 +209,14 @@ print_config_summary() {
         echo "MinIO Mode:               $MINIO_MODE"
         echo "MinIO Medium:             $MINIO_MEDIUM"
         echo "ETCD Mode:                $ETCD_MODE"
+        echo "Coordinator Nodes:        $COORDINATOR_NODES"
+        echo "Coordinator/Compute Node: $COORDINATOR_NODES_PER_CN"
         echo "Streaming Nodes:          $STREAMING_NODES"
         echo "Streaming/Compute Node:   $STREAMING_NODES_PER_CN"
+        echo "Query Nodes:              $QUERY_NODES"
+        echo "Query/Compute Node:       $QUERY_NODES_PER_CN"
+        echo "Data Nodes:               $DATA_NODES"
+        echo "Data/Compute Node:        $DATA_NODES_PER_CN"
         echo "Proxies:                  $NUM_PROXIES"
         echo "Proxies/Compute Node:     $NUM_PROXIES_PER_CN"
         echo "DML Channels:             $DML_CHANNELS"
