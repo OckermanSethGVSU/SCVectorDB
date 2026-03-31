@@ -21,9 +21,9 @@ MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the di
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
-TASK="INSERT" # [INSERT, INDEX, QUERY, MIXED]
-RUN_MODE="PBS" # [PBS, local]
-MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
+TASK="IMPORT" # [INSERT, IMPORT, INDEX, QUERY, MIXED]
+RUN_MODE="local" # [PBS, local]
+MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
 WAL="woodpecker" # [woodpecker, default]
@@ -31,11 +31,14 @@ GPU_INDEX="False" # [True, False]
 TRACING="False" 
 DEBUG="False" # [True, False]
 BASE_DIR="$(pwd)"
-MINIO_MODE="stripped" # standalone: [off, single], distributed: [single, stripped]
+MINIO_MODE="single" # standalone: [off, single], distributed: [single, stripped]
 MINIO_MEDIUM="lustre" # [lustre] (can be memory if running single) - DAOS is broken
 
+# Bulk upload
+IMPORT_PROCESSES=2
+
 ### Insertion Variables ### 
-INSERT_CORPUS_SIZE=1000000000 # total data to insert
+INSERT_CORPUS_SIZE=100000 # total data to insert
 INSERT_CLIENTS_PER_PROXY=32
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 INSERT_STREAMING="True" # [True, False]
@@ -53,7 +56,7 @@ INSERT_STREAMING="True" # [True, False]
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part1.npy"
-INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/yandex1B.npy"
+INSERT_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
@@ -210,6 +213,12 @@ do
                     else
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_CPP${INSERT_CLIENTS_PER_PROXY}_uploadBS${INSERT_bs}_${DATE}"
                     fi
+                elif [[ "$TASK" == "IMPORT" ]]; then
+                    if [[ "$MODE" == "DISTRIBUTED" ]]; then
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_P${IMPORT_PROCESSES}_BS${upload_bs}_CS${INSERT_CORPUS_SIZE}_${DATE}"
+                    else
+                        dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_P${IMPORT_PROCESSES}_BS${upload_bs}_CS${INSERT_CORPUS_SIZE}_${DATE}"
+                    fi
                 elif [[ "$TASK" == "INDEX" ]]; then
                     if [[ "$MODE" == "DISTRIBUTED" ]]; then
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_N${num_nodes}_${INSERT_CORPUS_SIZE}_${DATE}"
@@ -235,7 +244,7 @@ do
                         dir="${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${numCores}_N${num_nodes}_IBS${upload_bs}_QBS${query_bs}_CS${corpus_size_for_dir}_${DATE}"
                     fi
                 else
-                    echo "Unknown task: $TASK: valid options include INSERT, INDEX, QUERY, MIXED"
+                    echo "Unknown task: $TASK: valid options include INSERT, IMPORT, INDEX, QUERY, MIXED"
                     exit
                 fi
 
@@ -258,6 +267,7 @@ do
                 echo "INSERT_CORPUS_SIZE=${INSERT_CORPUS_SIZE}" >> $target_file
                 echo "INSERT_BATCH_SIZE=${upload_bs}" >> $target_file
                 echo "INSERT_CLIENTS_PER_PROXY=${INSERT_CLIENTS_PER_PROXY}" >> $target_file
+                echo "IMPORT_PROCESSES=${IMPORT_PROCESSES}" >> $target_file
                 
                 echo "QUERY_DATA_FILEPATH=${QUERY_DATA_FILEPATH}" >> $target_file
                 echo "QUERY_BALANCE_STRATEGY=${QUERY_BALANCE_STRATEGY}" >> $target_file
@@ -335,6 +345,7 @@ do
                     cp ./goCode/multiClientOP/multiClientOP $dir/
                     cp ./goCode/multiClientOP/main.go $dir/multiClient.go
                     cp ./generalPython/multi_client_summary.py "$dir/"
+                    cp ./generalPython/bulk_upload_import.py "$dir/"
                     if [[ "$TASK" == "MIXED" ]]; then
                         cp ./goCode/mixedRunner/mixedRunner "$dir/"
                         cp ./goCode/mixedRunner/main.go "$dir/mixed_main.go"
@@ -384,6 +395,7 @@ do
                     cp generalPython/profile.py $dir/
                     cp generalPython/poll.py $dir/
                     cp ./generalPython/multi_client_summary.py "$dir/"
+                    cp ./generalPython/bulk_upload_import.py "$dir/"
                                     
                     # all tasks need go code
                     cp ./goCode/multiClientOP/multiClientOP $dir/

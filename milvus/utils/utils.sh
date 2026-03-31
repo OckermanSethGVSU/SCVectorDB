@@ -46,6 +46,7 @@ apply_overrides() {
 
     apply_override_value INSERT_CORPUS_SIZE INSERT_CORPUS_SIZE_OVERRIDE
     apply_override_value INSERT_CLIENTS_PER_PROXY INSERT_CLIENTS_PER_PROXY_OVERRIDE
+    apply_override_value IMPORT_PROCESSES IMPORT_PROCESSES_OVERRIDE
     apply_override_value INSERT_BALANCE_STRATEGY INSERT_BALANCE_STRATEGY_OVERRIDE
     apply_override_value INSERT_STREAMING INSERT_STREAMING_OVERRIDE
     apply_override_value INSERT_DATA_FILEPATH INSERT_DATA_FILEPATH_OVERRIDE
@@ -133,6 +134,15 @@ print_config_summary() {
             echo "Insert Balance:           $INSERT_BALANCE_STRATEGY"
             echo "Insert Streaming:         $INSERT_STREAMING"
             ;;
+        IMPORT)
+            echo "Bulk Upload Corpus Size:  $INSERT_CORPUS_SIZE"
+            echo "Bulk Upload Data File:    $INSERT_DATA_FILEPATH"
+            echo "Bulk Upload Batch Sizes:  ${INSERT_BATCH_SIZE[*]}"
+            echo "Import Processes:         $IMPORT_PROCESSES"
+            echo "Collection Name:          ${COLLECTION_NAME:-standalone}"
+            echo "Vector Field:             ${VECTOR_FIELD:-vector}"
+            echo "ID Field:                 ${ID_FIELD:-id}"
+            ;;
         INDEX)
             echo "Index Corpus Size:        $INSERT_CORPUS_SIZE"
             echo "Restore Dir:              ${RESTORE_DIR:-<unset>}"
@@ -202,6 +212,9 @@ print_config_summary() {
         echo "MinIO Medium:             $MINIO_MEDIUM"
         case "$TASK" in
             INSERT)
+                echo "Standalone Cores:         ${CORES[*]}"
+                ;;
+            IMPORT)
                 echo "Standalone Cores:         ${CORES[*]}"
                 ;;
             INDEX)

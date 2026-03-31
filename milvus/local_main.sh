@@ -49,12 +49,23 @@ CONTAINER_NAME="${MILVUS_LOCAL_NAME:-milvus-standalone}"
 IMAGE="${MILVUS_LOCAL_IMAGE:-milvusdb/milvus:v2.6.12}"
 ETCD_PORT="${MILVUS_ETCD_PORT:-2379}"
 VOLUMES_DIR="${MILVUS_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/milvus}"
+MINIO_CONTAINER_NAME="${MINIO_LOCAL_NAME:-milvus-minio}"
+MINIO_IMAGE="${MINIO_LOCAL_IMAGE:-minio/minio:RELEASE.2025-02-28T09-55-16Z}"
+MINIO_API_PORT="${MINIO_API_PORT:-9000}"
+MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9001}"
+MINIO_HOST="${MINIO_HOST:-127.0.0.1}"
+MINIO_INTERNAL_HOST="${MINIO_INTERNAL_HOST:-$MINIO_CONTAINER_NAME}"
+MINIO_BUCKET_NAME="${MINIO_BUCKET_NAME:-a-bucket}"
+MINIO_ACCESS_KEY_ID="${MINIO_ACCESS_KEY_ID:-minioadmin}"
+MINIO_SECRET_ACCESS_KEY="${MINIO_SECRET_ACCESS_KEY:-minioadmin}"
+MINIO_NETWORK_NAME="${MINIO_NETWORK_NAME:-milvus-local-net}"
+MINIO_VOLUMES_DIR="${MINIO_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/minio}"
 EMBED_ETCD_FILE="$RUN_DIR/embedEtcd.yaml"
 USER_CONFIG_FILE="$RUN_DIR/user.yaml"
 STANDARD_BINARY_PATH="${STANDARD_BINARY_PATH:-}"
 MIXED_BINARY_PATH="${MIXED_BINARY_PATH:-}"
 
-mkdir -p "$RUN_DIR" "$RUN_DIR/workerOut" "$VOLUMES_DIR"
+mkdir -p "$RUN_DIR" "$RUN_DIR/workerOut" "$VOLUMES_DIR" "$MINIO_VOLUMES_DIR"
 
 pick_binary() {
     local override="$1"
@@ -129,6 +140,12 @@ EOF
 write_registry_files() {
     printf '%s\n' "$MILVUS_HOST" > "$RUN_DIR/worker.ip"
     printf '0,%s,%s,%s\n' "$MILVUS_HOST" "$MILVUS_GRPC_PORT" "$MILVUS_HEALTH_PORT" > "$RUN_DIR/PROXY_registry.txt"
+
+    if [[ "$MINIO_MODE" == "single" ]]; then
+        printf '0,%s,%s\n' "$MINIO_HOST" "$MINIO_API_PORT" > "$RUN_DIR/minio_registry.txt"
+    else
+        rm -f "$RUN_DIR/minio_registry.txt"
+    fi
 }
 
 wait_for_milvus() {
@@ -146,18 +163,149 @@ wait_for_milvus() {
     exit 1
 }
 
-start_local_milvus() {
-    write_local_configs
+ensure_container_network() {
+    if ! "$CONTAINER_RUNTIME" network inspect "$MINIO_NETWORK_NAME" >/dev/null 2>&1; then
+        "$CONTAINER_RUNTIME" network create "$MINIO_NETWORK_NAME" >/dev/null
+    fi
+}
 
-    if [[ "$MINIO_MODE" != "off" ]]; then
-        echo "Local mode does not yet support MINIO_MODE='${MINIO_MODE}'. Use off." >&2
-        exit 1
+container_exists() {
+    local name="$1"
+    "$CONTAINER_RUNTIME" ps -a --format '{{.Names}}' | grep -Fxq "$name"
+}
+
+container_running() {
+    local name="$1"
+    "$CONTAINER_RUNTIME" ps --format '{{.Names}}' | grep -Fxq "$name"
+}
+
+remove_container_if_present() {
+    local name="$1"
+
+    if container_running "$name"; then
+        "$CONTAINER_RUNTIME" stop "$name" >/dev/null
     fi
 
-    if "$CONTAINER_RUNTIME" ps --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+    if container_exists "$name"; then
+        "$CONTAINER_RUNTIME" rm "$name" >/dev/null
+    fi
+}
+
+wait_for_minio() {
+    echo "Waiting for MinIO at ${MINIO_HOST}:${MINIO_API_PORT}..."
+    for _ in {1..120}; do
+        if env "${PYTHON_ENV_VARS[@]}" curl -fsS "http://${MINIO_HOST}:${MINIO_API_PORT}/minio/health/live" >/dev/null 2>&1; then
+            echo "MinIO is ready."
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "MinIO did not become healthy within 120 seconds." >&2
+    echo "Inspect logs with: ${CONTAINER_RUNTIME} logs ${MINIO_CONTAINER_NAME}" >&2
+    exit 1
+}
+
+start_local_minio() {
+    case "$MINIO_MODE" in
+        off)
+            return 0
+            ;;
+        single)
+            ;;
+        *)
+            echo "Local mode only supports MINIO_MODE='off' or 'single' (got '${MINIO_MODE}')." >&2
+            exit 1
+            ;;
+    esac
+
+    ensure_container_network
+
+    if container_exists "$MINIO_CONTAINER_NAME"; then
+        local minio_port_bindings
+        minio_port_bindings="$("$CONTAINER_RUNTIME" inspect "$MINIO_CONTAINER_NAME" --format '{{json .HostConfig.PortBindings}}')"
+
+        if [[ "$minio_port_bindings" != *"9000/tcp"* ]]; then
+            echo "Recreating MinIO container '$MINIO_CONTAINER_NAME' to publish host ports."
+            remove_container_if_present "$MINIO_CONTAINER_NAME"
+        fi
+    fi
+
+    if container_running "$MINIO_CONTAINER_NAME"; then
+        echo "MinIO container '$MINIO_CONTAINER_NAME' is already running."
+    else
+        if container_exists "$MINIO_CONTAINER_NAME"; then
+            echo "Starting existing MinIO container '$MINIO_CONTAINER_NAME'..."
+            "$CONTAINER_RUNTIME" start "$MINIO_CONTAINER_NAME" >/dev/null
+        else
+            echo "Launching MinIO container '$MINIO_CONTAINER_NAME' from image '$MINIO_IMAGE'..."
+            "$CONTAINER_RUNTIME" run -d \
+                --name "$MINIO_CONTAINER_NAME" \
+                --network "$MINIO_NETWORK_NAME" \
+                -e MINIO_ROOT_USER="$MINIO_ACCESS_KEY_ID" \
+                -e MINIO_ROOT_PASSWORD="$MINIO_SECRET_ACCESS_KEY" \
+                -v "${MINIO_VOLUMES_DIR}:/data" \
+                -p "${MINIO_API_PORT}:9000" \
+                -p "${MINIO_CONSOLE_PORT}:9001" \
+                --health-cmd="curl -f http://localhost:9000/minio/health/live" \
+                --health-interval=15s \
+                --health-start-period=10s \
+                --health-timeout=5s \
+                --health-retries=5 \
+                "$MINIO_IMAGE" server /data --console-address ":9001" >/dev/null
+        fi
+    fi
+
+    wait_for_minio
+}
+
+start_local_milvus() {
+    local storage_type="local"
+    local -a minio_env_args=()
+
+    write_local_configs
+
+    case "$MINIO_MODE" in
+        off)
+            ;;
+        single)
+            storage_type="remote"
+            minio_env_args=(
+                -e MINIO_ADDRESS="${MINIO_INTERNAL_HOST}:9000"
+                -e MINIO_ACCESS_KEY_ID="${MINIO_ACCESS_KEY_ID}"
+                -e MINIO_SECRET_ACCESS_KEY="${MINIO_SECRET_ACCESS_KEY}"
+                -e MINIO_BUCKET_NAME="${MINIO_BUCKET_NAME}"
+            )
+            ensure_container_network
+            ;;
+        *)
+            echo "Local mode only supports MINIO_MODE='off' or 'single' (got '${MINIO_MODE}')." >&2
+            exit 1
+            ;;
+    esac
+
+    if container_exists "$CONTAINER_NAME"; then
+        local current_network
+        local current_env
+        current_network="$("$CONTAINER_RUNTIME" inspect "$CONTAINER_NAME" --format '{{.HostConfig.NetworkMode}}')"
+        current_env="$("$CONTAINER_RUNTIME" inspect "$CONTAINER_NAME" --format '{{join .Config.Env "\n"}}')"
+
+        if [[ "$current_network" != "$MINIO_NETWORK_NAME" ]]; then
+            echo "Recreating Milvus container '$CONTAINER_NAME' to attach it to network '$MINIO_NETWORK_NAME'."
+            remove_container_if_present "$CONTAINER_NAME"
+        elif [[ "$storage_type" == "remote" && "$current_env" != *"COMMON_STORAGETYPE=remote"* ]]; then
+            echo "Recreating Milvus container '$CONTAINER_NAME' to enable remote object storage."
+            remove_container_if_present "$CONTAINER_NAME"
+        elif [[ "$storage_type" == "local" && "$current_env" != *"COMMON_STORAGETYPE=local"* ]]; then
+            echo "Recreating Milvus container '$CONTAINER_NAME' to restore local object storage."
+            remove_container_if_present "$CONTAINER_NAME"
+        fi
+    fi
+
+    if container_running "$CONTAINER_NAME"; then
         echo "Milvus container '$CONTAINER_NAME' is already running."
     else
-        if "$CONTAINER_RUNTIME" ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+        if container_exists "$CONTAINER_NAME"; then
             echo "Starting existing Milvus container '$CONTAINER_NAME'..."
             "$CONTAINER_RUNTIME" start "$CONTAINER_NAME" >/dev/null
         else
@@ -165,10 +313,11 @@ start_local_milvus() {
             "$CONTAINER_RUNTIME" run -d \
                 --name "$CONTAINER_NAME" \
                 --security-opt seccomp:unconfined \
+                --network "$MINIO_NETWORK_NAME" \
                 -e ETCD_USE_EMBED=true \
                 -e ETCD_DATA_DIR=/var/lib/milvus/etcd \
                 -e ETCD_CONFIG_PATH=/milvus/configs/embedEtcd.yaml \
-                -e COMMON_STORAGETYPE=local \
+                -e COMMON_STORAGETYPE="${storage_type}" \
                 -e DEPLOY_MODE=STANDALONE \
                 -v "${VOLUMES_DIR}:/var/lib/milvus" \
                 -v "${EMBED_ETCD_FILE}:/milvus/configs/embedEtcd.yaml" \
@@ -181,6 +330,7 @@ start_local_milvus() {
                 --health-start-period=90s \
                 --health-timeout=20s \
                 --health-retries=3 \
+                "${minio_env_args[@]}" \
                 "$IMAGE" milvus run standalone >/dev/null
         fi
     fi
@@ -203,6 +353,34 @@ run_insert() {
 	export INSERT_STREAMING="${INSERT_STREAMING:-}"
 
 	env GOGC="${LOCAL_INSERT_GOGC:-25}" "${PYTHON_ENV_VARS[@]}" "$STANDARD_BINARY_PATH"
+}
+
+run_bulk_upload() {
+    export ACTIVE_TASK="IMPORT"
+    export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
+    export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:?INSERT_CORPUS_SIZE is required}"
+    export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
+    export IMPORT_PROCESSES="${IMPORT_PROCESSES:-${INSERT_CLIENTS_PER_PROXY:-1}}"
+    export COLLECTION_NAME="${COLLECTION_NAME:-standalone}"
+    export VECTOR_FIELD="${VECTOR_FIELD:-vector}"
+    export ID_FIELD="${ID_FIELD:-id}"
+    export MINIO_ENDPOINT="${MINIO_ENDPOINT:-${MINIO_HOST}:${MINIO_API_PORT}}"
+
+    if [[ "${MINIO_MODE}" != "single" ]]; then
+        echo "TASK=IMPORT requires MINIO_MODE=single in local mode." >&2
+        exit 1
+    fi
+
+    env "${PYTHON_ENV_VARS[@]}" python3 ./bulk_upload_import.py \
+        --input "$INSERT_DATA_FILEPATH" \
+        --writer-mode remote \
+        --processes "$IMPORT_PROCESSES" \
+        --corpus-size "$INSERT_CORPUS_SIZE" \
+        --collection "$COLLECTION_NAME" \
+        --vector-field "$VECTOR_FIELD" \
+        --id-field "$ID_FIELD" \
+        --vector-dim "$VECTOR_DIM" \
+        --batch-rows "$INSERT_BATCH_SIZE"
 }
 
 run_index() {
@@ -327,10 +505,16 @@ run_restore_status() {
 main() {
     cd "$RUN_DIR"
     ensure_runtime_tools
+    start_local_minio
     start_local_milvus
 
     if [[ -z "$RESTORE_DIR" ]]; then
         run_setup_collection
+
+        if [[ "$TASK" == "IMPORT" ]]; then
+            run_bulk_upload
+            return 0
+        fi
 
         run_insert
 
@@ -367,7 +551,7 @@ main() {
         return 0
     fi
 
-    if [[ "$TASK" != "INSERT" && "$TASK" != "INDEX" && "$TASK" != "QUERY" && "$TASK" != "MIXED" ]]; then
+    if [[ "$TASK" != "INSERT" && "$TASK" != "IMPORT" && "$TASK" != "INDEX" && "$TASK" != "QUERY" && "$TASK" != "MIXED" ]]; then
         echo "Unsupported TASK '$TASK' for local_main.sh" >&2
         exit 1
     fi
