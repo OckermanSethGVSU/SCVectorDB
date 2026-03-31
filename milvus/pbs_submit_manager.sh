@@ -69,6 +69,8 @@ apply_overrides() {
     apply_override_array QUERY_BATCH_SIZE QUERY_BATCH_SIZE_OVERRIDE
 
     apply_override_value MIXED_RESULT_PATH MIXED_RESULT_PATH_OVERRIDE
+    apply_override_value MIXED_INSERT_BATCH_SIZE MIXED_INSERT_BATCH_SIZE_OVERRIDE
+    apply_override_value MIXED_QUERY_BATCH_SIZE MIXED_QUERY_BATCH_SIZE_OVERRIDE
     apply_override_value INSERT_MODE INSERT_MODE_OVERRIDE
     apply_override_value INSERT_OPS_PER_SEC INSERT_OPS_PER_SEC_OVERRIDE
     apply_override_value QUERY_MODE QUERY_MODE_OVERRIDE
@@ -85,6 +87,10 @@ apply_overrides() {
     apply_override_value QUERY_EF_SEARCH QUERY_EF_SEARCH_OVERRIDE
     apply_override_value SEARCH_CONSISTENCY SEARCH_CONSISTENCY_OVERRIDE
     apply_override_value RPC_TIMEOUT RPC_TIMEOUT_OVERRIDE
+    apply_override_value MIXED_INSERT_BATCH_MIN MIXED_INSERT_BATCH_MIN_OVERRIDE
+    apply_override_value MIXED_INSERT_BATCH_MAX MIXED_INSERT_BATCH_MAX_OVERRIDE
+    apply_override_value MIXED_QUERY_BATCH_MIN MIXED_QUERY_BATCH_MIN_OVERRIDE
+    apply_override_value MIXED_QUERY_BATCH_MAX MIXED_QUERY_BATCH_MAX_OVERRIDE
     apply_override_value INSERT_BATCH_MIN INSERT_BATCH_MIN_OVERRIDE
     apply_override_value INSERT_BATCH_MAX INSERT_BATCH_MAX_OVERRIDE
     apply_override_value QUERY_BATCH_MIN QUERY_BATCH_MIN_OVERRIDE
@@ -152,13 +158,13 @@ print_config_summary() {
         MIXED)
             echo "Insert Corpus Size:       $INSERT_CORPUS_SIZE"
             echo "Insert Data File:         $INSERT_DATA_FILEPATH"
-            echo "Insert Batch Sizes:       ${INSERT_BATCH_SIZE[*]}"
+            echo "Insert Batch Sizes:       ${MIXED_INSERT_BATCH_SIZE:-${INSERT_BATCH_SIZE[*]}}"
             echo "Insert Clients/Proxy:     $INSERT_CLIENTS_PER_PROXY"
             echo "Insert Balance:           $INSERT_BALANCE_STRATEGY"
             echo "Insert Streaming:         $INSERT_STREAMING"
             echo "Query Corpus Size:        $QUERY_CORPUS_SIZE"
             echo "Query Data File:          $QUERY_DATA_FILEPATH"
-            echo "Query Batch Sizes:        ${QUERY_BATCH_SIZE[*]}"
+            echo "Query Batch Sizes:        ${MIXED_QUERY_BATCH_SIZE:-${QUERY_BATCH_SIZE[*]}}"
             echo "Query Clients/Proxy:      $QUERY_CLIENTS_PER_PROXY"
             echo "Query Balance:            $QUERY_BALANCE_STRATEGY"
             echo "Query Streaming:          $QUERY_STREAMING"
@@ -179,10 +185,10 @@ print_config_summary() {
             echo "Query EF Search:          ${QUERY_EF_SEARCH:-<unset>}"
             echo "Search Consistency:       $SEARCH_CONSISTENCY"
             echo "RPC Timeout:              $RPC_TIMEOUT"
-            echo "Insert Batch Min:         ${INSERT_BATCH_MIN:-<unset>}"
-            echo "Insert Batch Max:         ${INSERT_BATCH_MAX:-<unset>}"
-            echo "Query Batch Min:          ${QUERY_BATCH_MIN:-<unset>}"
-            echo "Query Batch Max:          ${QUERY_BATCH_MAX:-<unset>}"
+            echo "Insert Batch Min:         ${MIXED_INSERT_BATCH_MIN:-${INSERT_BATCH_MIN:-<unset>}}"
+            echo "Insert Batch Max:         ${MIXED_INSERT_BATCH_MAX:-${INSERT_BATCH_MAX:-<unset>}}"
+            echo "Query Batch Min:          ${MIXED_QUERY_BATCH_MIN:-${QUERY_BATCH_MIN:-<unset>}}"
+            echo "Query Batch Max:          ${MIXED_QUERY_BATCH_MAX:-${QUERY_BATCH_MAX:-<unset>}}"
             echo "Restore Dir:              ${RESTORE_DIR:-<unset>}"
             echo "Expected Corpus Size:     $EXPECTED_CORPUS_SIZE"
             ;;
@@ -232,14 +238,14 @@ queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
 # Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
 ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
-MILVUS_BUILD_DIR="" # Name of the directory with your build: traceMilvus, cpuMilvus
+MILVUS_BUILD_DIR="cpuMilvus" # Name of the directory with your build: traceMilvus, cpuMilvus
 MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the dir containing the yaml file
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
-TASK="QUERY" # [INSERT, INDEX, QUERY, MIXED]
-RUN_MODE="local" # [PBS, local]
-MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
+TASK="INSERT" # [INSERT, INDEX, QUERY, MIXED]
+RUN_MODE="PBS" # [PBS, local]
+MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
 WAL="woodpecker" # [woodpecker, default]
@@ -247,18 +253,20 @@ GPU_INDEX="False" # [True, False]
 TRACING="False" 
 DEBUG="False" # [True, False]
 BASE_DIR="$(pwd)"
-MINIO_MODE="" # standalone: [off, single], distributed: [single, stripped]
+MINIO_MODE="stripped" # standalone: [off, single], distributed: [single, stripped]
 MINIO_MEDIUM="lustre" # [lustre] (can be memory if running single) - DAOS is broken
 
 ### Insertion Variables ### 
-INSERT_CORPUS_SIZE=1000 # total data to insert
-INSERT_CLIENTS_PER_PROXY=4
+INSERT_CORPUS_SIZE=1000000000 # total data to insert
+INSERT_CLIENTS_PER_PROXY=32
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
-INSERT_STREAMING="TRUE" # [True, False]
+INSERT_STREAMING="True" # [True, False]
 # Aurora
     # 10 million 
     #    HPC-Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
     #    Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy
+                # /lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part<1/2>.npy
+                # /lus/flare/projects/AuroraGPT/sockerman/text2image1B/yandex1B.npy 
 # Polaris 
     # 10 million 
     #     HPC-Pes2o: /eagle/projects/argonne_tpc/sockerman/pes2oEmbeddings/embeddings.npy
@@ -266,46 +274,52 @@ INSERT_STREAMING="TRUE" # [True, False]
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
-INSERT_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+# INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part1.npy"
+INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/yandex1B.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 # best batch for 32 clients: 128
 INSERT_BATCH_SIZE=(512)
-# VECTOR_DIM=200
 VECTOR_DIM=200
+# VECTOR_DIM=2560
 DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 INIT_FLAT_INDEX="FALSE" # [TRUE, FALSE]
 
 
 ### QUERY Variables ###
 # QUERY_CORPUS_SIZE=22723  # queries
-QUERY_CORPUS_SIZE=100  # queries
+QUERY_CORPUS_SIZE=22723  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
 QUERY_STREAMING="False" # [True, False]
-QUERY_BATCH_SIZE=(1)
+QUERY_BATCH_SIZE=(32)
 
 # Aurora
     # * Yandex: /lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy
     # * Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
-# QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
-# QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
-QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
+# QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+# QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 
 
 # Mixed Insert/Query Variables
-MIXED_RESULT_PATH="mixed_logs"
 INSERT_MODE="max" # [max, rate]
 INSERT_OPS_PER_SEC=""
+MIXED_INSERT_BATCH_SIZE=32
+
 QUERY_MODE="max" # [max, rate]
 QUERY_OPS_PER_SEC=""
-MIXED_CORPUS_SIZE=1000
+MIXED_QUERY_BATCH_SIZE=32
+
+MIXED_RESULT_PATH="mixed_logs"
+MIXED_CORPUS_SIZE=1000000
 MIXED_QUERY_CLIENTS_PER_PROXY=1
 MIXED_INSERT_CLIENTS_PER_PROXY=1
-MIXED_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+# MIXED_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part2.npy"
+MIXED_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/10M_part2.npy"
 
 # Optional but useful
 COLLECTION_NAME=""
@@ -317,10 +331,10 @@ SEARCH_CONSISTENCY=""
 RPC_TIMEOUT=""
 
 # only relevant if you want random batch sizes 
-INSERT_BATCH_MIN=""
-INSERT_BATCH_MAX=""
-QUERY_BATCH_MIN=""
-QUERY_BATCH_MAX=""
+MIXED_INSERT_BATCH_MIN=""
+MIXED_INSERT_BATCH_MAX=""
+MIXED_QUERY_BATCH_MIN=""
+MIXED_QUERY_BATCH_MAX=""
 
 # Polaris: TODO
 # Aurora: 
@@ -336,10 +350,10 @@ EXPECTED_CORPUS_SIZE=10000000
 
 ### Distributed Variables ###
 ETCD_MODE="replicated" # [single, replicated]
-STREAMING_NODES=8
-STREAMING_NODES_PER_CN=4
-NUM_PROXIES=8
-NUM_PROXIES_PER_CN=4
+STREAMING_NODES=1
+STREAMING_NODES_PER_CN=1
+NUM_PROXIES=1
+NUM_PROXIES_PER_CN=1
 DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
 
 apply_overrides
@@ -475,6 +489,8 @@ do
                 echo "QUERY_CLIENTS_PER_PROXY=${QUERY_CLIENTS_PER_PROXY}" >> $target_file
 
                 echo "MIXED_RESULT_PATH=${MIXED_RESULT_PATH}" >> $target_file
+                echo "MIXED_INSERT_BATCH_SIZE=${MIXED_INSERT_BATCH_SIZE:-$upload_bs}" >> $target_file
+                echo "MIXED_QUERY_BATCH_SIZE=${MIXED_QUERY_BATCH_SIZE:-$query_bs}" >> $target_file
                 echo "INSERT_MODE=${INSERT_MODE}" >> $target_file
                 echo "INSERT_OPS_PER_SEC=${INSERT_OPS_PER_SEC}" >> $target_file
                 echo "QUERY_MODE=${QUERY_MODE}" >> $target_file
@@ -491,6 +507,10 @@ do
                 echo "QUERY_EF_SEARCH=${QUERY_EF_SEARCH}" >> $target_file
                 echo "SEARCH_CONSISTENCY=${SEARCH_CONSISTENCY}" >> $target_file
                 echo "RPC_TIMEOUT=${RPC_TIMEOUT}" >> $target_file
+                echo "MIXED_INSERT_BATCH_MIN=${MIXED_INSERT_BATCH_MIN}" >> $target_file
+                echo "MIXED_INSERT_BATCH_MAX=${MIXED_INSERT_BATCH_MAX}" >> $target_file
+                echo "MIXED_QUERY_BATCH_MIN=${MIXED_QUERY_BATCH_MIN}" >> $target_file
+                echo "MIXED_QUERY_BATCH_MAX=${MIXED_QUERY_BATCH_MAX}" >> $target_file
                 echo "INSERT_BATCH_MIN=${INSERT_BATCH_MIN}" >> $target_file
                 echo "INSERT_BATCH_MAX=${INSERT_BATCH_MAX}" >> $target_file
                 echo "QUERY_BATCH_MIN=${QUERY_BATCH_MIN}" >> $target_file
@@ -591,8 +611,8 @@ do
                     cp ./goCode/multiClientOP/multiClientOP $dir/
                     cp ./goCode/multiClientOP/main.go $dir/multiClient.go
                     if [[ "$TASK" == "MIXED" ]]; then
-                        cp ./goCode/mixedrunner/mixedrunner "$dir/"
-                        cp ./goCode/mixedrunner/main.go "$dir/mixed_main.go"
+                        cp ./goCode/mixedRunner/mixedRunner "$dir/"
+                        cp ./goCode/mixedRunner/main.go "$dir/mixed_main.go"
                         cp ../qdrant/generalPython/mixed_timeline.py "$dir/"
                     fi
 

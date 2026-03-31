@@ -254,12 +254,12 @@ func parseFlags() (config, error) {
 	flag.DurationVar(&cfg.rpcTimeout, "rpc-timeout", getenvDurationDefault("RPC_TIMEOUT", 10*time.Minute), "Per-operation timeout")
 	flag.BoolVar(&cfg.dryRun, "dry-run", getenvBoolDefault("DRY_RUN", false), "Use an in-memory backend instead of Milvus")
 
-	flag.IntVar(&cfg.insertBatch.fixed, "insert-batch-size", getenvIntDefault("INSERT_BATCH_SIZE", 1), "Fixed insert batch size")
-	flag.IntVar(&cfg.queryBatch.fixed, "query-batch-size", getenvIntDefault("QUERY_BATCH_SIZE", 1), "Fixed query batch size")
-	flag.IntVar(&cfg.insertBatch.min, "insert-batch-min", getenvIntDefault("INSERT_BATCH_MIN", 0), "Random insert batch min, inclusive")
-	flag.IntVar(&cfg.insertBatch.max, "insert-batch-max", getenvIntDefault("INSERT_BATCH_MAX", 0), "Random insert batch max, inclusive")
-	flag.IntVar(&cfg.queryBatch.min, "query-batch-min", getenvIntDefault("QUERY_BATCH_MIN", 0), "Random query batch min, inclusive")
-	flag.IntVar(&cfg.queryBatch.max, "query-batch-max", getenvIntDefault("QUERY_BATCH_MAX", 0), "Random query batch max, inclusive")
+	flag.IntVar(&cfg.insertBatch.fixed, "insert-batch-size", getenvIntDefault("MIXED_INSERT_BATCH_SIZE", getenvIntDefault("INSERT_BATCH_SIZE", 1)), "Fixed insert batch size")
+	flag.IntVar(&cfg.queryBatch.fixed, "query-batch-size", getenvIntDefault("MIXED_QUERY_BATCH_SIZE", getenvIntDefault("QUERY_BATCH_SIZE", 1)), "Fixed query batch size")
+	flag.IntVar(&cfg.insertBatch.min, "insert-batch-min", getenvIntDefault("MIXED_INSERT_BATCH_MIN", getenvIntDefault("INSERT_BATCH_MIN", 0)), "Random insert batch min, inclusive")
+	flag.IntVar(&cfg.insertBatch.max, "insert-batch-max", getenvIntDefault("MIXED_INSERT_BATCH_MAX", getenvIntDefault("INSERT_BATCH_MAX", 0)), "Random insert batch max, inclusive")
+	flag.IntVar(&cfg.queryBatch.min, "query-batch-min", getenvIntDefault("MIXED_QUERY_BATCH_MIN", getenvIntDefault("QUERY_BATCH_MIN", 0)), "Random query batch min, inclusive")
+	flag.IntVar(&cfg.queryBatch.max, "query-batch-max", getenvIntDefault("MIXED_QUERY_BATCH_MAX", getenvIntDefault("QUERY_BATCH_MAX", 0)), "Random query batch max, inclusive")
 	flag.Parse()
 
 	// The top-level mode acts as a default unless a role-specific mode overrides it.
