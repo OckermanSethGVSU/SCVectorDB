@@ -49,6 +49,19 @@ def first_non_empty(*values: str | None) -> str | None:
     return None
 
 
+def env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value in (None, ""):
+        return default
+    return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
+def load_matrix(path: str, use_mmap: bool) -> np.ndarray:
+    if use_mmap:
+        return np.load(path, mmap_mode="r")
+    return np.load(path)
+
+
 def split_range(total: int, part_count: int, part_index: int) -> tuple[int, int]:
     base, remainder = divmod(total, part_count)
     start = part_index * base + min(part_index, remainder)
@@ -106,6 +119,7 @@ def worker_write(
     remote_secret_key: str | None,
     remote_secure: bool,
     remote_path: str,
+    use_mmap: bool,
     shared_results: Any,
 ) -> None:
     started_at = time.perf_counter()
@@ -126,7 +140,7 @@ def worker_write(
         )
         return
 
-    data = np.load(input_path, mmap_mode="r")
+    data = load_matrix(input_path, use_mmap=use_mmap)
     schema = build_schema(id_field=id_field, vector_field=vector_field, vector_dim=vector_dim)
     if writer_mode == "local":
         writer_root = Path(stage_dir) / f"proc_{worker_index:03d}"
@@ -441,7 +455,8 @@ def main() -> None:
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
 
-    matrix = np.load(str(input_path), mmap_mode="r")
+    use_mmap = env_flag("INSERT_STREAMING", default=False)
+    matrix = load_matrix(str(input_path), use_mmap=use_mmap)
     if matrix.ndim != 2:
         raise ValueError(f"Expected a 2D NumPy matrix, got shape={matrix.shape}")
 
@@ -463,7 +478,7 @@ def main() -> None:
 
     print(
         f"Writing {row_count} rows from {input_path} across {args.processes} processes "
-        f"using writer_mode={args.writer_mode}",
+        f"using writer_mode={args.writer_mode} load_mode={'mmap' if use_mmap else 'eager'}",
         flush=True,
     )
 
@@ -498,6 +513,7 @@ def main() -> None:
                 args.remote_secret_key,
                 args.remote_secure,
                 args.remote_path,
+                use_mmap,
                 shared_results,
             ),
         )

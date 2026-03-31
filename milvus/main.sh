@@ -317,6 +317,7 @@ if [ -z "$RESTORE_DIR" ]; then
         export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
         export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
         export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
+        export INSERT_STREAMING=$INSERT_STREAMING
         export IMPORT_PROCESSES=${IMPORT_PROCESSES:-${INSERT_CLIENTS_PER_PROXY:-1}}
         export COLLECTION_NAME=${COLLECTION_NAME:-standalone}
         export VECTOR_FIELD=${VECTOR_FIELD:-vector}
@@ -337,31 +338,34 @@ if [ -z "$RESTORE_DIR" ]; then
             --id-field "$ID_FIELD" \
             --vector-dim "$VECTOR_DIM" \
             --batch-rows "$INSERT_BATCH_SIZE"
+        
         touch flag.txt
-        exit 0
+    
+    else
+        export ACTIVE_TASK="INSERT"
+        export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
+        export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
+        export INSERT_CLIENTS_PER_PROXY=$INSERT_CLIENTS_PER_PROXY
+        export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
+        export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
+        export INSERT_STREAMING=$INSERT_STREAMING
+
+
+        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+
+        if [[ "$TASK" == "INSERT" ]]; then
+            touch flag.txt
+        fi
+
+        env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
+
+        mv times.csv insert_times.txt
+        mv summary.csv insert_summary.txt
+        mkdir -p uploadNPY
+        mv *.npy uploadNPY
     fi
 
-    export ACTIVE_TASK="INSERT"
-    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
-    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
-    export INSERT_CLIENTS_PER_PROXY=$INSERT_CLIENTS_PER_PROXY
-    export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
-    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
-    export INSERT_STREAMING=$INSERT_STREAMING
 
-
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
-
-    if [[ "$TASK" == "INSERT" ]]; then
-        touch flag.txt
-    fi
-
-    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
-
-    mv times.csv insert_times.txt
-    mv summary.csv insert_summary.txt
-    mkdir -p uploadNPY
-    mv *.npy uploadNPY
 
     if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
         export ACTIVE_TASK="INDEX"

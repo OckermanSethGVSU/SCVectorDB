@@ -34,9 +34,8 @@ BASE_DIR="$(pwd)"
 MINIO_MODE="single" # standalone: [off, single], distributed: [single, stripped]
 MINIO_MEDIUM="lustre" # [lustre] (can be memory if running single) - DAOS is broken
 
-# Bulk upload
-IMPORT_PROCESSES=2
 
+# 
 ### Insertion Variables ### 
 INSERT_CORPUS_SIZE=100000 # total data to insert
 INSERT_CLIENTS_PER_PROXY=32
@@ -62,6 +61,10 @@ INSERT_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/Yandex
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 # best batch for 32 clients: 128
 INSERT_BATCH_SIZE=(512)
+IMPORT_PROCESSES=2 # If you are doing a bulk import
+
+
+# Index Variables
 VECTOR_DIM=200
 # VECTOR_DIM=2560
 DISTANCE_METRIC="IP" # [IP, COSINE, L2]
