@@ -101,6 +101,13 @@ def load_unified_template() -> str:
     return Path("configs/unified_milvus.yaml").read_text()
 
 
+def load_distributed_component_template() -> str:
+    distributed_path = Path("configs/distributed_milvus.yaml")
+    if distributed_path.exists():
+        return distributed_path.read_text()
+    return load_unified_template()
+
+
 def apply_common_tuning(text: str) -> str:
     gpu_enabled = os.environ.get("GPU_INDEX", "false").strip().lower() == "true"
     if not gpu_enabled:
@@ -216,7 +223,7 @@ def build_distributed_base_config(wal: str) -> str:
 
 def build_component_config(mode: str, rank: int) -> str:
     spec = COMPONENT_SPECS[mode]
-    text = Path("configs/distributed_milvus_unified.yaml").read_text()
+    text = load_distributed_component_template()
     ip = get_ip_by_rank(f"{mode}_registry.txt", rank)
     for token in spec["tokens"]:
         text = text.replace(token, ip)
