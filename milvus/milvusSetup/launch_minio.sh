@@ -119,7 +119,7 @@ elif [[ "$MINIO_MODE" == "single" ]]; then
     --env MINIO_ROOT_USER=minioadmin \
     --env MINIO_ROOT_PASSWORD=minioadmin \
     "${DAOS_ARGS[@]}" \
-    -B $TARGET_BASE/volumes/minio_volume${RANK}:/data$ \
+    -B $TARGET_BASE/volumes/minio_volume${RANK}:/data \
     minio.sif \
     minio server /data \
     --address ${MY_IP_ADDR}:9000 --console-address ${MY_IP_ADDR}:9001 > minio${RANK}.out 2>&1
