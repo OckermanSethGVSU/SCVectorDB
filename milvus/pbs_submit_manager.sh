@@ -21,8 +21,8 @@ MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the di
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
-TASK="IMPORT" # [INSERT, IMPORT, INDEX, QUERY, MIXED]
-RUN_MODE="PBS" # [PBS, local]
+TASK="QUERY" # [INSERT, IMPORT, INDEX, QUERY, MIXED]
+RUN_MODE="local" # [PBS, local]
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
@@ -37,8 +37,9 @@ MINIO_MEDIUM="memory" # [lustre] (can be memory if running single) - DAOS is bro
 
 # 
 ### Insertion Variables ###  88453763
-INSERT_CORPUS_SIZE=88453763 # total data to insert
+INSERT_CORPUS_SIZE=10000 # total data to insert
 INSERT_CLIENTS_PER_PROXY=32
+INSERT_METHOD="bulk" # [traditional, bulk] - method for uploading data into Milvus for index/query tasks
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 INSERT_STREAMING="True" # [True, False]
 # Aurora
@@ -56,19 +57,19 @@ INSERT_STREAMING="True" # [True, False]
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part1.npy"
-INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/mergedData/embeddings_merged.npy"
+INSERT_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 # best batch for 32 clients: 128
 INSERT_BATCH_SIZE=(512)
-IMPORT_PROCESSES=64 # If you are doing a bulk import
+IMPORT_PROCESSES=2 # If you are doing a bulk import
 
 
 # Index Variables
-VECTOR_DIM=2560
+VECTOR_DIM=200
 # VECTOR_DIM=2560
-DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
+DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 INIT_FLAT_INDEX="FALSE" # [TRUE, FALSE]
 SHARDS="16"
 DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
@@ -88,7 +89,7 @@ QUERY_BATCH_SIZE=(32)
     # * Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
-QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
+QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 # QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 # QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 
@@ -138,8 +139,6 @@ MIXED_QUERY_BATCH_MAX=""
 # RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/milvus/10MillDirs/pes2o"
 RESTORE_DIR=""
 EXPECTED_CORPUS_SIZE=10000000
-
-
 
 
 ### Distributed Variables ###
@@ -284,6 +283,7 @@ do
                 echo "WAL=${WAL}" >> $target_file
 
                 echo "INSERT_DATA_FILEPATH=${INSERT_DATA_FILEPATH}" >> $target_file
+                echo "INSERT_METHOD=${INSERT_METHOD}" >> $target_file
                 echo "INSERT_BALANCE_STRATEGY=${INSERT_BALANCE_STRATEGY}" >> $target_file
                 echo "INSERT_STREAMING=${INSERT_STREAMING}" >> $target_file
                 echo "INSERT_CORPUS_SIZE=${INSERT_CORPUS_SIZE}" >> $target_file

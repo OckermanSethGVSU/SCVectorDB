@@ -47,6 +47,7 @@ apply_overrides() {
     apply_override_value INSERT_CORPUS_SIZE INSERT_CORPUS_SIZE_OVERRIDE
     apply_override_value INSERT_CLIENTS_PER_PROXY INSERT_CLIENTS_PER_PROXY_OVERRIDE
     apply_override_value IMPORT_PROCESSES IMPORT_PROCESSES_OVERRIDE
+    apply_override_value INSERT_METHOD INSERT_METHOD_OVERRIDE
     apply_override_value INSERT_BALANCE_STRATEGY INSERT_BALANCE_STRATEGY_OVERRIDE
     apply_override_value INSERT_STREAMING INSERT_STREAMING_OVERRIDE
     apply_override_value INSERT_DATA_FILEPATH INSERT_DATA_FILEPATH_OVERRIDE
@@ -143,6 +144,7 @@ print_config_summary() {
             echo "Insert Data File:         $INSERT_DATA_FILEPATH"
             echo "Insert Batch Sizes:       ${INSERT_BATCH_SIZE[*]}"
             echo "Insert Clients/Proxy:     $INSERT_CLIENTS_PER_PROXY"
+            echo "Insert Method:            ${INSERT_METHOD:-traditional}"
             echo "Insert Balance:           $INSERT_BALANCE_STRATEGY"
             echo "Insert Streaming:         $INSERT_STREAMING"
             ;;
@@ -165,6 +167,7 @@ print_config_summary() {
             echo "Query Data File:          $QUERY_DATA_FILEPATH"
             echo "Query Batch Sizes:        ${QUERY_BATCH_SIZE[*]}"
             echo "Query Clients/Proxy:      $QUERY_CLIENTS_PER_PROXY"
+            echo "Preload Insert Method:    ${INSERT_METHOD:-traditional}"
             echo "Query Balance:            $QUERY_BALANCE_STRATEGY"
             echo "Query Streaming:          $QUERY_STREAMING"
             echo "Restore Dir:              ${RESTORE_DIR:-<unset>}"

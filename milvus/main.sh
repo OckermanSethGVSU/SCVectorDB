@@ -325,79 +325,118 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     env "${PYTHON_ENV_VARS[@]}" python3 poll.py
 fi
 
+normalize_insert_method() {
+    local method="${INSERT_METHOD:-traditional}"
+    method="${method,,}"
+    case "$method" in
+        traditional|standard|direct)
+            printf 'traditional\n'
+            ;;
+        bulk|bulk_upload|bulk-upload|import)
+            printf 'bulk\n'
+            ;;
+        *)
+            echo "Unsupported INSERT_METHOD='$INSERT_METHOD'. Valid options: traditional, bulk" >&2
+            exit 1
+            ;;
+    esac
+}
+
+run_direct_insert() {
+    export ACTIVE_TASK="INSERT"
+    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
+    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
+    export INSERT_CLIENTS_PER_PROXY=$INSERT_CLIENTS_PER_PROXY
+    export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
+    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
+    export INSERT_STREAMING=$INSERT_STREAMING
+
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+
+    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
+
+    mv times.csv insert_times.txt
+    mv summary.csv insert_summary.txt
+    mkdir -p uploadNPY
+    mv *.npy uploadNPY
+}
+
+run_bulk_insert() {
+    export ACTIVE_TASK="IMPORT"
+    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
+    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
+    export INSERT_STREAMING=$INSERT_STREAMING
+    export IMPORT_PROCESSES=${IMPORT_PROCESSES:-${INSERT_CLIENTS_PER_PROXY:-1}}
+    export COLLECTION_NAME=${COLLECTION_NAME:-standalone}
+    export VECTOR_FIELD=${VECTOR_FIELD:-vector}
+    export ID_FIELD=${ID_FIELD:-id}
+    bulk_request_args=()
+
+    if [[ -n "${BULK_IMPORT_LOAD_REQUEST:-}" ]]; then
+        bulk_request_args+=(--load-import-request "$BULK_IMPORT_LOAD_REQUEST")
+    else
+        export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
+        bulk_request_args+=(--input "$INSERT_DATA_FILEPATH")
+    fi
+
+    if [[ -n "${BULK_IMPORT_REQUEST_PATH:-}" ]]; then
+        bulk_request_args+=(--import-request-path "$BULK_IMPORT_REQUEST_PATH")
+    fi
+
+    if [[ "${BULK_IMPORT_PREPARE_ONLY:-}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
+        bulk_request_args+=(--prepare-only)
+    fi
+
+    if [[ "${MINIO_MODE}" == "off" ]]; then
+        echo "INSERT_METHOD=bulk requires remote MinIO storage; set MINIO_MODE to single or stripped." >&2
+        exit 1
+    fi
+
+    env "${PYTHON_ENV_VARS[@]}" python3 bulk_upload_import.py \
+        --writer-mode remote \
+        --processes "$IMPORT_PROCESSES" \
+        --corpus-size "$INSERT_CORPUS_SIZE" \
+        --collection "$COLLECTION_NAME" \
+        --vector-field "$VECTOR_FIELD" \
+        --id-field "$ID_FIELD" \
+        --vector-dim "$VECTOR_DIM" \
+        --batch-rows "$INSERT_BATCH_SIZE" \
+        "${bulk_request_args[@]}"
+}
+
+run_insert_for_task() {
+    local insert_method
+    insert_method="$(normalize_insert_method)"
+
+    if [[ "$insert_method" == "bulk" ]]; then
+        run_bulk_insert
+    else
+        run_direct_insert
+    fi
+}
+
 # if we are not restoring, run insert and/or indexing
 if [ -z "$RESTORE_DIR" ]; then
     env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
 
     if [[ "$TASK" == "IMPORT" ]]; then
-        export ACTIVE_TASK="IMPORT"
-        export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
-        export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
-        export INSERT_STREAMING=$INSERT_STREAMING
-        export IMPORT_PROCESSES=${IMPORT_PROCESSES:-${INSERT_CLIENTS_PER_PROXY:-1}}
-        export COLLECTION_NAME=${COLLECTION_NAME:-standalone}
-        export VECTOR_FIELD=${VECTOR_FIELD:-vector}
-        export ID_FIELD=${ID_FIELD:-id}
-        bulk_request_args=()
-
-        if [[ -n "${BULK_IMPORT_LOAD_REQUEST:-}" ]]; then
-            bulk_request_args+=(--load-import-request "$BULK_IMPORT_LOAD_REQUEST")
-        else
-            export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
-            bulk_request_args+=(--input "$INSERT_DATA_FILEPATH")
-        fi
-
-        if [[ -n "${BULK_IMPORT_REQUEST_PATH:-}" ]]; then
-            bulk_request_args+=(--import-request-path "$BULK_IMPORT_REQUEST_PATH")
-        fi
-
-        if [[ "${BULK_IMPORT_PREPARE_ONLY:-}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
-            bulk_request_args+=(--prepare-only)
-        fi
-
-        if [[ "${MINIO_MODE}" == "off" ]]; then
-            echo "TASK=IMPORT requires remote MinIO storage; set MINIO_MODE to single or stripped." >&2
-            exit 1
-        fi
-
-        env "${PYTHON_ENV_VARS[@]}" python3 bulk_upload_import.py \
-            --writer-mode remote \
-            --processes "$IMPORT_PROCESSES" \
-            --corpus-size "$INSERT_CORPUS_SIZE" \
-            --collection "$COLLECTION_NAME" \
-            --vector-field "$VECTOR_FIELD" \
-            --id-field "$ID_FIELD" \
-            --vector-dim "$VECTOR_DIM" \
-            --batch-rows "$INSERT_BATCH_SIZE" \
-            "${bulk_request_args[@]}"
+        run_bulk_insert
         
         touch flag.txt
     
     else
-        export ACTIVE_TASK="INSERT"
-        export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
-        export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
-        export INSERT_CLIENTS_PER_PROXY=$INSERT_CLIENTS_PER_PROXY
-        export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
-        export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
-        export INSERT_STREAMING=$INSERT_STREAMING
-
-
-        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
-
         if [[ "$TASK" == "INSERT" ]]; then
+            run_direct_insert
+        elif [[ "$TASK" == "IMPORT" ]]; then
+            run_bulk_insert
+        else
+            run_insert_for_task
+        fi
+        
+        if [[ "$TASK" == "INSERT" || "$TASK" == "IMPORT" ]]; then
             touch flag.txt
         fi
-
-        env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
-
-        mv times.csv insert_times.txt
-        mv summary.csv insert_summary.txt
-        mkdir -p uploadNPY
-        mv *.npy uploadNPY
     fi
-
-
 
     if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
         export ACTIVE_TASK="INDEX"

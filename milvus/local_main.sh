@@ -125,6 +125,13 @@ ensure_runtime_tools() {
 }
 
 write_local_configs() {
+    if [[ -d "$EMBED_ETCD_FILE" ]]; then
+        rm -rf "$EMBED_ETCD_FILE"
+    fi
+    if [[ -d "$USER_CONFIG_FILE" ]]; then
+        rm -rf "$USER_CONFIG_FILE"
+    fi
+
     cat > "$EMBED_ETCD_FILE" <<'EOF'
 listen-client-urls: http://0.0.0.0:2379
 advertise-client-urls: http://0.0.0.0:2379
@@ -180,6 +187,15 @@ container_running() {
     "$CONTAINER_RUNTIME" ps --format '{{.Names}}' | grep -Fxq "$name"
 }
 
+container_mount_source() {
+    local name="$1"
+    local destination="$2"
+
+    "$CONTAINER_RUNTIME" inspect "$name" \
+        --format "{{range .Mounts}}{{if eq .Destination \"$destination\"}}{{println .Source}}{{end}}{{end}}" |
+        head -n 1
+}
+
 remove_container_if_present() {
     local name="$1"
 
@@ -224,10 +240,18 @@ start_local_minio() {
 
     if container_exists "$MINIO_CONTAINER_NAME"; then
         local minio_port_bindings
+        local minio_mount_source
         minio_port_bindings="$("$CONTAINER_RUNTIME" inspect "$MINIO_CONTAINER_NAME" --format '{{json .HostConfig.PortBindings}}')"
+        minio_mount_source="$(container_mount_source "$MINIO_CONTAINER_NAME" "/data")"
 
         if [[ "$minio_port_bindings" != *"9000/tcp"* ]]; then
             echo "Recreating MinIO container '$MINIO_CONTAINER_NAME' to publish host ports."
+            remove_container_if_present "$MINIO_CONTAINER_NAME"
+        elif [[ "$minio_mount_source" != "$MINIO_VOLUMES_DIR" ]]; then
+            echo "Recreating MinIO container '$MINIO_CONTAINER_NAME' to refresh its data bind mount."
+            remove_container_if_present "$MINIO_CONTAINER_NAME"
+        elif [[ -d "$minio_mount_source" && ! -w "$minio_mount_source" ]]; then
+            echo "Recreating MinIO container '$MINIO_CONTAINER_NAME' because its data directory is not writable."
             remove_container_if_present "$MINIO_CONTAINER_NAME"
         fi
     fi
@@ -288,8 +312,12 @@ start_local_milvus() {
     if container_exists "$CONTAINER_NAME"; then
         local current_network
         local current_env
+        local embed_mount_source
+        local user_mount_source
         current_network="$("$CONTAINER_RUNTIME" inspect "$CONTAINER_NAME" --format '{{.HostConfig.NetworkMode}}')"
         current_env="$("$CONTAINER_RUNTIME" inspect "$CONTAINER_NAME" --format '{{join .Config.Env "\n"}}')"
+        embed_mount_source="$(container_mount_source "$CONTAINER_NAME" "/milvus/configs/embedEtcd.yaml")"
+        user_mount_source="$(container_mount_source "$CONTAINER_NAME" "/milvus/configs/user.yaml")"
 
         if [[ "$current_network" != "$MINIO_NETWORK_NAME" ]]; then
             echo "Recreating Milvus container '$CONTAINER_NAME' to attach it to network '$MINIO_NETWORK_NAME'."
@@ -299,6 +327,12 @@ start_local_milvus() {
             remove_container_if_present "$CONTAINER_NAME"
         elif [[ "$storage_type" == "local" && "$current_env" != *"COMMON_STORAGETYPE=local"* ]]; then
             echo "Recreating Milvus container '$CONTAINER_NAME' to restore local object storage."
+            remove_container_if_present "$CONTAINER_NAME"
+        elif [[ "$embed_mount_source" != "$EMBED_ETCD_FILE" || "$user_mount_source" != "$USER_CONFIG_FILE" ]]; then
+            echo "Recreating Milvus container '$CONTAINER_NAME' to refresh config bind mounts."
+            remove_container_if_present "$CONTAINER_NAME"
+        elif [[ -d "$embed_mount_source" || -d "$user_mount_source" ]]; then
+            echo "Recreating Milvus container '$CONTAINER_NAME' because a config bind source is a directory."
             remove_container_if_present "$CONTAINER_NAME"
         fi
     fi
@@ -342,6 +376,23 @@ start_local_milvus() {
 
 run_setup_collection() {
     env "${PYTHON_ENV_VARS[@]}" python3 ./setup_collection.py
+}
+
+normalize_insert_method() {
+    local method="${INSERT_METHOD:-traditional}"
+    method="${method,,}"
+    case "$method" in
+        traditional|standard|direct)
+            printf 'traditional\n'
+            ;;
+        bulk|bulk_upload|bulk-upload|import)
+            printf 'bulk\n'
+            ;;
+        *)
+            echo "Unsupported INSERT_METHOD='$INSERT_METHOD'. Valid options: traditional, bulk" >&2
+            exit 1
+            ;;
+    esac
 }
 
 run_insert() {
@@ -398,6 +449,17 @@ run_bulk_upload() {
         --vector-dim "$VECTOR_DIM" \
         --batch-rows "$INSERT_BATCH_SIZE" \
         "${bulk_request_args[@]}"
+}
+
+run_insert_for_task() {
+    local insert_method
+    insert_method="$(normalize_insert_method)"
+
+    if [[ "$insert_method" == "bulk" ]]; then
+        run_bulk_upload
+    else
+        run_insert
+    fi
 }
 
 run_index() {
@@ -530,16 +592,23 @@ main() {
 
         if [[ "$TASK" == "IMPORT" ]]; then
             run_bulk_upload
+            touch flag.txt
             return 0
         fi
 
-        run_insert
+        if [[ "$TASK" == "INSERT" ]]; then
+            run_insert
+        else
+            run_insert_for_task
+        fi
 
         if [[ "$TASK" == "INSERT" ]]; then
             touch flag.txt
         fi
 
-        summarize_insert
+        if [[ "$TASK" == "INSERT" ]] || [[ "$(normalize_insert_method)" == "traditional" ]]; then
+            summarize_insert
+        fi
 
         if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
             run_index
