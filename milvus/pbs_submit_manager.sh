@@ -40,6 +40,8 @@ MINIO_MEDIUM="memory" # [lustre] (can be memory if running single) - DAOS is bro
 INSERT_CORPUS_SIZE=10000 # total data to insert
 INSERT_CLIENTS_PER_PROXY=32
 INSERT_METHOD="bulk" # [traditional, bulk] - method for uploading data into Milvus for index/query tasks
+BULK_UPLOAD_TRANSPORT="mc" # [writer, mc] - transport implementation for bulk uploads
+BULK_UPLOAD_STAGING_MEDIUM="memory" # [memory, lustre, SSD] - temporary staging location before uploaded files are deleted
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 INSERT_STREAMING="True" # [True, False]
 # Aurora
@@ -284,6 +286,8 @@ do
 
                 echo "INSERT_DATA_FILEPATH=${INSERT_DATA_FILEPATH}" >> $target_file
                 echo "INSERT_METHOD=${INSERT_METHOD}" >> $target_file
+                echo "BULK_UPLOAD_TRANSPORT=${BULK_UPLOAD_TRANSPORT}" >> $target_file
+                echo "BULK_UPLOAD_STAGING_MEDIUM=${BULK_UPLOAD_STAGING_MEDIUM}" >> $target_file
                 echo "INSERT_BALANCE_STRATEGY=${INSERT_BALANCE_STRATEGY}" >> $target_file
                 echo "INSERT_STREAMING=${INSERT_STREAMING}" >> $target_file
                 echo "INSERT_CORPUS_SIZE=${INSERT_CORPUS_SIZE}" >> $target_file
@@ -388,6 +392,7 @@ do
                     cp ./goCode/multiClientOP/main.go $dir/multiClient.go
                     cp ./generalPython/multi_client_summary.py "$dir/"
                     cp ./generalPython/bulk_upload_import.py "$dir/"
+                    cp ./generalPython/bulk_upload_import_mc.py "$dir/"
                     if [[ "$TASK" == "MIXED" ]]; then
                         cp ./goCode/mixedRunner/mixedRunner "$dir/"
                         cp ./goCode/mixedRunner/main.go "$dir/mixed_main.go"
@@ -438,6 +443,7 @@ do
                     cp generalPython/poll.py $dir/
                     cp ./generalPython/multi_client_summary.py "$dir/"
                     cp ./generalPython/bulk_upload_import.py "$dir/"
+                    cp ./generalPython/bulk_upload_import_mc.py "$dir/"
                                     
                     # all tasks need go code
                     cp ./goCode/multiClientOP/multiClientOP $dir/

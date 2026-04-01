@@ -18,6 +18,12 @@ Main HPC entrypoint:
 - Insert/query balancing used by the Go clients:
   - `INSERT_BALANCE_STRATEGY`: `NONE`, `WORKER`
   - `QUERY_BALANCE_STRATEGY`: `NONE`, `WORKER`
+- Insert path selection for `TASK=INSERT` and the preload phase of `TASK=QUERY`:
+  - `INSERT_METHOD`: `traditional`, `bulk`
+- Bulk transport selection when `INSERT_METHOD=bulk` or `TASK=IMPORT`:
+  - `BULK_UPLOAD_TRANSPORT`: `writer`, `mc`
+- Staging-medium selection for the `mc` bulk path:
+  - `BULK_UPLOAD_STAGING_MEDIUM`: `memory`, `lustre`, `SSD`
 - Distributed controls:
   - `MINIO_MODE`: `single`, `stripped`
   - `MINIO_MEDIUM`: `DAOS`, `lustre`
@@ -48,7 +54,17 @@ Main HPC entrypoint:
    - distributed etcd/MinIO plus Milvus service roles across worker nodes.
 4. Wait for readiness and determine the reachable Milvus address.
 5. For insert/index paths, configure the collection with `generalPython/setup_collection.py`.
-6. Run the Go multi-client binary for insert or query workload generation.
+6. For `TASK=INSERT` and the preload insert step of `TASK=QUERY`, choose the write path with `INSERT_METHOD`:
+   - `traditional`: run the Go multi-client insert workload
+   - `bulk`: run `generalPython/bulk_upload_import.py`
+   - alternative pipelined helper: `generalPython/bulk_upload_import_mc.py` writes local bulk files and uploads them to MinIO with `mc cp` as each batch is committed, deleting staged files after successful upload by default
+   - when `INSERT_METHOD=bulk`, choose the bulk transport with `BULK_UPLOAD_TRANSPORT`:
+     - `writer`: current `RemoteBulkWriter` path
+     - `mc`: local writer plus pipelined `mc cp`
+   - when `BULK_UPLOAD_TRANSPORT=mc`, choose the temporary staging location with `BULK_UPLOAD_STAGING_MEDIUM`:
+     - `memory`: `/dev/shm/<run>/bulk-import-stage`
+     - `lustre`: `<run>/bulk-import-stage`
+     - `SSD`: `/local/scratch/<run>/bulk-import-stage`
 7. If `TASK=INDEX`, run `generalPython/index_data.py`.
 8. Write timing outputs, summaries, optional tracing data, and worker logs.
 
@@ -79,6 +95,9 @@ Main HPC entrypoint:
   - `INSERT_DATA_FILEPATH`
   - `INSERT_CORPUS_SIZE`
   - `INSERT_CLIENTS_PER_PROXY`
+  - `INSERT_METHOD`
+  - `BULK_UPLOAD_TRANSPORT`
+  - `BULK_UPLOAD_STAGING_MEDIUM`
   - `INSERT_BALANCE_STRATEGY`
   - `INSERT_BATCH_SIZE`
 - Query path:

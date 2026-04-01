@@ -91,6 +91,7 @@ export WAL=$WAL
 export DML_CHANNELS=$DML_CHANNELS
 export MINIO_MODE=$MINIO_MODE
 export MINIO_MEDIUM=$MINIO_MEDIUM
+export BULK_UPLOAD_STAGING_MEDIUM=$BULK_UPLOAD_STAGING_MEDIUM
 
 export NUM_PROXIES=$NUM_PROXIES
 export NUM_PROXIES_PER_CN=$NUM_PROXIES_PER_CN
@@ -342,6 +343,23 @@ normalize_insert_method() {
     esac
 }
 
+normalize_bulk_upload_transport() {
+    local transport="${BULK_UPLOAD_TRANSPORT:-writer}"
+    transport="${transport,,}"
+    case "$transport" in
+        writer|remote_writer|remote-writer)
+            printf 'writer\n'
+            ;;
+        mc|mc_cp|mc-cp|minio_mc|minio-mc)
+            printf 'mc\n'
+            ;;
+        *)
+            echo "Unsupported BULK_UPLOAD_TRANSPORT='$BULK_UPLOAD_TRANSPORT'. Valid options: writer, mc" >&2
+            exit 1
+            ;;
+    esac
+}
+
 run_direct_insert() {
     export ACTIVE_TASK="INSERT"
     export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
@@ -370,6 +388,9 @@ run_bulk_insert() {
     export COLLECTION_NAME=${COLLECTION_NAME:-standalone}
     export VECTOR_FIELD=${VECTOR_FIELD:-vector}
     export ID_FIELD=${ID_FIELD:-id}
+    local bulk_transport
+    local bulk_script
+    local bulk_transport_args=()
     bulk_request_args=()
 
     if [[ -n "${BULK_IMPORT_LOAD_REQUEST:-}" ]]; then
@@ -392,8 +413,15 @@ run_bulk_insert() {
         exit 1
     fi
 
-    env "${PYTHON_ENV_VARS[@]}" python3 bulk_upload_import.py \
-        --writer-mode remote \
+    bulk_transport="$(normalize_bulk_upload_transport)"
+    if [[ "$bulk_transport" == "mc" ]]; then
+        bulk_script="bulk_upload_import_mc.py"
+    else
+        bulk_script="bulk_upload_import.py"
+        bulk_transport_args+=(--writer-mode remote)
+    fi
+
+    env "${PYTHON_ENV_VARS[@]}" python3 "$bulk_script" \
         --processes "$IMPORT_PROCESSES" \
         --corpus-size "$INSERT_CORPUS_SIZE" \
         --collection "$COLLECTION_NAME" \
@@ -401,6 +429,7 @@ run_bulk_insert() {
         --id-field "$ID_FIELD" \
         --vector-dim "$VECTOR_DIM" \
         --batch-rows "$INSERT_BATCH_SIZE" \
+        "${bulk_transport_args[@]}" \
         "${bulk_request_args[@]}"
 }
 
