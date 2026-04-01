@@ -21,24 +21,24 @@ MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the di
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
-TASK="INDEX" # [INSERT, IMPORT, INDEX, QUERY, MIXED]
+TASK="IMPORT" # [INSERT, IMPORT, INDEX, QUERY, MIXED]
 RUN_MODE="PBS" # [PBS, local]
-MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
-STORAGE_MEDIUM="lustre" # [memory, DAOS, lustre, SSD]
+MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
+STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
 WAL="woodpecker" # [woodpecker, default]
 GPU_INDEX="False" # [True, False]
 TRACING="False" 
 DEBUG="False" # [True, False]
 BASE_DIR="$(pwd)"
-MINIO_MODE="stripped" # standalone: [off, single], distributed: [single, stripped]
-MINIO_MEDIUM="lustre" # [lustre] (can be memory if running single) - DAOS is broken
+MINIO_MODE="single" # standalone: [off, single], distributed: [single, stripped]
+MINIO_MEDIUM="memory" # [lustre] (can be memory if running single) - DAOS is broken
 
 
 # 
-### Insertion Variables ### 
-INSERT_CORPUS_SIZE=1000 # total data to insert
-INSERT_CLIENTS_PER_PROXY=1
+### Insertion Variables ###  88453763
+INSERT_CORPUS_SIZE=88453763 # total data to insert
+INSERT_CLIENTS_PER_PROXY=32
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
 INSERT_STREAMING="True" # [True, False]
 # Aurora
@@ -56,7 +56,7 @@ INSERT_STREAMING="True" # [True, False]
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part1.npy"
-INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex1B.npy"
+INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/mergedData/embeddings_merged.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
@@ -66,10 +66,13 @@ IMPORT_PROCESSES=64 # If you are doing a bulk import
 
 
 # Index Variables
-VECTOR_DIM=200
+VECTOR_DIM=2560
 # VECTOR_DIM=2560
-DISTANCE_METRIC="IP" # [IP, COSINE, L2]
+DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 INIT_FLAT_INDEX="FALSE" # [TRUE, FALSE]
+SHARDS="16"
+DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
+FLUSH_BEFORE_INDEX="FALSE" # [TRUE, FALSE]
 
 
 ### QUERY Variables ###
@@ -116,7 +119,7 @@ SEARCH_CONSISTENCY=""
 RPC_TIMEOUT=""
 
 # Bulk import handoff controls
-BULK_IMPORT_PREPARE_ONLY="True" #  [True, False] - generate bulk files + request JSON, but do not start bulk_import yet
+BULK_IMPORT_PREPARE_ONLY="False" #  [True, False] - generate bulk files + request JSON, but do not start bulk_import yet
 BULK_IMPORT_REQUEST_PATH=""  # path to write the reusable import-request JSON manifest
 BULK_IMPORT_LOAD_REQUEST="" # path to a previously written import-request JSON
 BULK_IMPORT_SUMMARY_PATH="" #  path to write the JSON summary for the prepare/import run
@@ -140,22 +143,21 @@ EXPECTED_CORPUS_SIZE=10000000
 
 
 ### Distributed Variables ###
-ETCD_MODE="replicated" # [single, replicated]
+ETCD_MODE="single" # [single, replicated]
 STREAMING_NODES=1
 STREAMING_NODES_PER_CN=1
 
-QUERY_NODES=1
-QUERY_NODES_PER_CN=1
+QUERY_NODES=32
+QUERY_NODES_PER_CN=4
 
-DATA_NODES=1
-DATA_NODES_PER_CN=1
+DATA_NODES=32
+DATA_NODES_PER_CN=4
 
 COORDINATOR_NODES=1
 COORDINATOR_NODES_PER_CN=1
 
 NUM_PROXIES=1
 NUM_PROXIES_PER_CN=1
-DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
 
 apply_overrides
 
@@ -331,6 +333,8 @@ do
                 echo "VECTOR_DIM=${VECTOR_DIM}" >> $target_file
                 echo "DISTANCE_METRIC=${DISTANCE_METRIC}" >> $target_file
                 echo "INIT_FLAT_INDEX=${INIT_FLAT_INDEX}" >> $target_file
+                echo "SHARDS=${SHARDS}" >> $target_file
+                echo "FLUSH_BEFORE_INDEX=${FLUSH_BEFORE_INDEX}" >> $target_file
                 echo "GPU_INDEX=${GPU_INDEX}" >> $target_file
                 
                 echo "TRACING=${TRACING}" >> $target_file

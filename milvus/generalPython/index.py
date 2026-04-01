@@ -110,6 +110,7 @@ client = MilvusClient(f"http://{MILVUS_HOST}:{MILVUS_GRPC_PORT}", token=MILVUS_T
 collection_name = "standalone"
 
 INIT_FLAT_INDEX = os.getenv("INIT_FLAT_INDEX", "TRUE").strip().lower() == "true"
+FLUSH_BEFORE_INDEX = os.getenv("FLUSH_BEFORE_INDEX", "TRUE").strip().lower() == "true"
 
 if INIT_FLAT_INDEX:
     print(
@@ -175,8 +176,11 @@ else:
         mmap_enabled=False,
     )
 
-client.flush(collection_name)
-print("Data flushed", flush=True)
+if FLUSH_BEFORE_INDEX:
+    client.flush(collection_name)
+    print("Data flushed before index build", flush=True)
+else:
+    print("Skipping flush before index build", flush=True)
 
 t1 = time.time()
 resp = create_index_with_fallback_poll(client, collection_name, index_params)

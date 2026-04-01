@@ -55,6 +55,8 @@ apply_overrides() {
     apply_override_value VECTOR_DIM VECTOR_DIM_OVERRIDE
     apply_override_value DISTANCE_METRIC DISTANCE_METRIC_OVERRIDE
     apply_override_value INIT_FLAT_INDEX INIT_FLAT_INDEX_OVERRIDE
+    apply_override_value SHARDS SHARDS_OVERRIDE
+    apply_override_value FLUSH_BEFORE_INDEX FLUSH_BEFORE_INDEX_OVERRIDE
 
     apply_override_value QUERY_CORPUS_SIZE QUERY_CORPUS_SIZE_OVERRIDE
     apply_override_value QUERY_CLIENTS_PER_PROXY QUERY_CLIENTS_PER_PROXY_OVERRIDE
@@ -131,6 +133,8 @@ print_config_summary() {
     echo "Vector Dim:               $VECTOR_DIM"
     echo "Distance Metric:          $DISTANCE_METRIC"
     echo "Init Flat Index:          $INIT_FLAT_INDEX"
+    echo "Shards:                   ${SHARDS:-<auto: streaming nodes>}"
+    echo "Flush Before Index:       ${FLUSH_BEFORE_INDEX:-TRUE}"
     echo "GPU Index:                $GPU_INDEX"
 
     case "$TASK" in

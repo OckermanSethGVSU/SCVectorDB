@@ -68,12 +68,18 @@ match distance_metric:
 init_flat_index = os.getenv("INIT_FLAT_INDEX", "TRUE").strip().lower() == "true"
 
 
-streaming_value = get_streaming_count()
+shards_env = os.getenv("SHARDS", "").strip()
+if shards_env:
+    shard_count = int(shards_env)
+    if shard_count <= 0:
+        raise ValueError(f"SHARDS must be a positive integer, got {shards_env!r}")
+else:
+    shard_count = get_streaming_count()
 
 create_collection_kwargs = {
     "collection_name": collection_name,
     "schema": schema,
-    "num_shards": streaming_value,
+    "num_shards": shard_count,
     "properties": {"mmap.enabled": False},
 }
 
@@ -93,7 +99,6 @@ else:
 
 client.create_collection(**create_collection_kwargs)
 
-print(f"Collection shards: {streaming_value}. Indexes for {collection_name}: ", client.list_indexes(collection_name), flush=True)
+print(f"Collection shards: {shard_count}. Indexes for {collection_name}: ", client.list_indexes(collection_name), flush=True)
 if init_flat_index:
     print(client.describe_index(collection_name, "vector"), flush=True)
-
