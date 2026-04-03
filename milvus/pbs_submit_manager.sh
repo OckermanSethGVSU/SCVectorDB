@@ -5,45 +5,46 @@ source "$SCRIPT_DIR/utils/utils.sh"
 
 ### Allocation Variables ###
 NODES=(1)
-CORES=(112)
+CORES=(32)
 
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
+queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
 
 ### Platform/DIR Specific Variables ###
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
 # Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
 ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
-MILVUS_BUILD_DIR="cpuMilvus" # Name of the directory with your build: traceMilvus, cpuMilvus
+MILVUS_BUILD_DIR="traceMilvus" # Name of the directory with your build: traceMilvus, cpuMilvus
 MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the dir containing the yaml file
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 TASK="QUERY" # [INSERT, IMPORT, INDEX, QUERY, MIXED]
-RUN_MODE="local" # [PBS, local]
+RUN_MODE="PBS" # [PBS, local]
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
 WAL="woodpecker" # [woodpecker, default]
 GPU_INDEX="False" # [True, False]
-TRACING="False" 
+TRACING="True" 
 DEBUG="False" # [True, False]
 BASE_DIR="$(pwd)"
-MINIO_MODE="single" # standalone: [off, single], distributed: [single, stripped]
-MINIO_MEDIUM="memory" # [lustre] (can be memory if running single) - DAOS is broken
+MINIO_MODE="off" # standalone: [off, single], distributed: [single, stripped]
+MINIO_MEDIUM="lustre" # [lustre] (can be memory if running single) - DAOS is broken
 
 
 # 
 ### Insertion Variables ###  88453763
-INSERT_CORPUS_SIZE=10000 # total data to insert
-INSERT_CLIENTS_PER_PROXY=32
-INSERT_METHOD="bulk" # [traditional, bulk] - method for uploading data into Milvus for index/query tasks
+INSERT_CORPUS_SIZE=10000000 # total data to insert
+INSERT_CLIENTS_PER_PROXY=16
+INSERT_METHOD="traditional" # [traditional, bulk] - method for uploading data into Milvus for index/query tasks
 BULK_UPLOAD_TRANSPORT="mc" # [writer, mc] - transport implementation for bulk uploads
 BULK_UPLOAD_STAGING_MEDIUM="memory" # [memory, lustre, SSD] - temporary staging location before uploaded files are deleted
+IMPORT_PROCESSES=204 # If you are doing a bulk import
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
-INSERT_STREAMING="True" # [True, False]
+INSERT_STREAMING="False" # [True, False]
 # Aurora
     # 10 million 
     #    HPC-Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
@@ -59,23 +60,22 @@ INSERT_STREAMING="True" # [True, False]
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part1.npy"
-INSERT_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 # best batch for 32 clients: 128
 INSERT_BATCH_SIZE=(512)
-IMPORT_PROCESSES=2 # If you are doing a bulk import
 
 
 # Index Variables
-VECTOR_DIM=200
-# VECTOR_DIM=2560
-DISTANCE_METRIC="IP" # [IP, COSINE, L2]
+# VECTOR_DIM=200
+VECTOR_DIM=2560
+DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 INIT_FLAT_INDEX="FALSE" # [TRUE, FALSE]
 SHARDS="16"
 DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
-FLUSH_BEFORE_INDEX="FALSE" # [TRUE, FALSE]
+FLUSH_BEFORE_INDEX="TRUE" # [TRUE, FALSE]
 
 
 ### QUERY Variables ###
@@ -91,7 +91,7 @@ QUERY_BATCH_SIZE=(32)
     # * Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
-QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
 # QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 # QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 
@@ -122,7 +122,7 @@ SEARCH_CONSISTENCY=""
 RPC_TIMEOUT=""
 
 # Bulk import handoff controls
-BULK_IMPORT_PREPARE_ONLY="False" #  [True, False] - generate bulk files + request JSON, but do not start bulk_import yet
+BULK_IMPORT_PREPARE_ONLY="TRUE" #  [True, False] - generate bulk files + request JSON, but do not start bulk_import yet
 BULK_IMPORT_REQUEST_PATH=""  # path to write the reusable import-request JSON manifest
 BULK_IMPORT_LOAD_REQUEST="" # path to a previously written import-request JSON
 BULK_IMPORT_SUMMARY_PATH="" #  path to write the JSON summary for the prepare/import run
@@ -148,11 +148,11 @@ ETCD_MODE="single" # [single, replicated]
 STREAMING_NODES=1
 STREAMING_NODES_PER_CN=1
 
-QUERY_NODES=32
-QUERY_NODES_PER_CN=4
+QUERY_NODES=1
+QUERY_NODES_PER_CN=1
 
-DATA_NODES=32
-DATA_NODES_PER_CN=4
+DATA_NODES=1
+DATA_NODES_PER_CN=1
 
 COORDINATOR_NODES=1
 COORDINATOR_NODES_PER_CN=1
@@ -473,7 +473,7 @@ do
 
                 if [[ "${RUN_MODE^^}" != "LOCAL" ]]; then
                     cd $dir
-                    # qsub $target_file
+                    qsub $target_file
                     sleep 1
                     cd .. 
                 else

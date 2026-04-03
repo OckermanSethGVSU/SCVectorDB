@@ -117,6 +117,102 @@ apply_overrides() {
     apply_override_value DML_CHANNELS DML_CHANNELS_OVERRIDE
 }
 
+lower_string() {
+    printf '%s' "${1,,}"
+}
+
+validate_programmatic_submit_config() {
+    local num_nodes="$1"
+    local num_cores="$2"
+    local upload_bs="$3"
+    local query_bs="$4"
+
+    local mode_lower task_lower minio_mode_lower etcd_mode_lower insert_method_lower tracing_lower
+    mode_lower="$(lower_string "$MODE")"
+    task_lower="$(lower_string "$TASK")"
+    minio_mode_lower="$(lower_string "$MINIO_MODE")"
+    etcd_mode_lower="$(lower_string "$ETCD_MODE")"
+    insert_method_lower="$(lower_string "${INSERT_METHOD:-traditional}")"
+    tracing_lower="$(lower_string "${TRACING:-false}")"
+
+    local errors=()
+    local available_worker_nodes="$num_nodes"
+
+    if (( num_nodes <= 0 )); then
+        errors+=("NODES must be > 0; got '$num_nodes'.")
+    fi
+
+    if (( num_cores <= 0 )); then
+        errors+=("CORES must be > 0; got '$num_cores'.")
+    fi
+
+    if [[ "$mode_lower" == "distributed" ]]; then
+        if [[ "$minio_mode_lower" != "single" && "$minio_mode_lower" != "stripped" ]]; then
+            errors+=("DISTRIBUTED mode requires MINIO_MODE to be 'single' or 'stripped'; got '$MINIO_MODE'.")
+        fi
+
+        if [[ "$etcd_mode_lower" != "single" && "$etcd_mode_lower" != "replicated" ]]; then
+            errors+=("DISTRIBUTED mode requires ETCD_MODE to be 'single' or 'replicated'; got '$ETCD_MODE'.")
+        fi
+
+        if (( COORDINATOR_NODES <= 0 || COORDINATOR_NODES_PER_CN <= 0 )); then
+            errors+=("COORDINATOR_NODES and COORDINATOR_NODES_PER_CN must be > 0.")
+        elif (( (COORDINATOR_NODES + COORDINATOR_NODES_PER_CN - 1) / COORDINATOR_NODES_PER_CN > available_worker_nodes )); then
+            errors+=("Coordinator layout needs more than $available_worker_nodes worker nodes.")
+        fi
+
+        if (( STREAMING_NODES <= 0 || STREAMING_NODES_PER_CN <= 0 )); then
+            errors+=("STREAMING_NODES and STREAMING_NODES_PER_CN must be > 0.")
+        elif (( (STREAMING_NODES + STREAMING_NODES_PER_CN - 1) / STREAMING_NODES_PER_CN > available_worker_nodes )); then
+            errors+=("Streaming layout needs more than $available_worker_nodes worker nodes.")
+        fi
+
+        if (( QUERY_NODES <= 0 || QUERY_NODES_PER_CN <= 0 )); then
+            errors+=("QUERY_NODES and QUERY_NODES_PER_CN must be > 0.")
+        elif (( (QUERY_NODES + QUERY_NODES_PER_CN - 1) / QUERY_NODES_PER_CN > available_worker_nodes )); then
+            errors+=("Query layout needs more than $available_worker_nodes worker nodes.")
+        fi
+
+        if (( DATA_NODES <= 0 || DATA_NODES_PER_CN <= 0 )); then
+            errors+=("DATA_NODES and DATA_NODES_PER_CN must be > 0.")
+        elif (( (DATA_NODES + DATA_NODES_PER_CN - 1) / DATA_NODES_PER_CN > available_worker_nodes )); then
+            errors+=("Data layout needs more than $available_worker_nodes worker nodes.")
+        fi
+
+        if (( NUM_PROXIES <= 0 || NUM_PROXIES_PER_CN <= 0 )); then
+            errors+=("NUM_PROXIES and NUM_PROXIES_PER_CN must be > 0.")
+        elif (( (NUM_PROXIES + NUM_PROXIES_PER_CN - 1) / NUM_PROXIES_PER_CN > available_worker_nodes )); then
+            errors+=("Proxy layout needs more than $available_worker_nodes worker nodes.")
+        fi
+    elif [[ "$mode_lower" == "standalone" ]]; then
+        if [[ "$minio_mode_lower" != "off" && "$minio_mode_lower" != "single" ]]; then
+            errors+=("STANDALONE mode requires MINIO_MODE to be 'off' or 'single'; got '$MINIO_MODE'.")
+        fi
+    else
+        errors+=("MODE must be 'DISTRIBUTED' or 'STANDALONE'; got '$MODE'.")
+    fi
+
+    if [[ "$task_lower" == "import" || "$insert_method_lower" == "bulk" ]]; then
+        if [[ "$minio_mode_lower" == "off" ]]; then
+            errors+=("Bulk import workflows require remote MinIO; MINIO_MODE cannot be 'off'.")
+        fi
+    fi
+
+    if [[ "$tracing_lower" != "true" && "$tracing_lower" != "false" ]]; then
+        errors+=("TRACING must be 'True' or 'False'; got '$TRACING'.")
+    fi
+
+    if (( ${#errors[@]} > 0 )); then
+        echo "Programmatic config validation failed before submit:" >&2
+        echo "  MODE=$MODE TASK=$TASK NODES=$num_nodes CORES=$num_cores INSERT_BATCH_SIZE=$upload_bs QUERY_BATCH_SIZE=$query_bs MINIO_MODE=$MINIO_MODE ETCD_MODE=$ETCD_MODE" >&2
+        local err
+        for err in "${errors[@]}"; do
+            echo "  - $err" >&2
+        done
+        return 1
+    fi
+}
+
 print_config_summary() {
     echo
     echo "                Experiment Configuration"
