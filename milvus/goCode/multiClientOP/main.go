@@ -566,6 +566,7 @@ func clientWorker(
 
 	tracing := os.Getenv("TRACING")
 	tracingEnabled := strings.ToLower(tracing) == "true"
+	spanStarted := false
 	var dialOpts []grpc.DialOption
 	var span trace.Span
 	if tracingEnabled {
@@ -668,6 +669,7 @@ func clientWorker(
 	if tracingEnabled && (ACTIVE_TASK == TASK) {
 		tracer := otel.Tracer("milvus-client")
 		ctx, span = tracer.Start(ctx, fmt.Sprintf("MilvusClient-rank-%d", globalClientRank))
+		spanStarted = true
 		span.SetAttributes(attribute.Int("client.rank", globalClientRank))
 
 		if globalClientRank == 0 {
@@ -842,7 +844,7 @@ func clientWorker(
 		sharedTiming.WaitSearchable()
 		searchableAtClient := time.Now()
 
-		if strings.ToLower(tracing) == "true" && sweepIdx == len(sweeps)-1 {
+		if spanStarted && sweepIdx == len(sweeps)-1 {
 			span.End()
 		}
 
