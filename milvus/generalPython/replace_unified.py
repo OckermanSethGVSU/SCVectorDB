@@ -97,6 +97,22 @@ def get_minio_mode() -> str:
     return os.environ.get("MINIO_MODE", "off").strip().lower()
 
 
+def validate_minio_mode(mode: str) -> None:
+    if mode == "standalone":
+        allowed = {"off", "single"}
+    elif mode == "distributed":
+        allowed = {"single", "stripped"}
+    else:
+        raise ValueError(f"Unknown mode '{mode}'")
+
+    minio_mode = get_minio_mode()
+    if minio_mode not in allowed:
+        allowed_list = "', '".join(sorted(allowed))
+        raise ValueError(
+            f"Unsupported MINIO_MODE='{minio_mode}' for {mode}. Expected one of '{allowed_list}'."
+        )
+
+
 def load_unified_template() -> str:
     return Path("configs/unified_milvus.yaml").read_text()
 
@@ -157,6 +173,7 @@ def finalize_text(text: str, replacements: Dict[str, str]) -> str:
 
 def build_standalone_config(wal: str) -> str:
     worker_ip = Path("worker.ip").read_text().strip()
+    validate_minio_mode("standalone")
     standalone_minio_mode = get_minio_mode()
     minio_ip = worker_ip
 
@@ -193,6 +210,7 @@ def build_standalone_config(wal: str) -> str:
 
 
 def build_distributed_base_config(wal: str) -> str:
+    validate_minio_mode("distributed")
     text = load_unified_template()
 
     minio_ip = get_ip_by_rank("minio_registry.txt", 0)
