@@ -513,6 +513,13 @@ if [[ "$TASK" == "QUERY" ]]; then
     mkdir -p queryNPY
     mv *.npy queryNPY
 
+    if [[ "$TRACING" == "True" ]]; then
+        touch flag.txt
+        while [[ ! -f traces.jsonl ]]; do
+            sleep 1
+        done
+    fi
+
 fi 
 
 if [[ "$TASK" == "MIXED" ]]; then
@@ -605,7 +612,8 @@ if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_CONT="vectorDBTesting"
     rm -fr /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
 elif [[ "$STORAGE_MEDIUM" == "lustre" || "$MODE" == "DISTRIBUTED" ]]; then
-    rm -fr ./milvusDir/
+    echo "Removed the rm for now"
+    # rm -fr ./milvusDir/
 fi
 
 chmod -R g+rwX "$BASE_DIR/$myDIR"
