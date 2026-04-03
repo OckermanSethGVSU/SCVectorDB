@@ -48,6 +48,12 @@ python3 net_mapping.py --rank ${RANK} --name minio
 mkdir -p minioFiles/
 sleep 3
 
+PRESERVE_MINIO_STATE=0
+if [[ -n "${BULK_IMPORT_LOAD_REQUEST:-}" ]]; then
+    PRESERVE_MINIO_STATE=1
+    (( RANK == 0 )) && echo "BULK_IMPORT_LOAD_REQUEST is set; preserving existing MinIO state"
+fi
+
 
 if [[ "$MINIO_MODE" == "stripped" ]]; then
 
@@ -87,7 +93,7 @@ if [[ "$MINIO_MODE" == "stripped" ]]; then
 
 
 
-    if [[ -z "$RESTORE_DIR" ]]; then
+    if [[ -z "$RESTORE_DIR" && "$PRESERVE_MINIO_STATE" -ne 1 ]]; then
         rm -fr $TARGET_BASE/volumes/minio_volume${RANK}
     fi
     mkdir -p $TARGET_BASE/volumes/minio_volume${RANK}
@@ -108,7 +114,7 @@ elif [[ "$MINIO_MODE" == "single" ]]; then
     OUTPUT_FILE="minio_registry.txt"
     echo "${RANK},${MY_IP_ADDR},9000" >> $OUTPUT_FILE
 
-    if [[ -z "$RESTORE_DIR" ]]; then
+    if [[ -z "$RESTORE_DIR" && "$PRESERVE_MINIO_STATE" -ne 1 ]]; then
         rm -fr $TARGET_BASE/volumes/minio_volume${RANK}
     fi
     mkdir -p $TARGET_BASE/volumes/minio_volume${RANK}
