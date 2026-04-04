@@ -17,15 +17,17 @@ QUERY_BATCH_SIZE=(32)
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue="debug-scaling" # [preemptable, debug, debug-scaling, prod, capacity]
+queue="debug" # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
 TASK="QUERY" # [INSERT, INDEX, QUERY, MIXED]
 RUN_MODE="PBS" # [PBS, local]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
-PERF="NONE" # [NONE, STAT, TRACE]
-PERF_EVENTS="" # comma-separated perf stat event list override; only used when PERF=STAT
+PERF="STAT" # [NONE, STAT, TRACE]
+# topdown-be-bound,topdown-mem-bound,topdown-retiring,topdown-fe-bound,topdown-bad-spec
+# cycles,instructions,cache-references,cache-misses,LLC-load-misses
+PERF_EVENTS="cycles,instructions,cache-references,cache-misses,LLC-load-misses" # comma-separated perf stat event list override; only used when PERF=STAT
 VECTOR_DIM=2560
 DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 GPU_INDEX=False
@@ -97,9 +99,9 @@ QUERY_BATCH_MAX=""
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 
-QDRANT_EXECUTABLE="qdrant" # [qdrant, qdrantInsertTracing]
+QDRANT_EXECUTABLE="qdrantQueryTrace" # [qdrant, qdrantInsertTracing,qdrantQueryTrace]
 INSERT_TRACE=""
-QUERY_TRACE=""
+QUERY_TRACE="True"
 # RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/yandex/"
 RESTORE_DIR=""
 # RESTORE_DIR=""

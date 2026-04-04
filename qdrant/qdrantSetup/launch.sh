@@ -81,26 +81,32 @@ USEPERF=$4
 # echo "${IP_ADDR},${P2P_PORT},${RANK},${USEPERF}"
 
 if [[ $RANK -eq 0 ]]; then
-  env "${QDRANT_LAUNCH_ENV[@]}" \
-  ./qdrant --uri "http://${IP_ADDR}:${P2P_PORT}" --config-path /qdrant/config/config.yaml & 
-  QDRANT_PID=$!
-  HTTP_PORT=$((P2P_PORT - 2))
+  while true; do
+    env "${QDRANT_LAUNCH_ENV[@]}" \
+    ./qdrant --uri "http://${IP_ADDR}:${P2P_PORT}" --config-path /qdrant/config/config.yaml &
+    QDRANT_PID=$!
+    HTTP_PORT=$((P2P_PORT - 2))
 
-  healthy=false
-  for i in {1..30}; do
-      if NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" healthcheck "$IP_ADDR" "$HTTP_PORT"; then
-          echo "Rank ${RANK} qdrant ${IP_ADDR}:{P2P_PORT} is healthy"
-          healthy=true
-          touch /perf/qdrant_running${RANK}.txt
-          break
-      fi
-      sleep 1
+    healthy=false
+    for i in {1..30}; do
+        if NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" healthcheck "$IP_ADDR" "$HTTP_PORT"; then
+            echo "Rank ${RANK} qdrant ${IP_ADDR}:{P2P_PORT} is healthy"
+            healthy=true
+            touch /perf/qdrant_running${RANK}.txt
+            break
+        fi
+        sleep 1
+    done
+
+    if [[ "$healthy" == true ]]; then
+        break
+    fi
+
+    echo "Rank ${RANK} qdrant ${IP_ADDR}:{P2P_PORT} failed to become healthy, restarting..."
+    kill "$QDRANT_PID" 2>/dev/null || true
+    wait "$QDRANT_PID" 2>/dev/null || true
+    sleep 5
   done
-
-  if [[ "$healthy" != true ]]; then
-      echo "Rank ${RANK} qdrant ${IP_ADDR}:{P2P_PORT} failed to become healthy" >&2
-      exit 1
-  fi
 else
   # wait until the first rank is online
   TARGET="/perf/qdrant_running0.txt"
@@ -156,7 +162,9 @@ if [[ "$PERF" == "TRACE" ]]; then
 
 elif [[ "$PERF" == "STAT" ]]; then
     echo "Rank ${RANK} Launching perf stat"
-    /perf/perf stat  -e cycles,instructions,branches,branch-misses,cache-misses -o /perf/perf${RANK}.data  -p "$QDRANT_PID" &
+    DEFAULT_PERF_STAT_EVENTS="cycles,instructions,branches,branch-misses,cache-misses"
+    PERF_STAT_EVENTS="${PERF_EVENTS:-$DEFAULT_PERF_STAT_EVENTS}"
+    /perf/perf stat  -e "$PERF_STAT_EVENTS" -o /perf/perf${RANK}.data  -p "$QDRANT_PID" &
     PERF_PID=$!
 fi
 
