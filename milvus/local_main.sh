@@ -564,9 +564,14 @@ launch_local_distributed_role() {
     local count="$2"
     local command="$3"
     local rank name config_file data_dir metrics_port storage_type
+    local -a shared_storage_args=()
 
     if [[ "${MINIO_MODE,,}" == "off" ]]; then
         storage_type="local"
+        mkdir -p "$LOCAL_SHARED_STORAGE_PATH"
+        shared_storage_args=(
+            -v "${LOCAL_SHARED_STORAGE_PATH}:${LOCAL_SHARED_STORAGE_PATH}"
+        )
     else
         storage_type="remote"
     fi
@@ -592,8 +597,10 @@ launch_local_distributed_role() {
             -e DEPLOY_MODE=DISTRIBUTED \
             -e COMMON_STORAGETYPE="$storage_type" \
             -e METRICS_PORT="$metrics_port" \
+            -e LOCAL_SHARED_STORAGE_PATH="$LOCAL_SHARED_STORAGE_PATH" \
             -v "${data_dir}:/var/lib/milvus" \
             -v "${config_file}:/milvus/configs/milvus.yaml:ro" \
+            "${shared_storage_args[@]}" \
             "$IMAGE" milvus run "$command" >/dev/null
     done
 }
