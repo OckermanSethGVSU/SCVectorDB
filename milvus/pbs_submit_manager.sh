@@ -5,7 +5,7 @@ source "$SCRIPT_DIR/utils/utils.sh"
 
 ### Allocation Variables ###
 NODES=(1)
-CORES=(112 32)
+CORES=(112)
 
 
 # PBS Vars
@@ -22,8 +22,8 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 TASK="QUERY" # [INSERT, IMPORT, INDEX, QUERY, MIXED]
-RUN_MODE="PBS" # [PBS, local]
-MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
+RUN_MODE="local" # [PBS, local]
+MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
 # PERF_EVENTS="cycles,instructions,cache-references,cache-misses,LLC-load-misses" # comma-separated perf stat event list override when PERF=STAT
@@ -33,14 +33,15 @@ GPU_INDEX="False" # [True, False]
 TRACING="False" 
 DEBUG="False" # [True, False]
 BASE_DIR="$(pwd)"
-MINIO_MODE="off" # standalone: [off, single], distributed: [single, stripped]
+MINIO_MODE="off" # standalone: [off, single], distributed: [off, single, stripped]
 MINIO_MEDIUM="lustre" # [lustre] (can be memory if running single) - DAOS is broken
+LOCAL_SHARED_STORAGE_PATH="" # absolute shared path override for distributed MINIO_MODE=off; blank => auto
 
 
 # 
 ### Insertion Variables ###  88453763
-INSERT_CORPUS_SIZE=10000000 # total data to insert
-INSERT_CLIENTS_PER_PROXY=16
+INSERT_CORPUS_SIZE=1000 # total data to insert
+INSERT_CLIENTS_PER_PROXY=2
 INSERT_METHOD="traditional" # [traditional, bulk] - method for uploading data into Milvus for index/query tasks
 BULK_UPLOAD_TRANSPORT="mc" # [writer, mc] - transport implementation for bulk uploads
 BULK_UPLOAD_STAGING_MEDIUM="memory" # [memory, lustre, SSD] - temporary staging location before uploaded files are deleted
@@ -60,14 +61,14 @@ INSERT_STREAMING="False" # [True, False]
     #     Yandex: /eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
-INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
+INSERT_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part1.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 # best batch for 32 clients: 128
-INSERT_BATCH_SIZE=(512)
+INSERT_BATCH_SIZE=(32)
 
 
 # Index Variables
@@ -75,14 +76,14 @@ INSERT_BATCH_SIZE=(512)
 VECTOR_DIM=200
 DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 INIT_FLAT_INDEX="FALSE" # [TRUE, FALSE]
-SHARDS="1"
+SHARDS="8"
 DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
-FLUSH_BEFORE_INDEX="TRUE" # [TRUE, FALSE]
+FLUSH_BEFORE_INDEX="False" # [TRUE, FALSE]
 
 
 ### QUERY Variables ###
 # QUERY_CORPUS_SIZE=22723  # queries
-QUERY_CORPUS_SIZE=100000  # queries
+QUERY_CORPUS_SIZE=100  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
 QUERY_STREAMING="False" # [True, False]
@@ -94,7 +95,7 @@ QUERY_BATCH_SIZE=(32)
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
 # QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
-QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
+QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 # QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 
 
@@ -108,7 +109,7 @@ QUERY_OPS_PER_SEC=""
 MIXED_QUERY_BATCH_SIZE=32
 
 MIXED_RESULT_PATH="mixed_logs"
-MIXED_CORPUS_SIZE=1000000
+MIXED_CORPUS_SIZE=1000
 MIXED_QUERY_CLIENTS_PER_PROXY=1
 MIXED_INSERT_CLIENTS_PER_PROXY=1
 # MIXED_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part2.npy"
@@ -147,8 +148,8 @@ EXPECTED_CORPUS_SIZE=10000000
 
 ### Distributed Variables ###
 ETCD_MODE="single" # [single, replicated]
-STREAMING_NODES=1
-STREAMING_NODES_PER_CN=1
+STREAMING_NODES=2
+STREAMING_NODES_PER_CN=2
 
 QUERY_NODES=1
 QUERY_NODES_PER_CN=1
@@ -355,6 +356,7 @@ do
 
                 echo "MINIO_MODE=${MINIO_MODE}" >> $target_file
                 echo "MINIO_MEDIUM=${MINIO_MEDIUM}" >> $target_file
+                echo "LOCAL_SHARED_STORAGE_PATH=${LOCAL_SHARED_STORAGE_PATH}" >> $target_file
 
                 if [[ "$MODE" == "DISTRIBUTED" ]]; then
                     echo "ETCD_MODE=${ETCD_MODE}" >> $target_file
@@ -396,6 +398,9 @@ do
                     cp ./generalPython/multi_client_summary.py "$dir/"
                     cp ./generalPython/bulk_upload_import.py "$dir/"
                     cp ./generalPython/bulk_upload_import_mc.py "$dir/"
+                    cp ./generalPython/replace_unified.py "$dir/"
+                    mkdir -p "$dir/configs"
+                    cp ./cpuMilvus/configs/unified_milvus.yaml "$dir/configs/"
                     if [[ "$TASK" == "MIXED" ]]; then
                         cp ./goCode/mixedRunner/mixedRunner "$dir/"
                         cp ./goCode/mixedRunner/main.go "$dir/mixed_main.go"

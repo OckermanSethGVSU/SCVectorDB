@@ -62,6 +62,26 @@ wait_for_signal_files() {
     done
 }
 
+compute_local_shared_storage_path() {
+    if [[ -n "${LOCAL_SHARED_STORAGE_PATH:-}" ]]; then
+        printf '%s\n' "$LOCAL_SHARED_STORAGE_PATH"
+        return 0
+    fi
+
+    case "$STORAGE_MEDIUM" in
+        lustre)
+            printf '%s/%s/localfs-shared\n' "$BASE_DIR" "$myDIR"
+            ;;
+        DAOS)
+            printf '/tmp/radix-io/vectorDBTesting/%s/localfs-shared\n' "$myDIR"
+            ;;
+        *)
+            echo "DISTRIBUTED MINIO_MODE=off requires a shared STORAGE_MEDIUM; unsupported STORAGE_MEDIUM='$STORAGE_MEDIUM'." >&2
+            exit 1
+            ;;
+    esac
+}
+
 PYTHON_ENV_VARS=(
     NO_PROXY=""
     no_proxy=""
@@ -118,6 +138,7 @@ export MILVUS_CONFIG_DIR=$MILVUS_CONFIG_DIR
 
 export DEBUG=$DEBUG
 export RESTORE_DIR=$RESTORE_DIR
+export LOCAL_SHARED_STORAGE_PATH=${LOCAL_SHARED_STORAGE_PATH:-}
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -216,6 +237,13 @@ if [[ "$MODE" == "STANDALONE" ]]; then
 
 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     export ETCD_MODE=$ETCD_MODE
+    if [[ "$MINIO_MODE" == "off" ]]; then
+        export LOCAL_SHARED_STORAGE_PATH
+        LOCAL_SHARED_STORAGE_PATH="$(compute_local_shared_storage_path)"
+        export LOCAL_SHARED_STORAGE_PATH
+        mkdir -p "$LOCAL_SHARED_STORAGE_PATH"
+        echo "Distributed localfs mode enabled; shared storage path: $LOCAL_SHARED_STORAGE_PATH"
+    fi
     
 
     mapfile -t NODES < <(awk '!seen[$0]++' "$PBS_NODEFILE")
@@ -272,6 +300,9 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     elif [[ "$MINIO_MODE" == "single" ]]; then
         # Launch 1 Minio instance
         mpirun -n 1 --ppn 1 --no-vni --cpu-bind none --host "${NODES[1]}"  ./launch_minio.sh $MINIO_MEDIUM &
+    elif [[ "$MINIO_MODE" != "off" ]]; then
+        echo "Unsupported MINIO_MODE='$MINIO_MODE' for distributed. Expected 'off', 'single', or 'stripped'." >&2
+        exit 1
     fi
 
     

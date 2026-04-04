@@ -72,6 +72,9 @@ if [[ -z "$RESTORE_DIR" ]]; then
     rm -fr $TARGET_BASE/${TYPE}${RANK}/
 fi
 mkdir -p $TARGET_BASE/${TYPE}${RANK}/
+if [[ "${MINIO_MODE:-}" == "off" && -n "${LOCAL_SHARED_STORAGE_PATH:-}" ]]; then
+    mkdir -p "${LOCAL_SHARED_STORAGE_PATH}"
+fi
 
 python3 replace_unified.py --mode ${TYPE} --rank $RANK
 cp -r ./configs/ $TARGET_BASE/${TYPE}${RANK}/
@@ -109,6 +112,18 @@ if [ -n "$MILVUS_BUILD_DIR" ]; then
     )
 fi 
 
+SHARED_STORAGE_ARGS=()
+if [[ "${MINIO_MODE:-}" == "off" && -n "${LOCAL_SHARED_STORAGE_PATH:-}" ]]; then
+    SHARED_STORAGE_ARGS+=(
+        -B "${LOCAL_SHARED_STORAGE_PATH}:${LOCAL_SHARED_STORAGE_PATH}"
+        --env COMMON_STORAGETYPE=local
+    )
+else
+    SHARED_STORAGE_ARGS+=(
+        --env COMMON_STORAGETYPE=remote
+    )
+fi
+
 
 apptainer exec --fakeroot \
   --writable-tmpfs \
@@ -118,6 +133,7 @@ apptainer exec --fakeroot \
   --env METRICS_PORT=$METRICS_PORT \
   --env MILVUS_HEALTH_HOST=$MY_IP_ADDR \
   --env MILVUS_HEALTH_PORT=$METRICS_PORT \
+  --env LOCAL_SHARED_STORAGE_PATH="${LOCAL_SHARED_STORAGE_PATH:-}" \
   --env PERF=$PERF \
   --env PERF_EVENTS=$PERF_EVENTS \
   -B ./execute.sh:/milvus/app_execute.sh \
@@ -125,6 +141,7 @@ apptainer exec --fakeroot \
   -B $TARGET_BASE/${TYPE}${RANK}/:/var/lib/milvus \
   -B $TARGET_BASE/${TYPE}${RANK}/configs/:/milvus/configs/ \
    "${BUILD_ARGS[@]}" \
+   "${SHARED_STORAGE_ARGS[@]}" \
    "${POLARIS_BINDS[@]}" \
   "${GPU_ARGS[@]}" \
   milvus.sif bash app_execute.sh $RANK > ${TYPE}/${TYPE}${RANK}.out 2>&1

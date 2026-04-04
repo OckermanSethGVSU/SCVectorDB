@@ -23,12 +23,28 @@ export MODE="${MODE:-STANDALONE}"
 export TASK="${TASK:-INSERT}"
 export WAL="${WAL:-woodpecker}"
 export DML_CHANNELS="${DML_CHANNELS:-16}"
-export MINIO_MODE="${MINIO_MODE:-off}"
 export MINIO_MEDIUM="${MINIO_MEDIUM:-lustre}"
 export BULK_UPLOAD_STAGING_MEDIUM="${BULK_UPLOAD_STAGING_MEDIUM:-${STORAGE_MEDIUM:-lustre}}"
+export ETCD_MODE="${ETCD_MODE:-single}"
+
+if [[ -n "${MINIO_MODE:-}" ]]; then
+    export MINIO_MODE
+elif [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
+    export MINIO_MODE="single"
+else
+    export MINIO_MODE="off"
+fi
 
 export NUM_PROXIES="${NUM_PROXIES:-1}"
 export NUM_PROXIES_PER_CN="${NUM_PROXIES_PER_CN:-1}"
+export COORDINATOR_NODES="${COORDINATOR_NODES:-1}"
+export COORDINATOR_NODES_PER_CN="${COORDINATOR_NODES_PER_CN:-1}"
+export STREAMING_NODES="${STREAMING_NODES:-1}"
+export STREAMING_NODES_PER_CN="${STREAMING_NODES_PER_CN:-1}"
+export QUERY_NODES="${QUERY_NODES:-1}"
+export QUERY_NODES_PER_CN="${QUERY_NODES_PER_CN:-1}"
+export DATA_NODES="${DATA_NODES:-1}"
+export DATA_NODES_PER_CN="${DATA_NODES_PER_CN:-1}"
 
 export GPU_INDEX="${GPU_INDEX:-False}"
 export VECTOR_DIM="${VECTOR_DIM:-2560}"
@@ -44,12 +60,22 @@ export RESTORE_DIR="${RESTORE_DIR:-}"
 export EXPECTED_CORPUS_SIZE="${EXPECTED_CORPUS_SIZE:-0}"
 
 export MILVUS_HOST="${MILVUS_HOST:-127.0.0.1}"
-export MILVUS_GRPC_PORT="${MILVUS_GRPC_PORT:-19530}"
-export MILVUS_HEALTH_PORT="${MILVUS_HEALTH_PORT:-9091}"
 export MILVUS_TOKEN="${MILVUS_TOKEN:-root:Milvus}"
+
+if [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
+    DEFAULT_MILVUS_GRPC_PORT="20001"
+    DEFAULT_MILVUS_HEALTH_PORT="30001"
+else
+    DEFAULT_MILVUS_GRPC_PORT="19530"
+    DEFAULT_MILVUS_HEALTH_PORT="9091"
+fi
+
+export MILVUS_GRPC_PORT="${MILVUS_GRPC_PORT:-$DEFAULT_MILVUS_GRPC_PORT}"
+export MILVUS_HEALTH_PORT="${MILVUS_HEALTH_PORT:-$DEFAULT_MILVUS_HEALTH_PORT}"
 
 CONTAINER_NAME="${MILVUS_LOCAL_NAME:-milvus-standalone}"
 IMAGE="${MILVUS_LOCAL_IMAGE:-milvusdb/milvus:v2.6.12}"
+ETCD_IMAGE="${MILVUS_ETCD_IMAGE:-quay.io/coreos/etcd:v3.5.18}"
 ETCD_PORT="${MILVUS_ETCD_PORT:-2379}"
 VOLUMES_DIR="${MILVUS_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/milvus}"
 MINIO_CONTAINER_NAME="${MINIO_LOCAL_NAME:-milvus-minio}"
@@ -63,12 +89,15 @@ MINIO_ACCESS_KEY_ID="${MINIO_ACCESS_KEY_ID:-minioadmin}"
 MINIO_SECRET_ACCESS_KEY="${MINIO_SECRET_ACCESS_KEY:-minioadmin}"
 MINIO_NETWORK_NAME="${MINIO_NETWORK_NAME:-milvus-local-net}"
 MINIO_VOLUMES_DIR="${MINIO_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/minio}"
+LOCAL_CLUSTER_PREFIX="${MILVUS_LOCAL_CLUSTER_PREFIX:-milvus-local}"
+CONFIG_DIR="${RUN_DIR}/configs"
+LOCAL_SHARED_STORAGE_PATH="${LOCAL_SHARED_STORAGE_PATH:-$RUN_DIR/volumes/localfs/shared}"
 EMBED_ETCD_FILE="$RUN_DIR/embedEtcd.yaml"
 USER_CONFIG_FILE="$RUN_DIR/user.yaml"
 STANDARD_BINARY_PATH="${STANDARD_BINARY_PATH:-}"
 MIXED_BINARY_PATH="${MIXED_BINARY_PATH:-}"
 
-mkdir -p "$RUN_DIR" "$RUN_DIR/workerOut" "$VOLUMES_DIR" "$MINIO_VOLUMES_DIR"
+mkdir -p "$RUN_DIR" "$RUN_DIR/workerOut" "$VOLUMES_DIR" "$MINIO_VOLUMES_DIR" "$CONFIG_DIR" "$LOCAL_SHARED_STORAGE_PATH"
 
 pick_binary() {
     local override="$1"
@@ -223,6 +252,377 @@ wait_for_minio() {
     echo "MinIO did not become healthy within 120 seconds." >&2
     echo "Inspect logs with: ${CONTAINER_RUNTIME} logs ${MINIO_CONTAINER_NAME}" >&2
     exit 1
+}
+
+wait_for_http_ok() {
+    local url="$1"
+    local label="$2"
+    local attempts="${3:-180}"
+
+    echo "Waiting for ${label} at ${url}..."
+    for ((attempt=1; attempt<=attempts; attempt++)); do
+        if env "${PYTHON_ENV_VARS[@]}" curl -fsS "$url" >/dev/null 2>&1; then
+            echo "${label} is ready."
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "${label} did not become ready in time: ${url}" >&2
+    exit 1
+}
+
+distributed_etcd_instances() {
+    if [[ "${ETCD_MODE,,}" == "replicated" ]]; then
+        printf '3\n'
+    elif [[ "${ETCD_MODE,,}" == "single" ]]; then
+        printf '1\n'
+    else
+        echo "Local distributed mode requires ETCD_MODE='single' or 'replicated' (got '${ETCD_MODE}')." >&2
+        exit 1
+    fi
+}
+
+distributed_minio_instances() {
+    if [[ "${MINIO_MODE,,}" == "off" ]]; then
+        printf '0\n'
+    elif [[ "${MINIO_MODE,,}" == "stripped" ]]; then
+        printf '4\n'
+    elif [[ "${MINIO_MODE,,}" == "single" ]]; then
+        printf '1\n'
+    else
+        echo "Local distributed mode requires MINIO_MODE='off', 'single', or 'stripped' (got '${MINIO_MODE}')." >&2
+        exit 1
+    fi
+}
+
+role_service_base_port() {
+    case "$1" in
+        COORDINATOR) printf '20000\n' ;;
+        PROXY) printf '20001\n' ;;
+        QUERY) printf '20004\n' ;;
+        DATA) printf '20006\n' ;;
+        STREAMING) printf '20007\n' ;;
+        *)
+            echo "Unknown distributed role '$1'." >&2
+            exit 1
+            ;;
+    esac
+}
+
+role_metrics_base_port() {
+    case "$1" in
+        COORDINATOR) printf '30000\n' ;;
+        PROXY) printf '30001\n' ;;
+        QUERY) printf '30004\n' ;;
+        DATA) printf '30006\n' ;;
+        STREAMING) printf '30007\n' ;;
+        *)
+            echo "Unknown distributed role '$1'." >&2
+            exit 1
+            ;;
+    esac
+}
+
+role_service_port() {
+    local role="$1"
+    local rank="$2"
+    printf '%s\n' $(( $(role_service_base_port "$role") + (8 * rank) ))
+}
+
+role_metrics_port() {
+    local role="$1"
+    local rank="$2"
+    printf '%s\n' $(( $(role_metrics_base_port "$role") + (8 * rank) ))
+}
+
+component_container_name() {
+    local kind="$1"
+    local rank="$2"
+    printf '%s-%s-%s\n' "$LOCAL_CLUSTER_PREFIX" "${kind,,}" "$rank"
+}
+
+prepare_distributed_support_files() {
+    local replace_source=""
+    local config_source=""
+
+    if [[ -f "$RUN_DIR/replace_unified.py" ]]; then
+        replace_source="$RUN_DIR/replace_unified.py"
+    elif [[ -f "$ROOT_DIR/generalPython/replace_unified.py" ]]; then
+        replace_source="$ROOT_DIR/generalPython/replace_unified.py"
+    fi
+
+    if [[ -z "$replace_source" ]]; then
+        echo "Distributed local mode requires replace_unified.py in the run directory or repo checkout." >&2
+        exit 1
+    fi
+
+    if [[ "$replace_source" != "$RUN_DIR/replace_unified.py" ]]; then
+        cp "$replace_source" "$RUN_DIR/replace_unified.py"
+    fi
+
+    if [[ -f "$CONFIG_DIR/unified_milvus.yaml" ]]; then
+        return 0
+    fi
+
+    if [[ -f "$ROOT_DIR/cpuMilvus/configs/unified_milvus.yaml" ]]; then
+        config_source="$ROOT_DIR/cpuMilvus/configs/unified_milvus.yaml"
+    elif [[ -f "$RUN_DIR/unified_milvus.yaml" ]]; then
+        config_source="$RUN_DIR/unified_milvus.yaml"
+    fi
+
+    if [[ -z "$config_source" ]]; then
+        echo "Distributed local mode requires configs/unified_milvus.yaml in the run directory or repo checkout." >&2
+        exit 1
+    fi
+
+    cp "$config_source" "$CONFIG_DIR/unified_milvus.yaml"
+}
+
+write_distributed_registry_files() {
+    local etcd_instances
+    local minio_instances
+    local role role_count rank service_port metrics_port
+
+    etcd_instances="$(distributed_etcd_instances)"
+    minio_instances="$(distributed_minio_instances)"
+
+    printf '%s\n' "$MILVUS_HOST" > "$RUN_DIR/worker.ip"
+    : > "$RUN_DIR/etcd_registry.txt"
+    : > "$RUN_DIR/minio_registry.txt"
+    : > "$RUN_DIR/COORDINATOR_registry.txt"
+    : > "$RUN_DIR/STREAMING_registry.txt"
+    : > "$RUN_DIR/QUERY_registry.txt"
+    : > "$RUN_DIR/DATA_registry.txt"
+    : > "$RUN_DIR/PROXY_registry.txt"
+
+    for ((rank=0; rank<etcd_instances; rank++)); do
+        printf '%s,%s,%s,%s\n' \
+            "$rank" \
+            "$MILVUS_HOST" \
+            "$((2379 + (100 * rank)))" \
+            "$((2380 + (100 * rank)))" >> "$RUN_DIR/etcd_registry.txt"
+    done
+
+    for ((rank=0; rank<minio_instances; rank++)); do
+        printf '%s,%s,%s\n' \
+            "$rank" \
+            "$MILVUS_HOST" \
+            "$((9000 + (100 * rank)))" >> "$RUN_DIR/minio_registry.txt"
+    done
+
+    for role in COORDINATOR STREAMING QUERY DATA PROXY; do
+        case "$role" in
+            COORDINATOR) role_count="$COORDINATOR_NODES" ;;
+            STREAMING) role_count="$STREAMING_NODES" ;;
+            QUERY) role_count="$QUERY_NODES" ;;
+            DATA) role_count="$DATA_NODES" ;;
+            PROXY) role_count="$NUM_PROXIES" ;;
+        esac
+
+        for ((rank=0; rank<role_count; rank++)); do
+            service_port="$(role_service_port "$role" "$rank")"
+            metrics_port="$(role_metrics_port "$role" "$rank")"
+            printf '%s,%s,%s,%s\n' \
+                "$rank" "$MILVUS_HOST" "$service_port" "$metrics_port" >> "$RUN_DIR/${role}_registry.txt"
+        done
+    done
+}
+
+generate_distributed_configs() {
+    local role role_count rank
+
+    prepare_distributed_support_files
+    write_distributed_registry_files
+
+    (
+        cd "$RUN_DIR"
+        env LOCAL_SHARED_STORAGE_PATH="$LOCAL_SHARED_STORAGE_PATH" "${PYTHON_ENV_VARS[@]}" python3 ./replace_unified.py --mode distributed
+        for role in COORDINATOR STREAMING QUERY DATA PROXY; do
+            case "$role" in
+                COORDINATOR) role_count="$COORDINATOR_NODES" ;;
+                STREAMING) role_count="$STREAMING_NODES" ;;
+                QUERY) role_count="$QUERY_NODES" ;;
+                DATA) role_count="$DATA_NODES" ;;
+                PROXY) role_count="$NUM_PROXIES" ;;
+            esac
+
+            for ((rank=0; rank<role_count; rank++)); do
+                env LOCAL_SHARED_STORAGE_PATH="$LOCAL_SHARED_STORAGE_PATH" "${PYTHON_ENV_VARS[@]}" python3 ./replace_unified.py --mode "$role" --rank "$rank"
+            done
+        done
+    )
+}
+
+launch_local_distributed_etcd() {
+    local etcd_instances
+    local rank client_port peer_port initial_cluster state data_dir name
+    local cluster_parts=()
+
+    etcd_instances="$(distributed_etcd_instances)"
+    for ((rank=0; rank<etcd_instances; rank++)); do
+        cluster_parts+=("etcd-${rank}=http://${MILVUS_HOST}:$((2380 + (100 * rank)))")
+    done
+    initial_cluster="$(IFS=,; printf '%s' "${cluster_parts[*]}")"
+    state="new"
+    if [[ -n "$RESTORE_DIR" ]]; then
+        state="existing"
+    fi
+
+    for ((rank=0; rank<etcd_instances; rank++)); do
+        name="$(component_container_name "etcd" "$rank")"
+        client_port="$((2379 + (100 * rank)))"
+        peer_port="$((2380 + (100 * rank)))"
+        data_dir="$RUN_DIR/volumes/etcd/${rank}"
+        mkdir -p "$data_dir"
+        remove_container_if_present "$name"
+        "$CONTAINER_RUNTIME" run -d \
+            --name "$name" \
+            --network host \
+            -e ETCD_AUTO_COMPACTION_MODE=revision \
+            -e ETCD_AUTO_COMPACTION_RETENTION=1000 \
+            -e ETCD_QUOTA_BACKEND_BYTES=4294967296 \
+            -v "${data_dir}:/etcd" \
+            "$ETCD_IMAGE" \
+            etcd \
+            --name "etcd-${rank}" \
+            --advertise-client-urls "http://${MILVUS_HOST}:${client_port}" \
+            --listen-client-urls "http://0.0.0.0:${client_port}" \
+            --initial-advertise-peer-urls "http://${MILVUS_HOST}:${peer_port}" \
+            --listen-peer-urls "http://0.0.0.0:${peer_port}" \
+            --initial-cluster "$initial_cluster" \
+            --initial-cluster-state "$state" \
+            --data-dir /etcd >/dev/null
+    done
+
+    for ((rank=0; rank<etcd_instances; rank++)); do
+        wait_for_http_ok "http://${MILVUS_HOST}:$((2379 + (100 * rank)))/health" "etcd-${rank}" 120
+    done
+}
+
+launch_local_distributed_minio() {
+    local minio_instances
+    local rank name api_port console_port data_dir
+    local endpoints=()
+
+    minio_instances="$(distributed_minio_instances)"
+    if (( minio_instances == 0 )); then
+        return 0
+    fi
+
+    if (( minio_instances == 1 )); then
+        name="$(component_container_name "minio" "0")"
+        api_port="9000"
+        console_port="9001"
+        data_dir="$RUN_DIR/volumes/minio/0"
+        mkdir -p "$data_dir"
+        remove_container_if_present "$name"
+        "$CONTAINER_RUNTIME" run -d \
+            --name "$name" \
+            --network host \
+            -e MINIO_ROOT_USER="$MINIO_ACCESS_KEY_ID" \
+            -e MINIO_ROOT_PASSWORD="$MINIO_SECRET_ACCESS_KEY" \
+            -v "${data_dir}:/data0" \
+            "$MINIO_IMAGE" \
+            minio server /data0 \
+            --address "${MILVUS_HOST}:${api_port}" \
+            --console-address "${MILVUS_HOST}:${console_port}" >/dev/null
+        wait_for_http_ok "http://${MILVUS_HOST}:${api_port}/minio/health/live" "minio-0" 180
+        return 0
+    fi
+
+    for ((rank=0; rank<minio_instances; rank++)); do
+        endpoints+=("http://${MILVUS_HOST}:$((9000 + (100 * rank)))/data${rank}")
+    done
+
+    for ((rank=0; rank<minio_instances; rank++)); do
+        name="$(component_container_name "minio" "$rank")"
+        api_port="$((9000 + (100 * rank)))"
+        console_port="$((9001 + (100 * rank)))"
+        data_dir="$RUN_DIR/volumes/minio/${rank}"
+        mkdir -p "$data_dir"
+        remove_container_if_present "$name"
+        "$CONTAINER_RUNTIME" run -d \
+            --name "$name" \
+            --network host \
+            -e MINIO_ROOT_USER="$MINIO_ACCESS_KEY_ID" \
+            -e MINIO_ROOT_PASSWORD="$MINIO_SECRET_ACCESS_KEY" \
+            -v "${data_dir}:/data${rank}" \
+            "$MINIO_IMAGE" \
+            minio server "${endpoints[@]}" \
+            --address "${MILVUS_HOST}:${api_port}" \
+            --console-address "${MILVUS_HOST}:${console_port}" >/dev/null
+    done
+
+    for ((rank=0; rank<minio_instances; rank++)); do
+        wait_for_http_ok "http://${MILVUS_HOST}:$((9000 + (100 * rank)))/minio/health/live" "minio-${rank}" 180
+    done
+}
+
+launch_local_distributed_role() {
+    local role="$1"
+    local count="$2"
+    local command="$3"
+    local rank name config_file data_dir metrics_port storage_type
+
+    if [[ "${MINIO_MODE,,}" == "off" ]]; then
+        storage_type="local"
+    else
+        storage_type="remote"
+    fi
+
+    for ((rank=0; rank<count; rank++)); do
+        name="$(component_container_name "$role" "$rank")"
+        config_file="$RUN_DIR/configs/${role}${rank}.yaml"
+        data_dir="$RUN_DIR/volumes/${role,,}/${rank}"
+        metrics_port="$(role_metrics_port "$role" "$rank")"
+        mkdir -p "$data_dir"
+
+        if [[ ! -f "$config_file" ]]; then
+            echo "Missing generated config for ${role}${rank}: ${config_file}" >&2
+            exit 1
+        fi
+
+        remove_container_if_present "$name"
+        "$CONTAINER_RUNTIME" run -d \
+            --name "$name" \
+            --security-opt seccomp:unconfined \
+            --network host \
+            -e MILVUSCONF=/milvus/configs/ \
+            -e DEPLOY_MODE=DISTRIBUTED \
+            -e COMMON_STORAGETYPE="$storage_type" \
+            -e METRICS_PORT="$metrics_port" \
+            -v "${data_dir}:/var/lib/milvus" \
+            -v "${config_file}:/milvus/configs/milvus.yaml:ro" \
+            "$IMAGE" milvus run "$command" >/dev/null
+    done
+}
+
+wait_for_distributed_role_health() {
+    local role="$1"
+    local count="$2"
+    local rank metrics_port
+
+    for ((rank=0; rank<count; rank++)); do
+        metrics_port="$(role_metrics_port "$role" "$rank")"
+        wait_for_http_ok "http://${MILVUS_HOST}:${metrics_port}/healthz" "${role,,}-${rank}" 300
+    done
+}
+
+start_local_distributed_cluster() {
+    generate_distributed_configs
+    launch_local_distributed_etcd
+    launch_local_distributed_minio
+    launch_local_distributed_role "COORDINATOR" "$COORDINATOR_NODES" "mixcoord"
+    launch_local_distributed_role "STREAMING" "$STREAMING_NODES" "streamingnode"
+    launch_local_distributed_role "QUERY" "$QUERY_NODES" "querynode"
+    launch_local_distributed_role "DATA" "$DATA_NODES" "datanode"
+    launch_local_distributed_role "PROXY" "$NUM_PROXIES" "proxy"
+    wait_for_distributed_role_health "COORDINATOR" "$COORDINATOR_NODES"
+    wait_for_distributed_role_health "STREAMING" "$STREAMING_NODES"
+    wait_for_distributed_role_health "QUERY" "$QUERY_NODES"
+    wait_for_distributed_role_health "DATA" "$DATA_NODES"
+    wait_for_distributed_role_health "PROXY" "$NUM_PROXIES"
 }
 
 start_local_minio() {
@@ -614,8 +1014,19 @@ run_restore_status() {
 main() {
     cd "$RUN_DIR"
     ensure_runtime_tools
-    start_local_minio
-    start_local_milvus
+    case "${MODE^^}" in
+        STANDALONE)
+            start_local_minio
+            start_local_milvus
+            ;;
+        DISTRIBUTED)
+            start_local_distributed_cluster
+            ;;
+        *)
+            echo "Unsupported MODE '$MODE' for local_main.sh" >&2
+            exit 1
+            ;;
+    esac
 
     if [[ -z "$RESTORE_DIR" ]]; then
         run_setup_collection

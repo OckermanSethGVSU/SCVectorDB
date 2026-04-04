@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import time
 from pathlib import Path
 from typing import Dict
@@ -101,7 +102,7 @@ def validate_minio_mode(mode: str) -> None:
     if mode == "standalone":
         allowed = {"off", "single"}
     elif mode == "distributed":
-        allowed = {"single", "stripped"}
+        allowed = {"off", "single", "stripped"}
     else:
         raise ValueError(f"Unknown mode '{mode}'")
 
@@ -122,6 +123,11 @@ def load_distributed_component_template() -> str:
     if distributed_path.exists():
         return distributed_path.read_text()
     return load_unified_template()
+
+
+def get_local_shared_storage_path() -> str:
+    value = os.environ.get("LOCAL_SHARED_STORAGE_PATH", "/tmp/milvus-localfs").strip()
+    return value or "/tmp/milvus-localfs"
 
 
 def apply_common_tuning(text: str) -> str:
@@ -212,8 +218,11 @@ def build_standalone_config(wal: str) -> str:
 def build_distributed_base_config(wal: str) -> str:
     validate_minio_mode("distributed")
     text = load_unified_template()
+    minio_mode = get_minio_mode()
 
-    minio_ip = get_ip_by_rank("minio_registry.txt", 0)
+    minio_ip = "127.0.0.1"
+    if minio_mode != "off":
+        minio_ip = get_ip_by_rank("minio_registry.txt", 0)
     text = text.replace("<MINIO>", minio_ip)
     text = text.replace("<WAL>", wal)
 
@@ -233,6 +242,16 @@ def build_distributed_base_config(wal: str) -> str:
 
     text = text.replace("<DML>", get_dml_channels())
     text = text.replace("<TLS_SNI>", "localhost")
+
+    if minio_mode == "off":
+        local_root = get_local_shared_storage_path()
+        woodpecker_root = f"{local_root}/woodpecker"
+        text = text.replace("storageType: remote", "storageType: local")
+        text = text.replace("enablePosixMode: false", "enablePosixMode: true")
+        text = re.sub(r"(?m)^  path: /var/lib/milvus/data/$", f"  path: {local_root}", text)
+        text = re.sub(r"(?m)^    rootPath: default$", f"    rootPath: {woodpecker_root}", text)
+        text = re.sub(r"(?m)^  rootPath: files$", f"  rootPath: {local_root}", text)
+
     text = apply_tracing_config(text)
     text = apply_debug_config(text)
     text = apply_common_tuning(text)

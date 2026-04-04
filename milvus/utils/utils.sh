@@ -42,6 +42,7 @@ apply_overrides() {
     apply_override_value GPU_INDEX GPU_INDEX_OVERRIDE
     apply_override_value TRACING TRACING_OVERRIDE
     apply_override_value DEBUG DEBUG_OVERRIDE
+    apply_override_value LOCAL_SHARED_STORAGE_PATH LOCAL_SHARED_STORAGE_PATH_OVERRIDE
     apply_override_value BASE_DIR BASE_DIR_OVERRIDE
     apply_override_value PERF_EVENTS PERF_EVENTS_OVERRIDE
 
@@ -148,8 +149,12 @@ validate_programmatic_submit_config() {
     fi
 
     if [[ "$mode_lower" == "distributed" ]]; then
-        if [[ "$minio_mode_lower" != "single" && "$minio_mode_lower" != "stripped" ]]; then
-            errors+=("DISTRIBUTED mode requires MINIO_MODE to be 'single' or 'stripped'; got '$MINIO_MODE'.")
+        if [[ "$minio_mode_lower" != "off" && "$minio_mode_lower" != "single" && "$minio_mode_lower" != "stripped" ]]; then
+            errors+=("DISTRIBUTED mode requires MINIO_MODE to be 'off', 'single', or 'stripped'; got '$MINIO_MODE'.")
+        fi
+
+        if [[ "$minio_mode_lower" == "off" && "$STORAGE_MEDIUM" != "lustre" && "$STORAGE_MEDIUM" != "DAOS" ]]; then
+            errors+=("DISTRIBUTED mode with MINIO_MODE='off' requires shared STORAGE_MEDIUM ('lustre' or 'DAOS'); got '$STORAGE_MEDIUM'.")
         fi
 
         if [[ "$etcd_mode_lower" != "single" && "$etcd_mode_lower" != "replicated" ]]; then
@@ -323,6 +328,7 @@ print_config_summary() {
     if [[ "$MODE" == "DISTRIBUTED" ]]; then
         echo "MinIO Mode:               $MINIO_MODE"
         echo "MinIO Medium:             $MINIO_MEDIUM"
+        echo "Shared LocalFS Path:      ${LOCAL_SHARED_STORAGE_PATH:-<auto>}"
         echo "ETCD Mode:                $ETCD_MODE"
         echo "Coordinator Nodes:        $COORDINATOR_NODES"
         echo "Coordinator/Compute Node: $COORDINATOR_NODES_PER_CN"
