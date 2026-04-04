@@ -5,18 +5,18 @@ source "$SCRIPT_DIR/utils/utils.sh"
 
 ### Allocation Variables ###
 NODES=(1)
-CORES=(32)
+CORES=(112 32)
 
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=debug # [preemptable, debug, debug-scaling, prod,capacity]
+queue=capacity # [preemptable, debug, debug-scaling, prod,capacity]
 
 ### Platform/DIR Specific Variables ###
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
 # Polaris: /eagle/projects/radix-io/sockerman/vectorEval/milvus/multiNode/env/
 ENV_PATH=/lus/flare/projects/radix-io/sockerman/milvusEnv/
-MILVUS_BUILD_DIR="traceMilvus" # Name of the directory with your build: traceMilvus, cpuMilvus
+MILVUS_BUILD_DIR="cpuMilvus" # Name of the directory with your build: traceMilvus, cpuMilvus
 MILVUS_CONFIG_DIR="cpuMilvus" # If you have a specfic config, the path to the dir containing the yaml file
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
@@ -26,9 +26,11 @@ RUN_MODE="PBS" # [PBS, local]
 MODE="STANDALONE" # [DISTRIBUTED, STANDALONE]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
+# PERF_EVENTS="cycles,instructions,cache-references,cache-misses,LLC-load-misses" # comma-separated perf stat event list override when PERF=STAT
+PERF_EVENTS="topdown-be-bound,topdown-mem-bound,topdown-retiring,topdown-fe-bound,topdown-bad-spec" # comma-separated perf stat event list override when PERF=STAT
 WAL="woodpecker" # [woodpecker, default]
 GPU_INDEX="False" # [True, False]
-TRACING="True" 
+TRACING="False" 
 DEBUG="False" # [True, False]
 BASE_DIR="$(pwd)"
 MINIO_MODE="off" # standalone: [off, single], distributed: [single, stripped]
@@ -58,9 +60,9 @@ INSERT_STREAMING="False" # [True, False]
     #     Yandex: /eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
-# INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
+INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part1.npy"
-INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
+# INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
@@ -70,17 +72,17 @@ INSERT_BATCH_SIZE=(512)
 
 # Index Variables
 # VECTOR_DIM=200
-VECTOR_DIM=2560
-DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
+VECTOR_DIM=200
+DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 INIT_FLAT_INDEX="FALSE" # [TRUE, FALSE]
-SHARDS="16"
+SHARDS="1"
 DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
 FLUSH_BEFORE_INDEX="TRUE" # [TRUE, FALSE]
 
 
 ### QUERY Variables ###
 # QUERY_CORPUS_SIZE=22723  # queries
-QUERY_CORPUS_SIZE=22723  # queries
+QUERY_CORPUS_SIZE=100000  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
 QUERY_STREAMING="False" # [True, False]
@@ -91,8 +93,8 @@ QUERY_BATCH_SIZE=(32)
     # * Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
-QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
-# QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+# QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
+QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
 # QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 
 
@@ -343,6 +345,7 @@ do
                 
                 echo "TRACING=${TRACING}" >> $target_file
                 echo "PERF=${PERF}" >> $target_file
+                echo "PERF_EVENTS=${PERF_EVENTS}" >> $target_file
                 echo "DEBUG=${DEBUG}" >> $target_file
 
                 echo "RESTORE_DIR=${RESTORE_DIR}" >> $target_file

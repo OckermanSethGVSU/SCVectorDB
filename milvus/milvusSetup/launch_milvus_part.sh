@@ -119,6 +119,7 @@ apptainer exec --fakeroot \
   --env MILVUS_HEALTH_HOST=$MY_IP_ADDR \
   --env MILVUS_HEALTH_PORT=$METRICS_PORT \
   --env PERF=$PERF \
+  --env PERF_EVENTS=$PERF_EVENTS \
   -B ./execute.sh:/milvus/app_execute.sh \
   -B ./workerOut/:/workerOut/ \
   -B $TARGET_BASE/${TYPE}${RANK}/:/var/lib/milvus \

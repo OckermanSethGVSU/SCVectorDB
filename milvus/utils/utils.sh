@@ -43,6 +43,7 @@ apply_overrides() {
     apply_override_value TRACING TRACING_OVERRIDE
     apply_override_value DEBUG DEBUG_OVERRIDE
     apply_override_value BASE_DIR BASE_DIR_OVERRIDE
+    apply_override_value PERF_EVENTS PERF_EVENTS_OVERRIDE
 
     apply_override_value INSERT_CORPUS_SIZE INSERT_CORPUS_SIZE_OVERRIDE
     apply_override_value INSERT_CLIENTS_PER_PROXY INSERT_CLIENTS_PER_PROXY_OVERRIDE
@@ -227,6 +228,7 @@ print_config_summary() {
     echo "Milvus Build Dir:         $MILVUS_BUILD_DIR"
     echo "Milvus Config Dir:        $MILVUS_CONFIG_DIR"
     echo "Perf:                     $PERF"
+    echo "Perf Events:              ${PERF_EVENTS:-<default>}"
     echo "Tracing:                  $TRACING"
     echo "Debug:                    $DEBUG"
     echo "Vector Dim:               $VECTOR_DIM"

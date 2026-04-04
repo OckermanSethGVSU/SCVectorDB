@@ -29,6 +29,7 @@ HEALTH_HOST="${MILVUS_HEALTH_HOST:-127.0.0.1}"
 HEALTH_PORT="${MILVUS_HEALTH_PORT:-${METRICS_PORT:-9091}}"
 APT_RETRIES="${APT_RETRIES:-5}"
 APT_RETRY_DELAY_SECONDS="${APT_RETRY_DELAY_SECONDS:-10}"
+DEFAULT_PERF_STAT_EVENTS="cycles,instructions,branches,branch-misses,cache-misses"
 
 # if Milvus is restoring itself, give it longer to launch
 if [ -n "$RESTORE_DIR" ]; then
@@ -200,7 +201,8 @@ if [[ "$PERF" == "RECORD" ]]; then
 
 elif [[ "$PERF" == "STAT" ]]; then
     echo "Rank ${RANK} Launching perf stat"
-    /perfDir/perf stat  -e cycles,instructions,branches,branch-misses,cache-misses -o /workerOut/perf${RANK}.data  -p "$MILVUS_PID" &
+    PERF_STAT_EVENTS="${PERF_EVENTS:-$DEFAULT_PERF_STAT_EVENTS}"
+    /perfDir/perf stat  -e "$PERF_STAT_EVENTS" -o /workerOut/perf${RANK}.data  -p "$MILVUS_PID" &
     PERF_PID=$!
 fi
 

@@ -173,6 +173,7 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env DEPLOY_MODE=STANDALONE \
     --env TYPE=$TYPE \
     --env PERF=$PERF \
+    --env PERF_EVENTS=$PERF_EVENTS \
     --env MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR \
     --env WORKER_IP=$IP_ADDR \
     --env MILVUS_HEALTH_HOST=$IP_ADDR \
