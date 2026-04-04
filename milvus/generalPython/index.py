@@ -188,6 +188,94 @@ t2 = time.time()
 
 
 
+INDEX_PENDING_STABLE_SECONDS = float(os.getenv("INDEX_PENDING_STABLE_SECONDS", "60"))
+TARGET_INDEX_ROWS = int(os.getenv("INSERT_CORPUS_SIZE", "10000000"))
+
+wait_start = time.time()
+target_count_reached_at = None
+stabilized_at = None
+last_print = 0
+pending_zero_since = None
+
+while True:
+    try:
+        index_status = client.describe_index(collection_name, 'vector')
+        indexed_rows = int(index_status['indexed_rows'])
+        total_rows = int(index_status['total_rows'])
+        pending_index_rows = int(index_status['pending_index_rows'])
+
+        stats = client.get_collection_stats(collection_name)
+        collection_current_count = int(stats["row_count"])
+    except Exception as e:
+        if time.time() - wait_start > 60 * 30:
+            raise TimeoutError(f"Timed out while polling Milvus state: {e}", flush=True)
+        print(f"[warn] polling failed: {e}", flush=True)
+        time.sleep(10)
+        continue
+
+    now = time.time()
+    if now - last_print > 60:
+        print(
+            f"[wait] rows={collection_current_count} indexed_rows={indexed_rows}/{total_rows} "
+            f"target_rows={TARGET_INDEX_ROWS} pending_index_rows={pending_index_rows}",
+            flush=True,
+        )
+        last_print = now
+
+    if FLUSH_BEFORE_INDEX:
+        if target_count_reached_at is None:
+            if indexed_rows == TARGET_INDEX_ROWS:
+                target_count_reached_at = now
+                print(f"[wait] target indexed row count reached: {TARGET_INDEX_ROWS}", flush=True)
+            else:
+                if time.time() - wait_start > (60 * 10):
+                    raise TimeoutError(
+                        f"indexed_rows did not reach target {TARGET_INDEX_ROWS} within 10 minutes"
+                    )
+                time.sleep(1)
+                continue
+    else:
+        if target_count_reached_at is None:
+            target_count_reached_at = t2
+
+    if pending_index_rows == 0:
+        if pending_zero_since is None:
+            pending_zero_since = now
+            print(
+                f"[wait] pending_index_rows reached 0; starting stabilization window of "
+                f"{INDEX_PENDING_STABLE_SECONDS} seconds",
+                flush=True,
+            )
+        elif now - pending_zero_since >= INDEX_PENDING_STABLE_SECONDS:
+            stabilized_at = pending_zero_since
+            print("[wait] pending_index_rows remained 0 through stabilization window", flush=True)
+            break
+    else:
+        if pending_zero_since is not None:
+            print("[wait] pending_index_rows became non-zero again; restarting stabilization polling", flush=True)
+        pending_zero_since = None
+
+    if time.time() - wait_start > (60 * 30):
+        raise TimeoutError(
+            f"pending_index_rows did not stay at 0 for {INDEX_PENDING_STABLE_SECONDS} seconds within 30 minutes"
+        )
+
+    time.sleep(1)
+
+initial_index_time = t2 - t1
+if FLUSH_BEFORE_INDEX:
+    target_count_time = target_count_reached_at - t2
+else:
+    target_count_time = initial_index_time
+stabilization_time = stabilized_at - target_count_reached_at
+
+with open("index_time.txt", "w", encoding="utf-8") as f:
+    f.write("inital_index,target_count,stablization\n")
+    f.write(f"{initial_index_time},{target_count_time},{stabilization_time}\n")
+
+
+
+load_start = time.time()
 client.load_collection("standalone")
 
 while True:
@@ -195,46 +283,12 @@ while True:
     if str(state['state']) == "Loaded":
         break
     time.sleep(0.5)
-t3 = time.time()
+load_end = time.time()
 
-with open(f"index_time.txt", "w") as f:
-        f.write(str(t2 - t1))
+
 with open(f"collection_time.txt", "w") as f:
-        f.write(str(t3- t2))
+        f.write(str(load_end- load_start))
 
-
-
-EXPECTED_CORPUS_SIZE = int(os.getenv("INSERT_CORPUS_SIZE", "10000000"))
-
-start = time.time()
-last_print = 0
-while True:
-    try:
-        index_status = client.describe_index(collection_name, 'vector')
-        index_current_count = int(index_status['total_rows'])
-
-        stats = client.get_collection_stats(collection_name)
-        collection_current_count = int(stats["row_count"])
-    except Exception as e:
-        if time.time() - start > 60 * 10:
-            raise TimeoutError(f"Timed out while polling Milvus state: {e}", flush=True)
-        print(f"[warn] polling failed: {e}", flush=True)
-        time.sleep(10)
-        continue
-
-
-    now = time.time()
-    if now - last_print > 60:
-        print(f"[wait] rows={collection_current_count}/{EXPECTED_CORPUS_SIZE}", flush=True)
-        last_print = now
-    
-    if collection_current_count == EXPECTED_CORPUS_SIZE and index_current_count == collection_current_count:
-        break
-    
-    elif time.time() - start > (60 * 10):
-        raise TimeoutError("Expected row count not detected in 10 minutes ")
-    else:
-        time.sleep(10)
 
 while True:
     res = client.get_load_state(collection_name=collection_name)
