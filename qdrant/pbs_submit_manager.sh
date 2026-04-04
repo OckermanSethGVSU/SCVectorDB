@@ -11,6 +11,8 @@ print_config_summary() {
     echo "Distance Metric:          $DISTANCE_METRIC"
     echo "GPU Index:                $GPU_INDEX"
     echo "Qdrant Executable:        $QDRANT_EXECUTABLE"
+    echo "Insert Trace:             $INSERT_TRACE"
+    echo "Query Trace:              $QUERY_TRACE"
 
     if [[ -n "$RESTORE_DIR" ]]; then
         echo "Restore Dir:              $RESTORE_DIR"
@@ -108,6 +110,8 @@ apply_overrides() {
     apply_scalar_override QDRANT_EXECUTABLE
     apply_scalar_override RESTORE_DIR
     apply_scalar_override EXPECTED_CORPUS_SIZE
+    apply_scalar_override INSERT_TRACE
+    apply_scalar_override QUERY_TRACE
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -117,8 +121,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # fi
 
 ### Loop variables ###
-NODES=(64)
-WORKERS_PER_NODE=(4)
+NODES=(1)
+WORKERS_PER_NODE=(1)
 CORES=(112)
 INSERT_BATCH_SIZE=(512)
 QUERY_BATCH_SIZE=(32)
@@ -134,8 +138,8 @@ TASK="QUERY" # [INSERT, INDEX, QUERY, MIXED]
 RUN_MODE="PBS" # [PBS, local]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, TRACE]
-VECTOR_DIM=200
-DISTANCE_METRIC="IP" # [IP, COSINE, L2]
+VECTOR_DIM=2560
+DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
 GPU_INDEX=False
 
 # Aurora
@@ -152,14 +156,14 @@ GPU_INDEX=False
 
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
-INSERT_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/yandex1B.npy"
+INSERT_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
 
 # 88453763, 1000000000
-INSERT_CORPUS_SIZE=1000000000 # total data to insert
+INSERT_CORPUS_SIZE=10000000 # total data to insert
 INSERT_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 INSERT_CLIENTS_PER_WORKER=8
-INSERT_STREAMING="True"
+INSERT_STREAMING="False"
 
 
 ### Query ### 
@@ -168,10 +172,10 @@ INSERT_STREAMING="True"
     # * Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
-QUERY_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
+QUERY_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
 
 # 22723, 100000
-QUERY_CORPUS_SIZE=100000 # total data to QUERY
+QUERY_CORPUS_SIZE=22723 # total data to QUERY
 QUERY_BALANCE_STRATEGY="NO_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 TOTAL_QUERY_CLIENTS=1
@@ -206,6 +210,8 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 
 
 QDRANT_EXECUTABLE="qdrant" # [qdrant, qdrantInsertTracing]
+INSERT_TRACE=""
+QUERY_TRACE=""
 # RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/yandex/"
 RESTORE_DIR=""
 # RESTORE_DIR=""
@@ -302,6 +308,8 @@ do
                 
                     echo "PLATFORM=${PLATFORM}" >> $target_file
                     echo "QDRANT_EXECUTABLE=${QDRANT_EXECUTABLE}" >> $target_file
+                    echo "INSERT_TRACE=${INSERT_TRACE}" >> $target_file
+                    echo "QUERY_TRACE=${QUERY_TRACE}" >> $target_file
                     echo "CORES=${numCores}" >> $target_file
                     echo "TASK=${TASK}" >> $target_file
                     echo "RUN_MODE=${RUN_MODE}" >> $target_file

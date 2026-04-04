@@ -45,6 +45,34 @@ healthcheck() {
     [[ "$status" == *" 200 "* ]]
 }
 
+is_truth() {
+    local value="${1:-}"
+    shopt -s nocasematch
+    if [[ "$value" =~ ^(1|true|yes|y|on)$ ]]; then
+        shopt -u nocasematch
+        return 0
+    fi
+    shopt -u nocasematch
+    return 1
+}
+
+QDRANT_LAUNCH_ENV=(
+    NO_PROXY=""
+    no_proxy=""
+    http_proxy=""
+    https_proxy=""
+    HTTP_PROXY=""
+    HTTPS_PROXY=""
+)
+
+if is_truth "$QUERY_TRACE"; then
+    QDRANT_LAUNCH_ENV+=(QDRANT_QUERY_PATH=1)
+fi
+
+if is_truth "$INSERT_TRACE"; then
+    QDRANT_LAUNCH_ENV+=(QDRANT_INSERT_PATH=1)
+fi
+
 IP_ADDR=$1
 P2P_PORT=$2
 RANK=$3
@@ -53,7 +81,7 @@ USEPERF=$4
 # echo "${IP_ADDR},${P2P_PORT},${RANK},${USEPERF}"
 
 if [[ $RANK -eq 0 ]]; then
-  NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+  env "${QDRANT_LAUNCH_ENV[@]}" \
   ./qdrant --uri "http://${IP_ADDR}:${P2P_PORT}" --config-path /qdrant/config/config.yaml & 
   QDRANT_PID=$!
   HTTP_PORT=$((P2P_PORT - 2))
@@ -83,7 +111,7 @@ else
   bootstrapIP=$(cut -d',' -f2 /qdrant/ip_registry.d/0)
 
   while true; do
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
+    env "${QDRANT_LAUNCH_ENV[@]}" \
     ./qdrant --uri "http://${IP_ADDR}:${P2P_PORT}" --bootstrap http://$bootstrapIP:6335 --config-path /qdrant/config/config.yaml &
     QDRANT_PID=$!
     HTTP_PORT=$((P2P_PORT - 2))
