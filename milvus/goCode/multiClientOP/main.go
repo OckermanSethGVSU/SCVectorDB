@@ -83,6 +83,17 @@ type InputData struct {
 	Path      string
 }
 
+func writeInt64Npy(path string, data []int64, shape []int) error {
+	w, err := gonpy.NewFileWriter(path)
+	if err != nil {
+		return err
+	}
+	if shape != nil {
+		w.Shape = shape
+	}
+	return w.WriteInt64(data)
+}
+
 func getNodeByRank(filename string, targetRank int) (*NodeInfo, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -694,6 +705,9 @@ func clientWorker(
 			totalDurations   []float64
 			convertDurations []float64
 			uploadDurations  []float64
+			queryResultIDs   []int64
+			queryResultWidth = -1
+			queryResultRows  int
 		)
 
 		if localRows == 0 {
@@ -795,6 +809,30 @@ func clientWorker(
 			opCancel()
 			if err != nil {
 				log.Fatalf("op failed worker=%d client=%d absRowStart=%d sweep=%s: %v", workerRank, clientID, startIdx+i, sweep.Label, err)
+			}
+			if ACTIVE_TASK == "QUERY" {
+				for resultIdx, result := range queryResults {
+					resultWidth := result.IDs.Len()
+					if queryResultWidth == -1 {
+						queryResultWidth = resultWidth
+					} else if resultWidth != queryResultWidth {
+						log.Fatalf(
+							"inconsistent query result width worker=%d client=%d absRowStart=%d batch_result=%d got=%d expected=%d sweep=%s",
+							workerRank, clientID, startIdx+i, resultIdx, resultWidth, queryResultWidth, sweep.Label,
+						)
+					}
+					for idIdx := 0; idIdx < resultWidth; idIdx++ {
+						id, err := result.IDs.GetAsInt64(idIdx)
+						if err != nil {
+							log.Fatalf(
+								"failed to read query result id worker=%d client=%d absRowStart=%d batch_result=%d id_idx=%d sweep=%s: %v",
+								workerRank, clientID, startIdx+i, resultIdx, idIdx, sweep.Label, err,
+							)
+						}
+						queryResultIDs = append(queryResultIDs, id)
+					}
+					queryResultRows++
+				}
 			}
 			if ldebugfEnabled {
 				for _, milestone := range milestones {
@@ -926,6 +964,16 @@ func clientWorker(
 
 		w3, _ := gonpy.NewFileWriter(fmt.Sprintf(sweep.ResultPath+"/op_times_w%d_c%d.npy", workerRank, clientID))
 		_ = w3.WriteFloat64(totalDurations)
+
+		if ACTIVE_TASK == "QUERY" {
+			if queryResultWidth < 0 {
+				queryResultWidth = 0
+			}
+			queryIDsPath := fmt.Sprintf(sweep.ResultPath+"/query_result_ids_w%d_c%d.npy", workerRank, clientID)
+			if err := writeInt64Npy(queryIDsPath, queryResultIDs, []int{queryResultRows, queryResultWidth}); err != nil {
+				log.Fatalf("failed to write query result ids worker=%d client=%d sweep=%s: %v", workerRank, clientID, sweep.Label, err)
+			}
+		}
 	}
 }
 
