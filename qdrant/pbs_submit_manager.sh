@@ -16,20 +16,20 @@ QUERY_BATCH_SIZE=(32)
 
 
 # PBS Vars
-WALLTIME="01:00:00"
-queue="debug" # [preemptable, debug, debug-scaling, prod, capacity]
+WALLTIME="03:00:00"
+queue="debug-scaling" # [preemptable, debug, debug-scaling, prod, capacity]
 
 
 ### Runtime variables ###
 TASK="QUERY" # [INSERT, INDEX, QUERY, MIXED]
 RUN_MODE="PBS" # [PBS, local]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
-PERF="STAT" # [NONE, STAT, TRACE]
+PERF="NONE" # [NONE, STAT, TRACE]
 # topdown-be-bound,topdown-mem-bound,topdown-retiring,topdown-fe-bound,topdown-bad-spec
 # cycles,instructions,cache-references,cache-misses,LLC-load-misses
-PERF_EVENTS="cycles,instructions,cache-references,cache-misses,LLC-load-misses" # comma-separated perf stat event list override; only used when PERF=STAT
-VECTOR_DIM=2560
-DISTANCE_METRIC="COSINE" # [IP, COSINE, L2]
+PERF_EVENTS="topdown-be-bound,topdown-mem-bound,topdown-retiring,topdown-fe-bound,topdown-bad-spec" # comma-separated perf stat event list override; only used when PERF=STAT
+VECTOR_DIM=200
+DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 GPU_INDEX=False
 
 # Aurora
@@ -46,13 +46,13 @@ GPU_INDEX=False
 
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
-INSERT_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
+INSERT_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
 
 # 88453763, 1000000000
-INSERT_CORPUS_SIZE=10000000 # total data to insert
+INSERT_CORPUS_SIZE=5970464 # total data to insert
 INSERT_BALANCE_STRATEGY="WORKER_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
-INSERT_CLIENTS_PER_WORKER=8
+INSERT_CLIENTS_PER_WORKER=1
 INSERT_STREAMING="False"
 
 
@@ -62,10 +62,10 @@ INSERT_STREAMING="False"
     # * Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
-QUERY_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
+QUERY_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
 
 # 22723, 100000
-QUERY_CORPUS_SIZE=22723 # total data to QUERY
+QUERY_CORPUS_SIZE=100000 # total data to QUERY
 QUERY_BALANCE_STRATEGY="NO_BALANCE" # [NO_BALANCE, WORKER_BALANCE]
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 TOTAL_QUERY_CLIENTS=1
@@ -99,9 +99,9 @@ QUERY_BATCH_MAX=""
 PLATFORM="AURORA" # [POLARIS, AURORA]
 
 
-QDRANT_EXECUTABLE="qdrantQueryTrace" # [qdrant, qdrantInsertTracing,qdrantQueryTrace]
+QDRANT_EXECUTABLE="qdrant" # [qdrant, qdrantInsertTracing,qdrantQueryTrace]
 INSERT_TRACE=""
-QUERY_TRACE="True"
+QUERY_TRACE=""
 # RESTORE_DIR="/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/yandex/"
 RESTORE_DIR=""
 # RESTORE_DIR=""
