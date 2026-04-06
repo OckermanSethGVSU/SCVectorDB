@@ -191,6 +191,8 @@ t2 = time.time()
 INDEX_PENDING_STABLE_SECONDS = float(os.getenv("INDEX_PENDING_STABLE_SECONDS", "60"))
 TARGET_INDEX_ROWS = int(os.getenv("INSERT_CORPUS_SIZE", "10000000"))
 
+timeout_duration = 180
+
 wait_start = time.time()
 target_count_reached_at = None
 stabilized_at = None
@@ -207,7 +209,7 @@ while True:
         stats = client.get_collection_stats(collection_name)
         collection_current_count = int(stats["row_count"])
     except Exception as e:
-        if time.time() - wait_start > 60 * 30:
+        if time.time() - wait_start > 60 * timeout_duration:
             raise TimeoutError(f"Timed out while polling Milvus state: {e}", flush=True)
         print(f"[warn] polling failed: {e}", flush=True)
         time.sleep(10)
@@ -228,7 +230,7 @@ while True:
                 target_count_reached_at = now
                 print(f"[wait] target indexed row count reached: {TARGET_INDEX_ROWS}", flush=True)
             else:
-                if time.time() - wait_start > (60 * 10):
+                if time.time() - wait_start > (60 * timeout_duration):
                     raise TimeoutError(
                         f"indexed_rows did not reach target {TARGET_INDEX_ROWS} within 10 minutes"
                     )
@@ -255,7 +257,7 @@ while True:
             print("[wait] pending_index_rows became non-zero again; restarting stabilization polling", flush=True)
         pending_zero_since = None
 
-    if time.time() - wait_start > (60 * 30):
+    if time.time() - wait_start > (60 * timeout_duration):
         raise TimeoutError(
             f"pending_index_rows did not stay at 0 for {INDEX_PENDING_STABLE_SECONDS} seconds within 30 minutes"
         )
