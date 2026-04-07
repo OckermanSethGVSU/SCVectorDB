@@ -6,9 +6,10 @@ STORAGE_MEDIUM=${2:?Usage: $0 <rank> <storage_medium>}
 PLATFORM=${3:?Usage: $0 <rank> <storage_medium> <platform>}
 TYPE=${4:?Usage: $0 <rank> <storage_medium> <platform> <type>}
 WAL=${5:?Usage: $0 <rank> <storage_medium> <platform> <type> <WAL>}
+ETCD_MEDIUM=${ETCD_MEDIUM:-$STORAGE_MEDIUM}
 
-
-ETCD_FLAG="--env ETCD_DATA_DIR=/var/lib/milvus/etcd"
+APPTAINER_ARGS=()
+ETCD_BIND_ARGS=()
 if [[ "$STORAGE_MEDIUM" == "memory" ]]; then
     TARGET_BASE="/dev/shm/"
     (( RANK == 0 )) && echo "Using memory for persistence"
@@ -23,23 +24,61 @@ elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
         --bind "/home/treewalker/daos_lib64:/opt/daos/lib64:ro"
         --env LD_LIBRARY_PATH=/opt/daos/lib64
     )
-    ETCD_FLAG="--env ETCD_DATA_DIR=/dev/shm/var/lib/milvus/etcd"
-    # ETCD_FLAG="--env     ETCD_FLAG="--env ETCD_DATA_DIR=/dev/shm/var/lib/milvus/etcd"
 
 
 elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
     TARGET_BASE="./milvusDir"
-    ETCD_FLAG="--env ETCD_DATA_DIR=/dev/shm/var/lib/milvus/etcd"
     (( RANK == 0 )) && echo "Using lustre for persistence"
 elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
     TARGET_BASE="/local/scratch/milvusDir"
-    ETCD_FLAG="--env ETCD_DATA_DIR=/dev/shm/var/lib/milvus/etcd"
     (( RANK == 0 )) && echo "Using SSD for persistence"
 
 else
     (( RANK == 0 )) && echo "Error: unknown STORAGE_MEDIUM '$STORAGE_MEDIUM'" >&2
     exit 1
 fi
+
+case "$ETCD_MEDIUM" in
+    memory)
+        ETCD_DATA_DIR="/dev/shm/var/lib/milvus/etcd"
+        (( RANK == 0 )) && echo "ETCD using memory for persistence"
+        ;;
+    DAOS)
+        DAOS_POOL="radix-io"
+        DAOS_CONT="vectorDBTesting"
+        ETCD_HOST_BASE="/tmp/${DAOS_POOL}/${DAOS_CONT}/${myDIR}/etcdDir"
+        mkdir -p "$ETCD_HOST_BASE"
+        ETCD_DATA_DIR="/etcd-data/etcd"
+        ETCD_BIND_ARGS+=(-B "${ETCD_HOST_BASE}:/etcd-data")
+        if [[ "$STORAGE_MEDIUM" != "DAOS" ]]; then
+            APPTAINER_ARGS+=(
+                --bind "/home/treewalker/daos_lib64:/opt/daos/lib64:ro"
+                --env LD_LIBRARY_PATH=/opt/daos/lib64
+            )
+        fi
+        (( RANK == 0 )) && echo "ETCD using DAOS for persistence"
+        ;;
+    lustre)
+        ETCD_HOST_BASE="./etcdDir"
+        mkdir -p "$ETCD_HOST_BASE"
+        ETCD_DATA_DIR="/etcd-data/etcd"
+        ETCD_BIND_ARGS+=(-B "${ETCD_HOST_BASE}:/etcd-data")
+        (( RANK == 0 )) && echo "ETCD using lustre for persistence"
+        ;;
+    SSD)
+        ETCD_HOST_BASE="/local/scratch/etcdDir"
+        mkdir -p "$ETCD_HOST_BASE"
+        ETCD_DATA_DIR="/etcd-data/etcd"
+        ETCD_BIND_ARGS+=(-B "${ETCD_HOST_BASE}:/etcd-data")
+        (( RANK == 0 )) && echo "ETCD using SSD for persistence"
+        ;;
+    *)
+        (( RANK == 0 )) && echo "Error: unknown ETCD_MEDIUM '$ETCD_MEDIUM'" >&2
+        exit 1
+        ;;
+esac
+
+ETCD_FLAG="--env ETCD_DATA_DIR=${ETCD_DATA_DIR}"
 
 # get ipv4
 python3 net_mapping.py --rank $RANK
@@ -184,6 +223,8 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     -B ${base}/perfDir/:/perfDir/ \
     -B ./workerOut/:/workerOut/ \
     -B ${TARGET_BASE}/milvus:/var/lib/milvus \
+    "${ETCD_BIND_ARGS[@]}" \
+    "${APPTAINER_ARGS[@]}" \
     "${BUILD_ARGS[@]}" \
     "${POLARIS_BINDS[@]}" \
     "${GPU_ARGS[@]}" \

@@ -10,7 +10,7 @@ CORES=(112)
 
 # PBS Vars
 WALLTIME="01:00:00"
-queue=capacity # [preemptable, debug, debug-scaling, prod,capacity]
+queue=debug-scaling # [preemptable, debug, debug-scaling, prod,capacity]
 
 ### Platform/DIR Specific Variables ###
 # Aurora: /lus/flare/projects/radix-io/sockerman/milvusEnv/
@@ -22,7 +22,7 @@ PLATFORM="AURORA" # [POLARIS, AURORA]
 
 ### General runtime variables ###
 TASK="QUERY" # [INSERT, IMPORT, INDEX, QUERY, MIXED]
-RUN_MODE="local" # [PBS, local]
+RUN_MODE="PBS" # [PBS, local]
 MODE="DISTRIBUTED" # [DISTRIBUTED, STANDALONE]
 STORAGE_MEDIUM="memory" # [memory, DAOS, lustre, SSD]
 PERF="NONE" # [NONE, STAT, RECORD]
@@ -35,19 +35,20 @@ DEBUG="False" # [True, False]
 BASE_DIR="$(pwd)"
 MINIO_MODE="off" # standalone: [off, single], distributed: [off, single, stripped]
 MINIO_MEDIUM="lustre" # [lustre] (can be memory if running single) - DAOS is broken
+ETCD_MEDIUM="memory" # [memory, DAOS, lustre, SSD] blank => follow STORAGE_MEDIUM
 LOCAL_SHARED_STORAGE_PATH="" # absolute shared path override for distributed MINIO_MODE=off; blank => auto
 
 
 # 
 ### Insertion Variables ###  88453763
-INSERT_CORPUS_SIZE=1000 # total data to insert
-INSERT_CLIENTS_PER_PROXY=2
+INSERT_CORPUS_SIZE=10000000 # total data to insert
+INSERT_CLIENTS_PER_PROXY=8
 INSERT_METHOD="traditional" # [traditional, bulk] - method for uploading data into Milvus for index/query tasks
 BULK_UPLOAD_TRANSPORT="mc" # [writer, mc] - transport implementation for bulk uploads
 BULK_UPLOAD_STAGING_MEDIUM="memory" # [memory, lustre, SSD] - temporary staging location before uploaded files are deleted
 IMPORT_PROCESSES=204 # If you are doing a bulk import
 INSERT_BALANCE_STRATEGY="WORKER" # [NONE, WORKER]
-INSERT_STREAMING="False" # [True, False]
+INSERT_STREAMING="True" # [True, False]
 # Aurora
     # 10 million 
     #    HPC-Pes2o: /lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy
@@ -61,29 +62,29 @@ INSERT_STREAMING="False" # [True, False]
     #     Yandex: /eagle/projects/argonne_tpc/sockerman/big-ann-benchmarks/benchmark/data/yandex10Mil/Yandex10M.npy
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/Yandex10M.npy
-INSERT_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+# INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/10M_part1.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part1.npy"
 # INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
-# INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy"
+INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/mergedData/embeddings_merged.npy"
 
 # Batch: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768
 # best batch for 32 clients: 128
-INSERT_BATCH_SIZE=(32)
+INSERT_BATCH_SIZE=(512)
 
 
 # Index Variables
 # VECTOR_DIM=200
-VECTOR_DIM=200
+VECTOR_DIM=2560
 DISTANCE_METRIC="IP" # [IP, COSINE, L2]
 INIT_FLAT_INDEX="FALSE" # [TRUE, FALSE]
-SHARDS="8"
+SHARDS="16"
 DML_CHANNELS=16 # controls DML channels on startup -> defaults to 16 if not set
-FLUSH_BEFORE_INDEX="False" # [TRUE, FALSE]
+FLUSH_BEFORE_INDEX="TRUE" # [TRUE, FALSE]
 
 
 ### QUERY Variables ###
 # QUERY_CORPUS_SIZE=22723  # queries
-QUERY_CORPUS_SIZE=100  # queries
+QUERY_CORPUS_SIZE=100000  # queries
 QUERY_CLIENTS_PER_PROXY=1
 QUERY_BALANCE_STRATEGY="NONE" # [NONE, WORKER]
 QUERY_STREAMING="False" # [True, False]
@@ -95,7 +96,7 @@ QUERY_BATCH_SIZE=(32)
 # Local (docker based)
     # Yandex: /home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy
 # QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
-QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
+QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
 # QUERY_DATA_FILEPATH="/home/seth/Documents/research/SCVectorDB/yandexTest/YandexQuery100k.npy"
 
 
@@ -109,7 +110,7 @@ QUERY_OPS_PER_SEC=""
 MIXED_QUERY_BATCH_SIZE=32
 
 MIXED_RESULT_PATH="mixed_logs"
-MIXED_CORPUS_SIZE=1000
+MIXED_CORPUS_SIZE=1000000
 MIXED_QUERY_CLIENTS_PER_PROXY=1
 MIXED_INSERT_CLIENTS_PER_PROXY=1
 # MIXED_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/10M_part2.npy"
@@ -165,6 +166,10 @@ NUM_PROXIES_PER_CN=1
 
 apply_overrides
 
+if [[ -z "$ETCD_MEDIUM" ]]; then
+    ETCD_MEDIUM="$STORAGE_MEDIUM"
+fi
+
 if [[ -z "$MINIO_MODE" ]]; then
     if [[ "$MODE" == "DISTRIBUTED" ]]; then
         MINIO_MODE="stripped"
@@ -214,7 +219,7 @@ do
                 if [[ "$PLATFORM" == "POLARIS" ]]; then
                     echo "#PBS -l filesystems=home:eagle" >> $target_file    
                 elif [[ "$PLATFORM" == "AURORA" ]]; then
-                    if [[ "$STORAGE_MEDIUM" == "DAOS" || ( "$MODE" == "DISTRIBUTED" && "$MINIO_MEDIUM" == "DAOS" ) ]]; then
+                    if [[ "$STORAGE_MEDIUM" == "DAOS" || "$ETCD_MEDIUM" == "DAOS" || ( "$MODE" == "DISTRIBUTED" && "$MINIO_MEDIUM" == "DAOS" ) ]]; then
                         echo "#PBS -l filesystems=home:flare:daos_user_fs" >> $target_file
                         echo "#PBS -l daos=daos_user" >> $target_file
                     else
@@ -356,6 +361,7 @@ do
 
                 echo "MINIO_MODE=${MINIO_MODE}" >> $target_file
                 echo "MINIO_MEDIUM=${MINIO_MEDIUM}" >> $target_file
+                echo "ETCD_MEDIUM=${ETCD_MEDIUM}" >> $target_file
                 echo "LOCAL_SHARED_STORAGE_PATH=${LOCAL_SHARED_STORAGE_PATH}" >> $target_file
 
                 if [[ "$MODE" == "DISTRIBUTED" ]]; then
@@ -419,8 +425,8 @@ do
                 else
                     # Copy in mode specific files
                     if [[ "$MODE" == "STANDALONE" ]]; then
-                        # cp sifs/milvus.sif $dir/
-                        cp sifs/milvus-2.6.6.sif $dir/milvus.sif
+                        cp sifs/milvus.sif $dir/
+                        # cp sifs/milvus-2.6.6.sif $dir/milvus.sif
                         cp milvusSetup/standaloneLaunch.sh $dir/
                         cp milvusSetup/execute.sh $dir/
 

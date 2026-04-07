@@ -111,6 +111,7 @@ export WAL=$WAL
 export DML_CHANNELS=$DML_CHANNELS
 export MINIO_MODE=$MINIO_MODE
 export MINIO_MEDIUM=$MINIO_MEDIUM
+export ETCD_MEDIUM=${ETCD_MEDIUM:-$STORAGE_MEDIUM}
 export BULK_UPLOAD_STAGING_MEDIUM=$BULK_UPLOAD_STAGING_MEDIUM
 
 export NUM_PROXIES=$NUM_PROXIES
@@ -163,7 +164,7 @@ cat $PBS_NODEFILE > all_nodefile.txt
 
 
 
-if [[ "$STORAGE_MEDIUM" == "DAOS" || ( "$MODE" == "DISTRIBUTED" && "$MINIO_MEDIUM" == "DAOS" ) ]]; then
+if [[ "$STORAGE_MEDIUM" == "DAOS" || "$ETCD_MEDIUM" == "DAOS" || ( "$MODE" == "DISTRIBUTED" && "$MINIO_MEDIUM" == "DAOS" ) ]]; then
     module use /soft/modulefiles
     module load daos
     DAOS_POOL="radix-io"
@@ -268,11 +269,11 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
         # enough ranks per node to fit 3 total
         PPN=$(( (ETCD_INSTANCES + ETCD_SPREAD - 1) / ETCD_SPREAD ))
         mpirun -n "$ETCD_INSTANCES" --ppn "$PPN" --cpu-bind none --host "$HOSTS" \
-            ./launch_etcd.sh "$STORAGE_MEDIUM" &
+            ./launch_etcd.sh "$ETCD_MEDIUM" &
 
     # Launch 1 etcd instance
     elif [[ "$ETCD_MODE" == "single" ]]; then
-        mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_etcd.sh $STORAGE_MEDIUM &
+        mpirun -n 1 --ppn 1 --cpu-bind none --host ${NODES[1]} ./launch_etcd.sh "$ETCD_MEDIUM" &
     fi
     
     # spread MINIO on up to 4 nodes
@@ -639,7 +640,7 @@ if [[ "$TRACING" == "True" ]]; then
 fi
 
 
-if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
+if [[ "$STORAGE_MEDIUM" == "DAOS" || "$ETCD_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
     DAOS_CONT="vectorDBTesting"
     rm -fr /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR

@@ -1,16 +1,16 @@
 #!/bin/bash
 
-STORAGE_MEDIUM=${1:?Usage: $0 <storage_medium>}
+ETCD_MEDIUM=${1:?Usage: $0 <etcd_medium>}
 RANK="${PMI_RANK:-${PMIX_RANK:-${OMPI_COMM_WORLD_RANK:-}}}"
 
-if [[ "$STORAGE_MEDIUM" == "memory" ]]; then
+if [[ "$ETCD_MEDIUM" == "memory" ]]; then
     TARGET_BASE="/dev/shm/"
     ETCD_BASE=$TARGET_BASE
     
     (( RANK == 0 )) && echo "ETCD using memory for persistence"
 
 DAOS_ARGS=()
-elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
+elif [[ "$ETCD_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
     DAOS_CONT="vectorDBTesting"
     TARGET_BASE="/tmp/${DAOS_POOL}/${DAOS_CONT}/${myDIR}/milvusDir"
@@ -22,19 +22,19 @@ elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     ETCD_BASE=./milvusDir/
 
 
-elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
+elif [[ "$ETCD_MEDIUM" == "lustre" ]]; then
     TARGET_BASE="./milvusDir"
     ETCD_BASE=$TARGET_BASE
 
     (( RANK == 0 )) && echo "ETCD using lustre for persistence"
-elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
+elif [[ "$ETCD_MEDIUM" == "SSD" ]]; then
     TARGET_BASE="/local/scratch/milvusDir"
     ETCD_BASE=$TARGET_BASE
 
     (( RANK == 0 )) && echo "ETCD using SSD for persistence"
 
 else
-    (( RANK == 0 )) && echo "Error: unknown STORAGE_MEDIUM '$STORAGE_MEDIUM'" >&2
+    (( RANK == 0 )) && echo "Error: unknown ETCD_MEDIUM '$ETCD_MEDIUM'" >&2
     exit 1
 fi
 
