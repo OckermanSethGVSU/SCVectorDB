@@ -245,12 +245,13 @@ def build_distributed_base_config(wal: str) -> str:
 
     if minio_mode == "off":
         local_root = get_local_shared_storage_path()
-        woodpecker_root = f"{local_root}/woodpecker"
         text = text.replace("storageType: remote", "storageType: local")
         text = text.replace("enablePosixMode: false", "enablePosixMode: true")
         text = re.sub(r"(?m)^  path: /var/lib/milvus/data/$", f"  path: {local_root}", text)
-        text = re.sub(r"(?m)^    rootPath: default$", f"    rootPath: {woodpecker_root}", text)
-        text = re.sub(r"(?m)^  rootPath: files$", f"  rootPath: {local_root}", text)
+        # Keep logical storage prefixes relative so Milvus does not recreate the
+        # absolute shared path under localStorage.path.
+        text = re.sub(r"(?m)^    rootPath: default$", "    rootPath: woodpecker", text)
+        text = re.sub(r"(?m)^  rootPath: files$", "  rootPath: files", text)
 
     text = apply_tracing_config(text)
     text = apply_debug_config(text)
