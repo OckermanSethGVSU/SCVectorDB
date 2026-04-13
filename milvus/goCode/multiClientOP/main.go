@@ -228,6 +228,119 @@ func (t *SharedTiming) MarkClientReady() {
 	}
 }
 
+// RankZeroGate blocks non-zero ranks until rank 0 completes the gated action.
+type RankZeroGate struct {
+	mu     sync.Mutex
+	cond   *sync.Cond
+	opened bool
+}
+
+func NewRankZeroGate() *RankZeroGate {
+	g := &RankZeroGate{}
+	g.cond = sync.NewCond(&g.mu)
+	return g
+}
+
+func (g *RankZeroGate) Wait(globalRank int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if globalRank == 0 {
+		return
+	}
+
+	for !g.opened {
+		g.cond.Wait()
+	}
+}
+
+func (g *RankZeroGate) Open() {
+	g.mu.Lock()
+	g.opened = true
+	g.cond.Broadcast()
+	g.mu.Unlock()
+}
+
+// WriteCoordinator ensures rank 0 performs the first write and serializes
+// all writes after that so no two clients write concurrently.
+type WriteCoordinator struct {
+	mu               sync.Mutex
+	cond             *sync.Cond
+	writerActive     bool
+	rankZeroFinished bool
+}
+
+func NewWriteCoordinator() *WriteCoordinator {
+	c := &WriteCoordinator{}
+	c.cond = sync.NewCond(&c.mu)
+	return c
+}
+
+func (c *WriteCoordinator) Lock(globalClientRank int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for c.writerActive || (!c.rankZeroFinished && globalClientRank != 0) {
+		c.cond.Wait()
+	}
+
+	c.writerActive = true
+}
+
+func (c *WriteCoordinator) Unlock(globalClientRank int) {
+	c.mu.Lock()
+	if globalClientRank == 0 && !c.rankZeroFinished {
+		c.rankZeroFinished = true
+	}
+	c.writerActive = false
+	c.cond.Broadcast()
+	c.mu.Unlock()
+}
+
+func (c *WriteCoordinator) SkipRankZero() {
+	c.mu.Lock()
+	if !c.rankZeroFinished {
+		c.rankZeroFinished = true
+		c.cond.Broadcast()
+	}
+	c.mu.Unlock()
+}
+
+// LockedCSVWriter serializes appends and ensures rank 0 emits the header first.
+type LockedCSVWriter struct {
+	mu            sync.Mutex
+	headerWritten bool
+}
+
+func (w *LockedCSVWriter) Append(
+	resultPath string,
+	globalClientRank int,
+	header []string,
+	record []string,
+) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	file, err := os.OpenFile(resultPath+"/times.csv", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	if globalClientRank == 0 && !w.headerWritten {
+		if err := writer.Write(header); err != nil {
+			return err
+		}
+		w.headerWritten = true
+	}
+	if err := writer.Write(record); err != nil {
+		return err
+	}
+	writer.Flush()
+	return writer.Error()
+}
+
 func waitForLocalLastIDSearchable(
 	ctx context.Context,
 	mclient *milvusclient.Client,
@@ -572,6 +685,9 @@ func clientWorker(
 	sweeps []SweepConfig,
 	barriers []*Barrier,
 	sharedTimings []*SharedTiming,
+	startGates []*RankZeroGate,
+	writeCoordinators []*WriteCoordinator,
+	resultWriters []*LockedCSVWriter,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -695,6 +811,9 @@ func clientWorker(
 	for sweepIdx, sweep := range sweeps {
 		barrier := barriers[sweepIdx]
 		sharedTiming := sharedTimings[sweepIdx]
+		startGate := startGates[sweepIdx]
+		writeCoordinator := writeCoordinators[sweepIdx]
+		resultWriter := resultWriters[sweepIdx]
 
 		fmt.Printf(
 			"Proxy=%d client=%d global_client=%d assigned [%d,%d) rows=%d batch=%d sweep=%s\n",
@@ -711,6 +830,9 @@ func clientWorker(
 		)
 
 		if localRows == 0 {
+			if ACTIVE_TASK == "INSERT" && globalClientRank == 0 {
+				writeCoordinator.SkipRankZero()
+			}
 			sharedTiming.MarkClientReady()
 			barrier.Wait()
 			barrier.Wait()
@@ -725,14 +847,16 @@ func clientWorker(
 		barrier.Wait()
 
 		// Preserve the existing perf marker behavior for the single-sweep case.
-		if len(sweeps) == 1 && (ACTIVE_TASK == TASK) && globalClientRank == 0 {
-			file, err := os.Create("./workerOut/workflow_start.txt")
-			if err != nil {
-				log.Fatalf("failed to create file: %v", err)
+		if len(sweeps) == 1 && (ACTIVE_TASK == TASK) {
+			startGate.Wait(globalClientRank)
+			if globalClientRank == 0 {
+				file, err := os.Create("./workerOut/workflow_start.txt")
+				if err != nil {
+					log.Fatalf("failed to create file: %v", err)
+				}
+				file.Close()
+				startGate.Open()
 			}
-			file.Close()
-
-			time.Sleep(2 * time.Second)
 		}
 
 		barrier.Wait()
@@ -783,12 +907,17 @@ func clientWorker(
 				}
 
 				startUpload = time.Now()
-				_, err = mclient.Insert(
-					opCtx,
-					milvusclient.NewColumnBasedInsertOption(collectionName).
-						WithInt64Column(idField, ids).
-						WithFloatVectorColumn(vectorField, mcols, batch),
-				)
+				func() {
+					writeCoordinator.Lock(globalClientRank)
+					defer writeCoordinator.Unlock(globalClientRank)
+
+					_, err = mclient.Insert(
+						opCtx,
+						milvusclient.NewColumnBasedInsertOption(collectionName).
+							WithInt64Column(idField, ids).
+							WithFloatVectorColumn(vectorField, mcols, batch),
+					)
+				}()
 			} else if ACTIVE_TASK == "QUERY" {
 				vectors := make([]entity.Vector, len(batch))
 				for j := range batch {
@@ -855,6 +984,20 @@ func clientWorker(
 			totalDurations = append(totalDurations, endUpload.Sub(startTotal).Seconds())
 		}
 		endLoop := time.Now()
+		log.Printf(
+			"worker finished local %s loop worker=%d client=%d global_client=%d sweep=%s inserted_rows=%d abs_rows=[%d,%d) loop_seconds=%.3f target_proxy=%s:%d",
+			ACTIVE_TASK,
+			workerRank,
+			clientID,
+			globalClientRank,
+			sweep.Label,
+			localRows,
+			startIdx,
+			endIdx,
+			endLoop.Sub(startLoop).Seconds(),
+			MILVUS_HOST,
+			MILVUS_PORT,
+		)
 		barrier.Wait()
 
 		sentinelID := int64(totalRows)
@@ -879,6 +1022,16 @@ func clientWorker(
 			sharedTiming.MarkSearchable()
 		}
 
+		log.Printf(
+			"worker entering post-%s wait worker=%d client=%d global_client=%d sweep=%s local_last_id=%d global_last_id=%d",
+			ACTIVE_TASK,
+			workerRank,
+			clientID,
+			globalClientRank,
+			sweep.Label,
+			localLastID,
+			lastID,
+		)
 		sharedTiming.WaitSearchable()
 		searchableAtClient := time.Now()
 
@@ -922,39 +1075,32 @@ func clientWorker(
 		clientTotalToSearchable := searchableAtClient.Sub(startLoop).Seconds()
 		sharedWindow := sharedTiming.searchableAt.Sub(sharedTiming.loopStart).Seconds()
 
-		time.Sleep(time.Second * time.Duration(globalClientRank*2))
-
-		file, err := os.OpenFile(sweep.ResultPath+"/times.csv", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		writer := csv.NewWriter(file)
-
-		if globalClientRank == 0 {
-			_ = writer.Write([]string{
+		if err := resultWriter.Append(
+			sweep.ResultPath,
+			globalClientRank,
+			[]string{
 				"worker", "client", "global_client",
 				"start_idx", "end_idx",
 				"local_sanity_check", "global_sanity_check",
 				"loop_duration", "wait_after_loop", "client_total_to_searchable",
 				"shared_loop_start_to_searchable",
-			})
+			},
+			[]string{
+				strconv.Itoa(workerRank),
+				strconv.Itoa(clientID),
+				strconv.Itoa(globalClientRank),
+				strconv.Itoa(startIdx),
+				strconv.Itoa(endIdx),
+				strconv.FormatBool(localExists),
+				strconv.FormatBool(globalExists),
+				strconv.FormatFloat(loopDuration, 'g', -1, 64),
+				strconv.FormatFloat(waitDuration, 'g', -1, 64),
+				strconv.FormatFloat(clientTotalToSearchable, 'g', -1, 64),
+				strconv.FormatFloat(sharedWindow, 'g', -1, 64),
+			},
+		); err != nil {
+			log.Fatal(err)
 		}
-		_ = writer.Write([]string{
-			strconv.Itoa(workerRank),
-			strconv.Itoa(clientID),
-			strconv.Itoa(globalClientRank),
-			strconv.Itoa(startIdx),
-			strconv.Itoa(endIdx),
-			strconv.FormatBool(localExists),
-			strconv.FormatBool(globalExists),
-			strconv.FormatFloat(loopDuration, 'g', -1, 64),
-			strconv.FormatFloat(waitDuration, 'g', -1, 64),
-			strconv.FormatFloat(clientTotalToSearchable, 'g', -1, 64),
-			strconv.FormatFloat(sharedWindow, 'g', -1, 64),
-		})
-		writer.Flush()
-		file.Close()
 
 		w1, _ := gonpy.NewFileWriter(fmt.Sprintf(sweep.ResultPath+"/batch_construction_times_w%d_c%d.npy", workerRank, clientID))
 		_ = w1.WriteFloat64(convertDurations)
@@ -1126,15 +1272,21 @@ func main() {
 	var wg sync.WaitGroup
 	barriers := make([]*Barrier, len(sweeps))
 	sharedTimings := make([]*SharedTiming, len(sweeps))
+	startGates := make([]*RankZeroGate, len(sweeps))
+	writeCoordinators := make([]*WriteCoordinator, len(sweeps))
+	resultWriters := make([]*LockedCSVWriter, len(sweeps))
 	for i := range sweeps {
 		barriers[i] = NewBarrier(totalClients)
 		sharedTimings[i] = NewSharedTiming(totalClients)
+		startGates[i] = NewRankZeroGate()
+		writeCoordinators[i] = NewWriteCoordinator()
+		resultWriters[i] = &LockedCSVWriter{}
 	}
 
 	for w := 0; w < nWorkers; w++ {
 		for c := 0; c < clientsPerWorker; c++ {
 			wg.Add(1)
-			go clientWorker(&wg, w, c, clientsPerWorker, CORPUS_SIZE, input, sweeps, barriers, sharedTimings)
+			go clientWorker(&wg, w, c, clientsPerWorker, CORPUS_SIZE, input, sweeps, barriers, sharedTimings, startGates, writeCoordinators, resultWriters)
 		}
 	}
 
