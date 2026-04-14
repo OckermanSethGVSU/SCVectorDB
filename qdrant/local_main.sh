@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_DIR="${RUN_DIR:-$(pwd)}"
+cd "$RUN_DIR"
 
 export myDIR="${myDIR:-$(basename "$RUN_DIR")}"
 export RESULT_PATH="${RESULT_PATH:-mixed_logs}"
@@ -37,7 +38,7 @@ P2P_PORT="${QDRANT_LOCAL_P2P_PORT:-6335}"
 DATA_DIR="${QDRANT_LOCAL_DATA_DIR:-$RUN_DIR/.local/qdrant/storage}"
 CONFIG_DIR="${QDRANT_LOCAL_CONFIG_DIR:-$RUN_DIR/.local/qdrant/config}"
 SNAPSHOT_DIR="${QDRANT_LOCAL_SNAPSHOT_DIR:-$RUN_DIR/.local/qdrant/snapshots}"
-RUNTIME_STATE_DIR="${RUN_DIR}/runtime_state"
+export RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-$RUN_DIR/runtime_state}"
 STANDARD_BINARY_PATH="${STANDARD_BINARY_PATH:-}"
 MIXED_BINARY_PATH="${MIXED_BINARY_PATH:-}"
 QUERY_DEBUG_RESULTS="${QUERY_DEBUG_RESULTS:-true}"

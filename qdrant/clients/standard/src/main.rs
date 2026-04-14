@@ -184,6 +184,13 @@ fn env_var(name: &str) -> Option<String> {
     env::var(name).ok().map(|value| value.trim().to_string())
 }
 
+fn runtime_state_path(name: &str) -> String {
+    match env_var("RUNTIME_STATE_DIR") {
+        Some(dir) if !dir.is_empty() => format!("{dir}/{name}"),
+        _ => format!("./runtime_state/{name}"),
+    }
+}
+
 // Allow multiple aliases for the same config knob and return the first populated one.
 fn first_env(names: &[&str]) -> Option<String> {
     names.iter().find_map(|name| env_var(name).filter(|value| !value.is_empty()))
@@ -892,7 +899,9 @@ async fn run_upload(
     let mut elapsed_count_times = Vec::new();
 
     if rank == 0 {
-        File::create("./runtime_state/workflow_start.txt")?;
+        let workflow_start = runtime_state_path("workflow_start.txt");
+        File::create(&workflow_start)
+            .with_context(|| format!("failed to create runtime state marker {workflow_start}"))?;
         sleep(Duration::from_secs(3)).await;
     }
     barrier.wait().await;
@@ -958,7 +967,9 @@ async fn run_upload(
     let global_end = Utc::now();
 
     if rank == 0 {
-        File::create("./runtime_state/workflow_stop.txt")?;
+        let workflow_stop = runtime_state_path("workflow_stop.txt");
+        File::create(&workflow_stop)
+            .with_context(|| format!("failed to create runtime state marker {workflow_stop}"))?;
         sleep(Duration::from_secs(3)).await;
     }
 
@@ -1256,7 +1267,9 @@ async fn run_upload_streaming(
     let mut elapsed_count_times = Vec::new();
 
     if rank == 0 {
-        File::create("./runtime_state/workflow_start.txt")?;
+        let workflow_start = runtime_state_path("workflow_start.txt");
+        File::create(&workflow_start)
+            .with_context(|| format!("failed to create runtime state marker {workflow_start}"))?;
         sleep(Duration::from_secs(3)).await;
     }
     barrier.wait().await;
@@ -1328,7 +1341,9 @@ async fn run_upload_streaming(
     let global_end = Utc::now();
 
     if rank == 0 {
-        File::create("./runtime_state/workflow_stop.txt")?;
+        let workflow_stop = runtime_state_path("workflow_stop.txt");
+        File::create(&workflow_stop)
+            .with_context(|| format!("failed to create runtime state marker {workflow_stop}"))?;
         sleep(Duration::from_secs(3)).await;
     }
 
