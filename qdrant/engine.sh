@@ -324,8 +324,12 @@ engine_validate_config() {
     if [[ -z "${INSERT_START_ID:-}" ]]; then
         if [[ -n "$RESTORE_DIR" ]]; then
             INSERT_START_ID=$EXPECTED_CORPUS_SIZE
-        else
+        elif [[ -n "$INSERT_CORPUS_SIZE" ]]; then
             INSERT_START_ID=$INSERT_CORPUS_SIZE
+        elif [[ -n "$INSERT_FILEPATH" ]]; then
+            INSERT_START_ID="$(python3 -c 'import numpy as np, sys; arr = np.load(sys.argv[1], mmap_mode="r"); print(arr.shape[0])' "$INSERT_FILEPATH")"
+        else
+            INSERT_START_ID=0
         fi
     fi
 }
@@ -406,6 +410,7 @@ engine_emit_runtime_env() {
         raw_value="$(get_var_as_raw_string "$var_name" 2>/dev/null || true)"
         printf '%s=%s\n' "$var_name" "$raw_value"
     done
+    printf 'INSERT_START_ID=%s\n' "${INSERT_START_ID:-}"
 }
 
 engine_copy_payload() {

@@ -157,7 +157,9 @@ finalize_cluster_run() {
         mv "${system_files[@]}" systemStats/
     fi
     mkdir -p clientTiming
-    local timing_files=(./index_time.txt ./*_times.csv ./*_summary.csv)
+    local timing_files=()
+    [[ -f ./index_time.txt ]] && timing_files+=(./index_time.txt)
+    timing_files+=(./*_times.csv ./*_summary.csv)
     if (( ${#timing_files[@]} > 0 )); then
         mv "${timing_files[@]}" clientTiming/
     fi
@@ -251,17 +253,29 @@ if [[ "$TASK" == "MIXED" ]]; then
         mixed_timeline.py
         --log-dir "$RESULT_PATH"
         --insert-vectors "$MIXED_DATA_FILEPATH"
-        --insert-max-rows "$MIXED_CORPUS_SIZE"
         --query-vectors "$QUERY_FILEPATH"
-        --query-max-rows "$QUERY_CORPUS_SIZE"
         --metric "$MIXED_TIMELINE_METRIC"
         --insert-id-offset "$INSERT_START_ID"
     )
+    if [[ -n "$MIXED_CORPUS_SIZE" ]]; then
+        MIXED_TIMELINE_ARGS+=(
+            --insert-max-rows "$MIXED_CORPUS_SIZE"
+        )
+    fi
+    if [[ -n "$QUERY_CORPUS_SIZE" ]]; then
+        MIXED_TIMELINE_ARGS+=(
+            --query-max-rows "$QUERY_CORPUS_SIZE"
+        )
+    fi
     if [[ -z "$RESTORE_DIR" ]]; then
         MIXED_TIMELINE_ARGS+=(
             --init-vectors "$INSERT_FILEPATH"
-            --init-max-rows "$INSERT_CORPUS_SIZE"
         )
+        if [[ -n "$INSERT_CORPUS_SIZE" ]]; then
+            MIXED_TIMELINE_ARGS+=(
+                --init-max-rows "$INSERT_CORPUS_SIZE"
+            )
+        fi
     fi
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 "${MIXED_TIMELINE_ARGS[@]}"
 
