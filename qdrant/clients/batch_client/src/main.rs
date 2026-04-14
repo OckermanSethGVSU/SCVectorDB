@@ -10,7 +10,6 @@ use qdrant_client::qdrant::{
 };
 use qdrant_client::{Payload, Qdrant};
 use std::env;
-use std::fmt::Write as _;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
 use std::sync::Arc;
@@ -680,7 +679,7 @@ async fn worker(
     let target_worker = worker_for_rank(rank, config.n_workers, config.clients_per_worker)?;
     let (target, qdrant_url) =
         resolve_qdrant_url(target_worker, &config.balance_strategy)?;
-    let (n_rows_total, dim) = input_data.dims();
+    let (n_rows_total, _dim) = input_data.dims();
     let (start_slice, end_slice) = if config.explicit_total_clients {
         range_for_rank_total_clients(rank, config.total_clients, n_rows_total)
     } else {
@@ -1206,7 +1205,6 @@ async fn run_upload_streaming(
     barrier.wait().await;
 
     let mut file = File::open(npy_path).with_context(|| format!("failed to open npy file {npy_path}"))?;
-    let mut batch_idx = 0;
     let mut elapsed_process_times = Vec::new();
     let mut elapsed_upload_times = Vec::new();
     let mut elapsed_op_times = Vec::new();
@@ -1249,7 +1247,6 @@ async fn run_upload_streaming(
         elapsed_upload_times.push(end_upload.duration_since(start_upload).as_secs_f64());
         elapsed_op_times.push(end_upload.duration_since(start_batch).as_secs_f64());
 
-        batch_idx += 1;
         batch_start += rows_in_batch;
     }
 
@@ -1365,7 +1362,6 @@ async fn run_query_streaming(
 
     let mut file =
         File::open(npy_path).with_context(|| format!("failed to open npy file {npy_path}"))?;
-    let mut batch_idx = 0;
     let mut elapsed_process_times = Vec::new();
     let mut elapsed_query_times = Vec::new();
     let mut elapsed_op_times = Vec::new();
@@ -1474,7 +1470,6 @@ async fn run_query_streaming(
             elapsed_op_times.push(end_query.duration_since(start_batch).as_secs_f64());
         }
 
-        batch_idx += 1;
         batch_start += rows_in_batch;
     }
 
