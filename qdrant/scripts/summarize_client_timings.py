@@ -129,6 +129,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--npy-dir", default=".", help="Directory containing timing .npy files")
     parser.add_argument("--output-dir", default=".", help="Directory for summary CSV outputs")
+    parser.add_argument("--times-csv", default=None, help="Path to the per-rank timing CSV")
     return parser.parse_args()
 
 
@@ -151,7 +152,7 @@ def main():
 
     summary_path = output_dir / f"{prefix}_summary.csv"
     rank_summary_path = output_dir / f"{prefix}_rank_summary.csv"
-    times_csv = Path(f"{prefix}_times.csv")
+    times_csv = Path(args.times_csv) if args.times_csv else Path(f"{prefix}_times.csv")
 
     with rank_summary_path.open("w", newline="") as f:
         writer = csv.writer(f)

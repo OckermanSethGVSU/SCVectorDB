@@ -7,6 +7,7 @@ cd "$RUN_DIR"
 
 export myDIR="${myDIR:-$(basename "$RUN_DIR")}"
 export RESULT_PATH="${RESULT_PATH:-mixed_logs}"
+export CLIENT_TIMING_DIR="${CLIENT_TIMING_DIR:-clientTiming}"
 export INSERT_MODE="${INSERT_MODE:-}"
 export INSERT_OPS_PER_SEC="${INSERT_OPS_PER_SEC:-}"
 export QUERY_MODE="${QUERY_MODE:-}"
@@ -245,7 +246,11 @@ summarize_standard_run() {
     local npy_files=("$npy_dir"/*.npy)
     shopt -u nullglob
     (( ${#npy_files[@]} > 0 )) || return 0
-    ACTIVE_TASK="$task_name" python3 ./summarize_client_timings.py --npy-dir "$npy_dir" --output-dir .
+    mkdir -p "$CLIENT_TIMING_DIR"
+    ACTIVE_TASK="$task_name" python3 ./summarize_client_timings.py \
+        --npy-dir "$npy_dir" \
+        --output-dir "$CLIENT_TIMING_DIR" \
+        --times-csv "./${task_name,,}_times.csv"
 }
 
 move_standard_npy_files() {
@@ -261,13 +266,26 @@ move_standard_npy_files() {
 
 finalize_local_run() {
     touch flag.txt "$RUNTIME_STATE_DIR/flag.txt"
+    mkdir -p "$CLIENT_TIMING_DIR"
     mkdir -p systemStats
     shopt -s nullglob
     local system_files=(./*_system_*.csv)
     if (( ${#system_files[@]} > 0 )); then
         mv "${system_files[@]}" systemStats/
     fi
+    local timing_files=(./index_time.txt ./*_times.csv ./*_summary.csv)
+    if (( ${#timing_files[@]} > 0 )); then
+        mv "${timing_files[@]}" "$CLIENT_TIMING_DIR"/
+    fi
     shopt -u nullglob
+    sleep 2
+    rm -f flag.txt
+    if [[ -f ./ip_registry.txt ]]; then
+        mv ./ip_registry.txt "$RUNTIME_STATE_DIR"/
+    fi
+    if [[ -d ./ip_registry.d ]]; then
+        mv ./ip_registry.d "$RUNTIME_STATE_DIR"/
+    fi
 }
 
 run_restore_status() {

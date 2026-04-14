@@ -129,7 +129,11 @@ summarize_standard_run() {
     local npy_files=("$npy_dir"/*.npy)
     shopt -u nullglob
     (( ${#npy_files[@]} > 0 )) || return 0
-    ACTIVE_TASK="$task_name" python3 summarize_client_timings.py --npy-dir "$npy_dir" --output-dir .
+    mkdir -p clientTiming
+    ACTIVE_TASK="$task_name" python3 summarize_client_timings.py \
+        --npy-dir "$npy_dir" \
+        --output-dir clientTiming \
+        --times-csv "./${task_name,,}_times.csv"
 }
 
 move_standard_npy_files() {
@@ -141,6 +145,31 @@ move_standard_npy_files() {
         mv "${npy_files[@]}" "$target_dir"/
     fi
     shopt -u nullglob
+}
+
+finalize_cluster_run() {
+    touch flag.txt
+    touch ./runtime_state/flag.txt
+    mkdir -p systemStats
+    shopt -s nullglob
+    local system_files=(./*_system_*.csv)
+    if (( ${#system_files[@]} > 0 )); then
+        mv "${system_files[@]}" systemStats/
+    fi
+    mkdir -p clientTiming
+    local timing_files=(./index_time.txt ./*_times.csv ./*_summary.csv)
+    if (( ${#timing_files[@]} > 0 )); then
+        mv "${timing_files[@]}" clientTiming/
+    fi
+    shopt -u nullglob
+    sleep 30
+    rm -f flag.txt
+    if [[ -f ./ip_registry.txt ]]; then
+        mv ./ip_registry.txt ./runtime_state/
+    fi
+    if [[ -d ./ip_registry.d ]]; then
+        mv ./ip_registry.d ./runtime_state/
+    fi
 }
 
 
@@ -165,11 +194,7 @@ if [ -z "$RESTORE_DIR" ]; then
     
     # tell the profs to close and give them time to do so
     if [[ "$TASK" == "INSERT" ]]; then
-        touch flag.txt
-        touch ./runtime_state/flag.txt
-        sleep 30
-        mkdir systemStats/
-        mv *_system_*.csv systemStats/
+        finalize_cluster_run
     fi
 
     move_standard_npy_files uploadNPY
@@ -181,11 +206,7 @@ if [ -z "$RESTORE_DIR" ]; then
         NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 build_index.py
         summarize_standard_run INSERT uploadNPY
         
-        touch flag.txt
-        touch ./runtime_state/flag.txt
-        sleep 30
-        mkdir systemStats/
-        mv *_system_*.csv systemStats/
+        finalize_cluster_run
     fi
 else
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 collection_status.py
@@ -203,11 +224,7 @@ if [[ "$TASK" == "QUERY" ]]; then
     summarize_standard_run INSERT uploadNPY
     summarize_standard_run QUERY queryNPY
 
-    touch flag.txt
-    touch ./runtime_state/flag.txt
-    sleep 30
-    mkdir systemStats/
-    mv *_system_*.csv systemStats/
+    finalize_cluster_run
 
 fi
 
@@ -248,11 +265,7 @@ if [[ "$TASK" == "MIXED" ]]; then
     fi
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 "${MIXED_TIMELINE_ARGS[@]}"
 
-    touch flag.txt
-    touch ./runtime_state/flag.txt
-    sleep 30
-    mkdir systemStats/
-    mv *_system_*.csv systemStats/
+    finalize_cluster_run
 fi
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
