@@ -52,7 +52,7 @@ struct RunConfig {
     total_clients: usize,
     explicit_total_clients: bool,
     clients_per_worker: usize,
-    corpus_size: usize,
+    corpus_size: Option<usize>,
     batch_size: usize,
     balance_strategy: String,
     npy_path: String,
@@ -284,12 +284,8 @@ fn load_config() -> anyhow::Result<RunConfig> {
         }
     };
     let corpus_size = match active_task {
-        ActiveTask::Upload => {
-            parse_required_usize(&["INSERT_CORPUS_SIZE"], "insert corpus size")?
-        }
-        ActiveTask::Query => {
-            parse_required_usize(&["QUERY_CORPUS_SIZE"], "query corpus size")?
-        }
+        ActiveTask::Upload => parse_optional_usize(&["INSERT_CORPUS_SIZE"])?,
+        ActiveTask::Query => parse_optional_usize(&["QUERY_CORPUS_SIZE"])?,
     };
     let batch_size = parse_required_usize(&[batch_key.as_str()], "batch_size")?;
 
@@ -540,17 +536,18 @@ fn parse_npy_header_bool(header: &str, key: &str) -> anyhow::Result<bool> {
     }
 }
 
-fn validate_corpus_size(config: &RunConfig, n_rows: usize) -> anyhow::Result<()> {
-    // Both eager and streaming modes honor the caller's corpus cap.
-    if config.corpus_size > n_rows {
+fn resolve_corpus_size(config: &RunConfig, n_rows: usize) -> anyhow::Result<usize> {
+    // Missing corpus size means "use the full matrix". Otherwise honor the caller's corpus cap.
+    let corpus_size = config.corpus_size.unwrap_or(n_rows);
+    if corpus_size > n_rows {
         bail!(
             "{} corpus size {} exceeds npy row count {}",
             config.active_task.as_env_prefix(),
-            config.corpus_size,
+            corpus_size,
             n_rows
         );
     }
-    Ok(())
+    Ok(corpus_size)
 }
 
 fn read_rows_from_npy(
@@ -639,23 +636,23 @@ async fn main() -> anyhow::Result<()> {
     // Select either eager load or the low-memory streaming reader.
     let input = if config.streaming_reads {
         let meta = parse_npy_metadata(&config.npy_path)?;
-        validate_corpus_size(&config, meta.rows)?;
+        let corpus_size = resolve_corpus_size(&config, meta.rows)?;
         println!(
             "ACTIVE_TASK={} streaming {}, shape = {}x{}",
             config.active_task.as_env_prefix(),
             config.npy_path,
-            config.corpus_size,
+            corpus_size,
             meta.cols
         );
         // Clamp the visible row count to the requested corpus size without copying data.
         Arc::new(InputData::Streaming(NpyMetadata {
-            rows: config.corpus_size,
+            rows: corpus_size,
             ..meta
         }))
     } else {
         let data: Array2<f32> = read_npy(&config.npy_path).context("failed to read npy file")?;
-        validate_corpus_size(&config, data.dim().0)?;
-        let data = data.slice(s![0..config.corpus_size, ..]).to_owned();
+        let corpus_size = resolve_corpus_size(&config, data.dim().0)?;
+        let data = data.slice(s![0..corpus_size, ..]).to_owned();
         let (n_rows_total, dim) = data.dim();
         println!(
             "ACTIVE_TASK={} loaded {}, shape = {}x{}",

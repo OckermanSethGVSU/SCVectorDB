@@ -190,7 +190,7 @@ run_insert() {
     echo "Running local insert workflow..."
     export ACTIVE_TASK="INSERT"
     export COLLECTION_NAME="$(standard_collection_name)"
-    export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:?INSERT_CORPUS_SIZE is required}"
+    export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:-}"
     export INSERT_CLIENTS_PER_WORKER="${INSERT_CLIENTS_PER_WORKER:-1}"
     export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:-1}"
     export INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:-NO_BALANCE}"
@@ -203,7 +203,7 @@ run_query() {
     echo "Running local query workflow..."
     export ACTIVE_TASK="QUERY"
     export COLLECTION_NAME="$(standard_collection_name)"
-    export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:?QUERY_CORPUS_SIZE is required}"
+    export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:-}"
     export QUERY_CLIENTS_PER_WORKER="${QUERY_CLIENTS_PER_WORKER:-1}"
     export TOTAL_QUERY_CLIENTS="${TOTAL_QUERY_CLIENTS:-}"
     export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:-1}"
@@ -217,8 +217,8 @@ run_query() {
 run_mixed() {
     echo "Running local mixed insert/query workflow..."
     export RESULT_PATH
-    export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:?INSERT_CORPUS_SIZE is required}"
-    export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:?QUERY_CORPUS_SIZE is required}"
+    export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:-}"
+    export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:-}"
     export INSERT_FILEPATH="${INSERT_FILEPATH:?INSERT_FILEPATH is required}"
     export QUERY_FILEPATH="${QUERY_FILEPATH:?QUERY_FILEPATH is required}"
     export INSERT_CLIENTS_PER_WORKER="${INSERT_CLIENTS_PER_WORKER:-1}"

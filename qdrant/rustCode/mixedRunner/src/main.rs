@@ -51,7 +51,7 @@ struct BatchConfig {
 struct RoleConfig {
     clients: usize,
     clients_per_worker: Option<usize>,
-    corpus_size: usize,
+    corpus_size: Option<usize>,
     vectors_path: PathBuf,
     batch: BatchConfig,
     mode: RunMode,
@@ -492,7 +492,7 @@ fn parse_config() -> Result<Config> {
     let insert = RoleConfig {
         clients: insert_clients,
         clients_per_worker: insert_clients_per_worker,
-        corpus_size: required_usize(value_with_args(
+        corpus_size: optional_usize(value_with_args(
             &args,
             "insert-corpus-size",
             &["MIXED_CORPUS_SIZE"],
@@ -527,7 +527,7 @@ fn parse_config() -> Result<Config> {
     let query = RoleConfig {
         clients: query_clients,
         clients_per_worker: query_clients_per_worker,
-        corpus_size: required_usize(value_with_args(
+        corpus_size: optional_usize(value_with_args(
             &args,
             "query-corpus-size",
             &["QUERY_CORPUS_SIZE", "QUERY_SET_SIZE"],
@@ -605,8 +605,10 @@ fn validate_role_config(role: Role, cfg: &RoleConfig) -> Result<()> {
     if cfg.clients == 0 {
         return Ok(());
     }
-    if cfg.corpus_size == 0 {
-        bail!("{}-corpus-size must be positive when {} clients are configured", role.as_str(), role.as_str());
+    if let Some(corpus_size) = cfg.corpus_size {
+        if corpus_size == 0 {
+            bail!("{}-corpus-size must be positive when {} clients are configured", role.as_str(), role.as_str());
+        }
     }
     validate_batch_config(role, &cfg.batch)?;
     match cfg.mode {
@@ -640,9 +642,10 @@ fn validate_batch_config(role: Role, cfg: &BatchConfig) -> Result<()> {
 }
 
 // Read a 2D float32 .npy file and trim it to the requested corpus size up front.
-fn load_matrix(path: &Path, corpus_size: usize) -> Result<MatrixData> {
+fn load_matrix(path: &Path, corpus_size: Option<usize>) -> Result<MatrixData> {
     let data: Array2<f32> = read_npy(path)?;
     let (rows, dim) = data.dim();
+    let corpus_size = corpus_size.unwrap_or(rows);
     if corpus_size > rows {
         bail!(
             "requested corpus size {} exceeds available rows {} in {}",

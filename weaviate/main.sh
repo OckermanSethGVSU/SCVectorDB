@@ -3,6 +3,7 @@ export myDIR=$myDIR
 export VECTOR_DIM=$VECTOR_DIM
 export DISTANCE_METRIC=$DISTANCE_METRIC
 export GPU_INDEX=$GPU_INDEX
+export WEAVIATE_CLIENT_BINARY=${WEAVIATE_CLIENT_BINARY:-test}
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -19,7 +20,7 @@ elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
     module load frameworks
     source /lus/flare/projects/radix-io/sockerman/qdrant/qEnv/bin/activate
-    cd /lus/flare/projects/radix-io/sockerman/temp/weaivate/$myDIR
+    cd /lus/flare/projects/radix-io/sockerman/temp/weaviate/$myDIR
 fi
 
 
@@ -82,4 +83,9 @@ fi
 export WEAVIATE_SCHEME="http"
 export WEAVIATE_HOST="${WEAVIATE_IP}:${WEAVIATE_HTTP_PORT}"
 echo "WEAVIATE_HOST=${WEAVIATE_HOST}"
-NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./test
+if [[ ! -x "./${WEAVIATE_CLIENT_BINARY}" ]]; then
+    echo "Error: expected Weaviate client binary './${WEAVIATE_CLIENT_BINARY}' in $(pwd)" >&2
+    exit 1
+fi
+
+NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" "./${WEAVIATE_CLIENT_BINARY}"

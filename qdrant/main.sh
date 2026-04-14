@@ -65,10 +65,14 @@ for ((i=0; i<NODES; i++)); do
     entry=$(sed -n "${line_num}p" "$PBS_NODEFILE")
     for ((j=0; j<WORKERS_PER_NODE; j++)); do
         index=$(((i * WORKERS_PER_NODE) + j))
-        echo "Launching node ${index} with cores ${CORES}"
+        if [[ -n "${CORES:-}" ]]; then
+            echo "Launching node ${index} with cores ${CORES}"
+        else
+            echo "Launching node ${index} with cpu-bind none"
+        fi
 
-        # don't use binding if we are using all cores, else set it
-        if [[ "$CORES" -eq 112 ]]; then            
+        # Empty CORES means do not request explicit core depth binding.
+        if [[ -z "${CORES:-}" ]]; then
             mpirun -n 1 --ppn 1 --cpu-bind none --host $entry ./launchQdrantNode.sh $index $STORAGE_MEDIUM &
         else
             mpirun -n 1 --ppn 1 -d $CORES --cpu-bind depth --host $entry ./launchQdrantNode.sh $index $STORAGE_MEDIUM &
