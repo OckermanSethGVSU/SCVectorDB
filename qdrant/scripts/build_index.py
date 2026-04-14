@@ -47,6 +47,13 @@ def mark_perf_event(filename):
 def is_mixed_task():
     return os.getenv("TASK", "").strip().lower() == "mixed"
 
+
+def env_int(name, default):
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return default
+    return int(value.strip())
+
 # ---------- Main ----------
 def main():
     
@@ -56,6 +63,8 @@ def main():
     grpc_port = rest_port + 1      # -> grpc=6334
 
     collection_name = "singleShard"
+    hnsw_m = env_int("HNSW_M", 16)
+    ef_construction = env_int("HNSW_EF_CONSTRUCTION", 100)
 
     # Sync client for admin/index ops
     client = QdrantClient(
@@ -76,7 +85,9 @@ def main():
         time.sleep(0.25)
 
     info = client.get_collection(collection_name)
+    print("*********************** Un-Indexed Collection Info ***********************", flush=True)
     print(info, flush=True)
+    print("**************************************************************************", flush=True)
     # re-enable graph and time rebuild
     mark_perf_event("workflow_start.txt")
     time.sleep(5)
@@ -84,7 +95,7 @@ def main():
     t1 = time.time()
     client.update_collection(
         collection_name=collection_name,
-        hnsw_config=models.HnswConfigDiff(m=16,ef_construct=100),
+        hnsw_config=models.HnswConfigDiff(m=hnsw_m, ef_construct=ef_construction),
         optimizers_config=models.OptimizersConfigDiff(indexing_threshold=1),
 
     )
@@ -108,7 +119,10 @@ def main():
                 break
             time.sleep(0.01)
 
+    print("", flush=True)
+    print("*********************** Indexed Collection Info ***********************", flush=True)
     print(info, flush=True)
+    print("***********************************************************************", flush=True)
     with open(f"index_time.txt", "w") as f:
         f.write(str(t2 - t1))
  

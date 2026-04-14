@@ -19,6 +19,13 @@ def is_truthy(value: str | None) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return default
+    return int(value.strip())
+
+
 def wait_for_shard_transfer(client, collection_name, shard_id, timeout=60, poll_interval=2):
     """Waits until the specified shard is no longer in a transfer state."""
     start = time.time()
@@ -117,6 +124,8 @@ for i in range(len(nodes)):
 # time.sleep(60)
 
 vector_dim = int(os.environ["VECTOR_DIM"])
+hnsw_m = env_int("HNSW_M", 16)
+ef_construction = env_int("HNSW_EF_CONSTRUCTION", 100)
 distance_metric = os.environ["DISTANCE_METRIC"].strip().lower()
 
 match distance_metric:
@@ -143,6 +152,7 @@ while True:
             collection_name=collection_name,
             vectors_config=models.VectorParams(size=vector_dim, distance=metric),
             shard_number=len(nodes),
+            hnsw_config=models.HnswConfigDiff(m=hnsw_m, ef_construct=ef_construction),
             optimizers_config=models.OptimizersConfigDiff(indexing_threshold=0),
             replication_factor=1,
         )
@@ -159,7 +169,9 @@ while True:
 if run_mode == "local" or not rebalance_topology:
     time.sleep(2)
     info = client.get_collection(collection_name)
-    print("Initial collection info: ", info,flush=True)
+    print("*********************** Initial Collection Info ***********************", flush=True)
+    print(info, flush=True)
+    print("***********************************************************************", flush=True)
     time.sleep(10)  
     if not rebalance_topology:
         Path("ready.flag").touch()

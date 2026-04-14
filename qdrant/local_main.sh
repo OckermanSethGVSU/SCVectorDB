@@ -40,7 +40,7 @@ DATA_DIR="${QDRANT_LOCAL_DATA_DIR:-$RUN_DIR/.local/qdrant/storage}"
 CONFIG_DIR="${QDRANT_LOCAL_CONFIG_DIR:-$RUN_DIR/.local/qdrant/config}"
 SNAPSHOT_DIR="${QDRANT_LOCAL_SNAPSHOT_DIR:-$RUN_DIR/.local/qdrant/snapshots}"
 export RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-$RUN_DIR/runtime_state}"
-STANDARD_BINARY_PATH="${STANDARD_BINARY_PATH:-}"
+BATCH_CLIENT_BINARY_PATH="${BATCH_CLIENT_BINARY_PATH:-}"
 MIXED_BINARY_PATH="${MIXED_BINARY_PATH:-}"
 QUERY_DEBUG_RESULTS="${QUERY_DEBUG_RESULTS:-true}"
 LOCAL_RECREATE_COLLECTION="${LOCAL_RECREATE_COLLECTION:-true}"
@@ -72,11 +72,11 @@ pick_binary() {
     printf '%s\n' "$1"
 }
 
-STANDARD_BINARY_PATH="$(pick_binary \
-    "$STANDARD_BINARY_PATH" \
-    "$ROOT_DIR/clients/standard/target/release/standard" \
-    "$ROOT_DIR/clients/standard/target/debug/standard" \
-    "$ROOT_DIR/standard")"
+BATCH_CLIENT_BINARY_PATH="$(pick_binary \
+    "$BATCH_CLIENT_BINARY_PATH" \
+    "$ROOT_DIR/clients/batch_client/target/release/batch_client" \
+    "$ROOT_DIR/clients/batch_client/target/debug/batch_client" \
+    "$ROOT_DIR/batch_client")"
 
 MIXED_BINARY_PATH="$(pick_binary \
     "$MIXED_BINARY_PATH" \
@@ -106,9 +106,9 @@ ensure_binaries() {
             exit 1
         fi
     else
-        if [[ ! -x "$STANDARD_BINARY_PATH" ]]; then
-            echo "Missing standard binary at $STANDARD_BINARY_PATH" >&2
-            echo "Build it with: (cd $ROOT_DIR/clients/standard && cargo build --release)" >&2
+        if [[ ! -x "$BATCH_CLIENT_BINARY_PATH" ]]; then
+            echo "Missing batch_client binary at $BATCH_CLIENT_BINARY_PATH" >&2
+            echo "Build it with: (cd $ROOT_DIR/clients/batch_client && cargo build --release)" >&2
             exit 1
         fi
     fi
@@ -188,7 +188,7 @@ run_insert() {
     INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:-1}"
     INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:-NO_BALANCE}"
     INSERT_FILEPATH="${INSERT_FILEPATH:?INSERT_FILEPATH is required}"
-    "$STANDARD_BINARY_PATH"
+    "$BATCH_CLIENT_BINARY_PATH"
 }
 
 run_query() {
@@ -201,7 +201,7 @@ run_query() {
     QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:-1}"
     QUERY_BALANCE_STRATEGY="${QUERY_BALANCE_STRATEGY:-NO_BALANCE}"
     QUERY_FILEPATH="${QUERY_FILEPATH:?QUERY_FILEPATH is required}"
-    "$STANDARD_BINARY_PATH"
+    "$BATCH_CLIENT_BINARY_PATH"
 }
 
 run_mixed() {

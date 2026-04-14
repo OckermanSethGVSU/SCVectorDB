@@ -190,7 +190,7 @@ if [ -z "$RESTORE_DIR" ]; then
     sleep 3
 
     export ACTIVE_TASK="INSERT"
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./standard
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
     
     # tell the profs to close and give them time to do so
     if [[ "$TASK" == "INSERT" ]]; then
@@ -218,7 +218,7 @@ if [[ "$TASK" == "QUERY" ]]; then
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 build_index.py
 
     export ACTIVE_TASK="QUERY"
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./standard
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
 
     move_standard_npy_files queryNPY
     summarize_standard_run INSERT uploadNPY
