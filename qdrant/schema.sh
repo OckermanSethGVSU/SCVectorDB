@@ -21,6 +21,7 @@ register_qdrant_var "QDRANT_EXECUTABLE" "default" "qdrant" "qdrant qdrantInsertT
 register_qdrant_var "VECTOR_DIM" "default" "200" "" "Vector dimension"
 register_qdrant_var "DISTANCE_METRIC" "default" "IP" "IP COSINE L2" "Distance metric"
 register_qdrant_var "GPU_INDEX" "default" "False" "True False" "Whether to use GPU indexing"
+register_qdrant_var "REBALANCE_TOPOLOGY" "default" "False" "True False" "Whether configure_collection should actively move shards to the target topology"
 
 
 # Insert / preload workload

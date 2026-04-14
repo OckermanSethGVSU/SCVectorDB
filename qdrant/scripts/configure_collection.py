@@ -13,6 +13,12 @@ from qdrant_client.http.models import (
 )
 
 
+def is_truthy(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 def wait_for_shard_transfer(client, collection_name, shard_id, timeout=60, poll_interval=2):
     """Waits until the specified shard is no longer in a transfer state."""
     start = time.time()
@@ -96,6 +102,7 @@ def load_topology(file_path, use_localhost=True):
 nodes = load_topology("ip_registry.txt", use_localhost=False)
 collection_name = "singleShard"
 run_mode = os.getenv("RUN_MODE", "PBS").strip().lower()
+rebalance_topology = is_truthy(os.getenv("REBALANCE_TOPOLOGY"))
 
 
 
@@ -104,7 +111,6 @@ total_shards = len(nodes)
 # put one shard per node
 for i in range(len(nodes)):
     topology[f"{nodes[i][0]}:{nodes[i][1]}"] = [(i % total_shards)]
-print("Target topo: ", topology, flush=True)
 
 
 
@@ -150,11 +156,16 @@ while True:
         # time.sleep(30)
         exit()
 
-if run_mode == "local":
+if run_mode == "local" or not rebalance_topology:
     time.sleep(2)
     info = client.get_collection(collection_name)
-    print(info, flush=True)
+    print("Initial collection info: ", info,flush=True)
+    time.sleep(10)  
+    if not rebalance_topology:
+        Path("ready.flag").touch()
     exit()
+
+print("Target topo: ", topology, flush=True)
 
 
 
