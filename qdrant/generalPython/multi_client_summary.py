@@ -1,3 +1,4 @@
+import argparse
 import csv
 import os
 import re
@@ -68,7 +69,23 @@ def expected_client_count(task: str) -> int:
     return n_workers * clients_per_worker
 
 
-def discover_ranks(prefix: str, main_prefix: str, expected_clients: int) -> list[int]:
+def resolve_corpus_size(task: str) -> int:
+    explicit = env_optional_int(f"{task}_CORPUS_SIZE")
+    if explicit is not None:
+        return explicit
+
+    if task == "INSERT":
+        npy_path = Path(env_required("INSERT_FILEPATH"))
+    else:
+        npy_path = Path(env_required("QUERY_FILEPATH"))
+
+    arr = np.load(npy_path, mmap_mode="r")
+    if arr.ndim != 2:
+        raise RuntimeError(f"expected a 2D npy array at {npy_path}, got shape {arr.shape}")
+    return int(arr.shape[0])
+
+
+def discover_ranks(prefix: str, main_prefix: str, expected_clients: int, npy_dir: Path) -> list[int]:
     patterns = [
         re.compile(rf"{re.escape(prefix)}_batch_construction_times_rank_(\d+)\.npy$"),
         re.compile(rf"{re.escape(prefix)}_{re.escape(main_prefix)}_rank_(\d+)\.npy$"),
@@ -78,7 +95,7 @@ def discover_ranks(prefix: str, main_prefix: str, expected_clients: int) -> list
 
     for pattern in patterns:
         ranks = set()
-        for path in Path(".").glob("*.npy"):
+        for path in npy_dir.glob("*.npy"):
             match = pattern.fullmatch(path.name)
             if match:
                 ranks.add(int(match.group(1)))
@@ -91,12 +108,22 @@ def discover_ranks(prefix: str, main_prefix: str, expected_clients: int) -> list
     return list(range(expected_clients))
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--npy-dir", default=".", help="Directory containing timing .npy files")
+    parser.add_argument("--output-dir", default=".", help="Directory for summary CSV outputs")
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     task = get_active_task()
     prefix = task.lower()
     batch_size = int(env_required(f"{task}_BATCH_SIZE"))
-    corpus_size = int(env_required(f"{task}_CORPUS_SIZE"))
+    corpus_size = resolve_corpus_size(task)
     clients = expected_client_count(task)
+    npy_dir = Path(args.npy_dir)
+    output_dir = Path(args.output_dir)
 
     if task == "INSERT":
         main_name = "insert"
@@ -105,8 +132,8 @@ def main():
         main_name = "query"
         main_prefix = "query_times"
 
-    summary_path = Path(f"{prefix}_summary.csv")
-    rank_summary_path = Path(f"{prefix}_rank_summary.csv")
+    summary_path = output_dir / f"{prefix}_summary.csv"
+    rank_summary_path = output_dir / f"{prefix}_rank_summary.csv"
     times_csv = Path(f"{prefix}_times.csv")
 
     with rank_summary_path.open("w", newline="") as f:
@@ -117,16 +144,16 @@ def main():
     all_main = []
     all_op = []
 
-    ranks = discover_ranks(prefix, main_prefix, clients)
+    ranks = discover_ranks(prefix, main_prefix, clients, npy_dir)
     if not ranks:
         raise RuntimeError(
             f"no rank timing files found for task={task} (expected up to {clients} ranks)"
         )
 
     for rank in ranks:
-        prep, prep_arr = summarize_npy(Path(f"{prefix}_batch_construction_times_rank_{rank}.npy"), rank, "prep", batch_size)
-        main_stats, main_arr = summarize_npy(Path(f"{prefix}_{main_prefix}_rank_{rank}.npy"), rank, main_name, batch_size)
-        op, op_arr = summarize_npy(Path(f"{prefix}_op_times_rank_{rank}.npy"), rank, "op", batch_size)
+        prep, prep_arr = summarize_npy(npy_dir / f"{prefix}_batch_construction_times_rank_{rank}.npy", rank, "prep", batch_size)
+        main_stats, main_arr = summarize_npy(npy_dir / f"{prefix}_{main_prefix}_rank_{rank}.npy", rank, main_name, batch_size)
+        op, op_arr = summarize_npy(npy_dir / f"{prefix}_op_times_rank_{rank}.npy", rank, "op", batch_size)
 
         with rank_summary_path.open("a", newline="") as f:
             writer = csv.writer(f)

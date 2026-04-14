@@ -136,6 +136,29 @@ mv interfaces*.json interfaces/
 sleep 30
 
 
+summarize_standard_run() {
+    local task_name="$1"
+    local npy_dir="$2"
+    [[ -d "$npy_dir" ]] || return 0
+    shopt -s nullglob
+    local npy_files=("$npy_dir"/*.npy)
+    shopt -u nullglob
+    (( ${#npy_files[@]} > 0 )) || return 0
+    ACTIVE_TASK="$task_name" python3 multi_client_summary.py --npy-dir "$npy_dir" --output-dir .
+}
+
+move_standard_npy_files() {
+    local target_dir="$1"
+    mkdir -p "$target_dir"
+    shopt -s nullglob
+    local npy_files=(./*.npy)
+    if (( ${#npy_files[@]} > 0 )); then
+        mv "${npy_files[@]}" "$target_dir"/
+    fi
+    shopt -u nullglob
+}
+
+
 ########## Workflow ###############
 line=$(head -n 1 ip_registry.txt)
 IFS=',' read -r id ip port <<< "$line"
@@ -170,16 +193,14 @@ if [ -z "$RESTORE_DIR" ]; then
         mv *_system_*.csv systemStats/
     fi
 
-    python3 multi_client_summary.py
-
-    mkdir -p uploadNPY
-    mv *.npy uploadNPY
+    move_standard_npy_files uploadNPY
    
    
     if [[ "$TASK" == "INDEX" ]]; then
 
         # TODO: parameterize index
         NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
+        summarize_standard_run INSERT uploadNPY
         
         touch flag.txt
         touch ./perf/flag.txt
@@ -207,7 +228,9 @@ if [[ "$TASK" == "QUERY" ]]; then
     export ACTIVE_TASK="QUERY"
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
 
-    python3 multi_client_summary.py
+    move_standard_npy_files queryNPY
+    summarize_standard_run INSERT uploadNPY
+    summarize_standard_run QUERY queryNPY
 
     touch flag.txt
     touch ./perf/flag.txt
@@ -215,8 +238,6 @@ if [[ "$TASK" == "QUERY" ]]; then
     mkdir systemStats/
     mv *_system_*.csv systemStats/
 
-    mkdir -p queryNPY
-    mv *.npy queryNPY
 fi
 
 
@@ -302,6 +323,10 @@ if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
 
     # techincally optional but still good to do
     clean-dfuse.sh  ${DAOS_POOL}:${DAOS_CONT}
+fi
+
+if [[ "$TASK" == "INSERT" ]]; then
+    summarize_standard_run INSERT uploadNPY
 fi
 
 mkdir workerOut

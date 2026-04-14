@@ -250,12 +250,23 @@ run_mixed() {
 }
 
 summarize_standard_run() {
-    python3 ./multi_client_summary.py
-    mkdir -p uploadNPY
+    local task_name="$1"
+    local npy_dir="$2"
+    [[ -d "$npy_dir" ]] || return 0
+    shopt -s nullglob
+    local npy_files=("$npy_dir"/*.npy)
+    shopt -u nullglob
+    (( ${#npy_files[@]} > 0 )) || return 0
+    ACTIVE_TASK="$task_name" python3 ./multi_client_summary.py --npy-dir "$npy_dir" --output-dir .
+}
+
+move_standard_npy_files() {
+    local target_dir="$1"
+    mkdir -p "$target_dir"
     shopt -s nullglob
     local npy_files=(./*.npy)
     if (( ${#npy_files[@]} > 0 )); then
-        mv "${npy_files[@]}" uploadNPY/
+        mv "${npy_files[@]}" "$target_dir"/
     fi
     shopt -u nullglob
 }
@@ -323,15 +334,17 @@ main() {
         run_insert
 
         if [[ "$TASK" == "INSERT" ]]; then
-            summarize_standard_run
+            move_standard_npy_files uploadNPY
+            summarize_standard_run INSERT uploadNPY
             finalize_local_run
             return 0
         fi
 
-        summarize_standard_run
+        move_standard_npy_files uploadNPY
 
         if [[ "$TASK" == "INDEX" ]]; then
             run_index
+            summarize_standard_run INSERT uploadNPY
             finalize_local_run
             return 0
         fi
@@ -351,7 +364,9 @@ main() {
 
     if [[ "$TASK" == "QUERY" ]]; then
         run_query
-        summarize_standard_run
+        move_standard_npy_files queryNPY
+        summarize_standard_run INSERT uploadNPY
+        summarize_standard_run QUERY queryNPY
         finalize_local_run
         return 0
     fi
