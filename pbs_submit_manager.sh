@@ -120,7 +120,7 @@ while IFS= read -r combo; do
         "$MAIN_SCRIPT_RELATIVE_PATH"
 
     write_run_config_snapshot \
-        "$RUN_DIR_PATH/resolved_config.env" \
+        "$RUN_DIR_PATH/run_config.env" \
         "$ENGINE_BASENAME" \
         "$RUN_DIR_NAME"
 

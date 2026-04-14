@@ -284,8 +284,12 @@ write_submit_script() {
 
     {
         write_pbs_header
-        echo "myDIR=${run_dir}"
-        engine_emit_runtime_env
+        cat <<'EOF'
+set -a
+source ./run_config.env
+set +a
+
+EOF
         echo
         cat "$engine_dir/$main_script"
     } > "$target_file"
@@ -299,15 +303,17 @@ write_run_config_snapshot() {
     local run_dir="$3"
 
     {
-        echo "ENGINE=${engine_name}"
-        echo "myDIR=${run_dir}"
-        echo "PLATFORM=${PLATFORM}"
-        echo "ACCOUNT=${ACCOUNT}"
-        echo "WALLTIME=${WALLTIME}"
-        echo "QUEUE=${QUEUE}"
-        echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}"
-        echo "GENERATE_ONLY=${GENERATE_ONLY}"
-        engine_emit_runtime_env
+        {
+            echo "ENGINE=${engine_name}"
+            echo "myDIR=${run_dir}"
+            echo "PLATFORM=${PLATFORM}"
+            echo "ACCOUNT=${ACCOUNT}"
+            echo "WALLTIME=${WALLTIME}"
+            echo "QUEUE=${QUEUE}"
+            echo "STORAGE_MEDIUM=${STORAGE_MEDIUM}"
+            echo "GENERATE_ONLY=${GENERATE_ONLY}"
+            engine_emit_runtime_env
+        } | awk -F= '!seen[$1]++'
     } > "$target_file"
 }
 
