@@ -22,9 +22,9 @@ register_qdrant_var "LOG_LEVEL" "default" "ERROR" "" "Qdrant log level passed to
 register_qdrant_var "VECTOR_DIM" "default" "200" "" "Vector dimension"
 register_qdrant_var "DISTANCE_METRIC" "default" "IP" "IP COSINE L2" "Distance metric"
 register_qdrant_var "GPU_INDEX" "default" "False" "True False" "Whether to use GPU indexing"
-register_qdrant_var "REBALANCE_TOPOLOGY" "default" "False" "True False" "Whether configure_collection should actively move shards to the target topology"
 register_qdrant_var "HNSW_M" "default" "16" "" "HNSW M parameter"
 register_qdrant_var "HNSW_EF_CONSTRUCTION" "default" "100" "" "HNSW efConstruction parameter"
+register_qdrant_var "REBALANCE_TOPOLOGY" "default" "False" "True False" "Whether configure_collection should actively move shards to the target topology"
 
 
 # Insert / preload workload
@@ -43,6 +43,7 @@ register_qdrant_var "QUERY_CLIENTS_PER_WORKER" "conditional" "1" "" "Query clien
 register_qdrant_var "TOTAL_QUERY_CLIENTS" "conditional" "1" "" "Total query clients across the run" "TASK=QUERY|MIXED"
 register_qdrant_var "QUERY_BALANCE_STRATEGY" "conditional" "NO_BALANCE" "NO_BALANCE WORKER_BALANCE" "Query balancing policy" "TASK=QUERY|MIXED"
 register_qdrant_var "QUERY_STREAMING" "default" "" "True False" "Enable query streaming behavior"
+register_qdrant_var "HNSW_EF_SEARCH" "default" "64" "" "Query efSearch override"
 
 # Mixed workload controls
 register_qdrant_var "MIXED_DATA_FILEPATH" "conditional" "" "" "Mixed workload data file" "TASK=MIXED"
@@ -62,7 +63,6 @@ register_qdrant_var "QUERY_BATCH_MAX" "default" "" "" "Optional randomized query
 
 register_qdrant_var "COLLECTION_NAME" "default" "" "" "Optional collection override"
 register_qdrant_var "TOP_K" "default" "" "" "Optional top-k override"
-register_qdrant_var "HNSW_EF_SEARCH" "default" "64" "" "Query efSearch override"
 register_qdrant_var "RPC_TIMEOUT" "default" "" "" "Optional RPC timeout override"
 
 # Restore / recovery
