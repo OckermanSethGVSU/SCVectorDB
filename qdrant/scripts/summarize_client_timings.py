@@ -140,8 +140,6 @@ def main():
         writer = csv.writer(f)
         writer.writerow(["rank", "operation", "total", "mean", "std", "p99", "rank_op/s", "rank_v/s"])
 
-    all_prep = []
-    all_main = []
     all_op = []
 
     ranks = discover_ranks(prefix, main_prefix, clients, npy_dir)
@@ -151,8 +149,8 @@ def main():
         )
 
     for rank in ranks:
-        prep, prep_arr = summarize_npy(npy_dir / f"{prefix}_batch_construction_times_rank_{rank}.npy", rank, "prep", batch_size)
-        main_stats, main_arr = summarize_npy(npy_dir / f"{prefix}_{main_prefix}_rank_{rank}.npy", rank, main_name, batch_size)
+        prep, _prep_arr = summarize_npy(npy_dir / f"{prefix}_batch_construction_times_rank_{rank}.npy", rank, "prep", batch_size)
+        main_stats, _main_arr = summarize_npy(npy_dir / f"{prefix}_{main_prefix}_rank_{rank}.npy", rank, main_name, batch_size)
         op, op_arr = summarize_npy(npy_dir / f"{prefix}_op_times_rank_{rank}.npy", rank, "op", batch_size)
 
         with rank_summary_path.open("a", newline="") as f:
@@ -161,20 +159,14 @@ def main():
             writer.writerow(main_stats)
             writer.writerow(op)
 
-        all_prep.append(prep_arr)
-        all_main.append(main_arr)
         all_op.append(op_arr)
 
     total_time_sec = extract_total_time(times_csv)
-    stacked_prep = np.concatenate(all_prep)
-    stacked_main = np.concatenate(all_main)
     stacked_op = np.concatenate(all_op)
 
     with summary_path.open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["rank", "operation", "total", "mean", "std", "p99", "rank_op/s", "rank_v/s"])
-        writer.writerow(aggregate_stats("prep", stacked_prep, total_time_sec, corpus_size))
-        writer.writerow(aggregate_stats(main_name, stacked_main, total_time_sec, corpus_size))
         writer.writerow(aggregate_stats("op", stacked_op, total_time_sec, corpus_size))
 
 
