@@ -456,20 +456,16 @@ engine_copy_payload() {
 
     if [[ -n "$RESTORE_DIR" ]]; then
         copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "fix_peer_id.py" "collection_status.py"
-        mv "$target_dir/collection_status.py" "$target_dir/status.py"
     fi
 
     copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "summarize_client_timings.py"
-    mv "$target_dir/summarize_client_timings.py" "$target_dir/multi_client_summary.py"
 
     if [[ -z "$RESTORE_DIR" ]]; then
         copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "configure_collection.py"
-        mv "$target_dir/configure_collection.py" "$target_dir/configureTopo.py"
     fi
 
     if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
         copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "build_index.py"
-        mv "$target_dir/build_index.py" "$target_dir/index.py"
     fi
 
     if [[ "$TASK" == "MIXED" ]]; then
