@@ -421,23 +421,24 @@ engine_copy_payload() {
                 copy_engine_items "$ENGINE_DIR/clients/mixed/target/release" "$target_dir" "mixed"
             elif [[ -f "$ENGINE_DIR/clients/mixed/mixed" ]]; then
                 copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed"
+            else
+                echo "Required mixed client binary missing for TASK=MIXED" >&2
+                return 1
             fi
-            if [[ -f "$ENGINE_DIR/clients/mixed/src/main.rs" ]]; then
-                cp "$ENGINE_DIR/clients/mixed/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
-            fi
+            cp "$ENGINE_DIR/clients/mixed/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
         fi
     else
         copy_engine_items "$ENGINE_DIR" "$target_dir" "qdrant.sif"
         copy_engine_items "$ENGINE_DIR/runtime/cluster" "$target_dir" "launchQdrantNode.sh" "launch.sh"
 
-        if [[ -n "$QDRANT_EXECUTABLE" && -f "$ENGINE_DIR/qdrantBuilds/${QDRANT_EXECUTABLE}" ]]; then
+        if [[ -n "$QDRANT_EXECUTABLE" ]]; then
             copy_engine_items "$ENGINE_DIR/qdrantBuilds" "$target_dir" "$QDRANT_EXECUTABLE"
             mv "$target_dir/$QDRANT_EXECUTABLE" "$target_dir/qdrant"
         fi
 
         copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "profile.py" "gen_dirs.py" "mapping.py"
         if [[ -d "$ENGINE_DIR/perf" ]]; then
-            copy_engine_items "$ENGINE_DIR" "$target_dir" "perf"
+            copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "perf"
         fi
 
         copy_engine_items "$ENGINE_DIR/clients/standard" "$target_dir" "standard"
@@ -447,10 +448,11 @@ engine_copy_payload() {
                 copy_engine_items "$ENGINE_DIR/clients/mixed/target/release" "$target_dir" "mixed"
             elif [[ -f "$ENGINE_DIR/clients/mixed/mixed" ]]; then
                 copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed"
+            else
+                echo "Required mixed client binary missing for TASK=MIXED" >&2
+                return 1
             fi
-            if [[ -f "$ENGINE_DIR/clients/mixed/src/main.rs" ]]; then
-                cp "$ENGINE_DIR/clients/mixed/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
-            fi
+            cp "$ENGINE_DIR/clients/mixed/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
         fi
     fi
 

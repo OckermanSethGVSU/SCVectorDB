@@ -365,7 +365,7 @@ engine_copy_payload() {
             if [[ -f "$target_dir/main.go" ]]; then
                 mv "$target_dir/main.go" "$target_dir/mixed_main.go"
             fi
-            copy_engine_items "$ENGINE_DIR/../qdrant/generalPython" "$target_dir" "mixed_timeline.py"
+            copy_engine_items "$ENGINE_DIR/../qdrant/scripts" "$target_dir" "mixed_timeline.py"
         fi
 
         if [[ -z "$RESTORE_DIR" ]]; then
@@ -416,7 +416,7 @@ engine_copy_payload() {
             if [[ -f "$target_dir/main.go" ]]; then
                 mv "$target_dir/main.go" "$target_dir/mixed_main.go"
             fi
-            copy_engine_items "$ENGINE_DIR/../qdrant/generalPython" "$target_dir" "mixed_timeline.py"
+            copy_engine_items "$ENGINE_DIR/../qdrant/scripts" "$target_dir" "mixed_timeline.py"
         fi
 
         if [[ -z "$RESTORE_DIR" ]]; then

@@ -157,9 +157,12 @@ engine_copy_payload() {
         mv "$target_dir/goCode/test/$WEAVIATE_CLIENT_BINARY" "$target_dir/$WEAVIATE_CLIENT_BINARY"
         rmdir "$target_dir/goCode/test" 2>/dev/null || true
         rmdir "$target_dir/goCode" 2>/dev/null || true
+    else
+        echo "Required Weaviate client binary missing: $WEAVIATE_CLIENT_BINARY" >&2
+        return 1
     fi
 
     if [[ -d "$ENGINE_DIR/perf" ]]; then
-        copy_engine_items "$ENGINE_DIR" "$target_dir" "perf"
+        copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "perf"
     fi
 }

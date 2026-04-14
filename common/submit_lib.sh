@@ -227,20 +227,40 @@ resolve_engine_dir() {
     esac
 }
 
-copy_engine_items() {
+copy_engine_items_internal() {
     local src_root="$1"
     local dest_root="$2"
+    local missing_ok="$3"
     shift 2
+    shift 1
 
     local item
     for item in "$@"; do
         if [[ ! -e "$src_root/$item" ]]; then
-            continue
+            if [[ "$missing_ok" == "true" ]]; then
+                continue
+            fi
+            echo "Required payload item missing: $src_root/$item" >&2
+            return 1
         fi
 
         mkdir -p "$dest_root/$(dirname "$item")"
         cp -R "$src_root/$item" "$dest_root/$item"
     done
+}
+
+copy_engine_items() {
+    local src_root="$1"
+    local dest_root="$2"
+    shift 2
+    copy_engine_items_internal "$src_root" "$dest_root" "false" "$@"
+}
+
+copy_optional_engine_items() {
+    local src_root="$1"
+    local dest_root="$2"
+    shift 2
+    copy_engine_items_internal "$src_root" "$dest_root" "true" "$@"
 }
 
 emit_platform_filesystems() {
