@@ -75,7 +75,7 @@ apptainer exec \
     --fakeroot \
     --writable-tmpfs \
     --pwd /qdrant \
-    --bind ./perf/:/perf/ \
+    --bind ./runtime_state/:/runtime_state/ \
     --bind ./ip_registry.txt:/ip_registry.txt \
     --bind ./ip_registry.d:/qdrant/ip_registry.d \
     --bind ./launch.sh:/qdrant/launch.sh \

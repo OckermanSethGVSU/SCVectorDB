@@ -7,7 +7,7 @@ DATA_DIR="${QDRANT_LOCAL_DATA_DIR:-$ROOT_DIR/.local/qdrant/storage}"
 CONFIG_DIR="${QDRANT_LOCAL_CONFIG_DIR:-$ROOT_DIR/.local/qdrant/config}"
 SNAPSHOT_DIR="${QDRANT_LOCAL_SNAPSHOT_DIR:-$ROOT_DIR/.local/qdrant/snapshots}"
 OUTPUT_DIR="${QDRANT_LOCAL_OUTPUT_DIR:-$ROOT_DIR/local_test_data}"
-PERF_DIR="${QDRANT_LOCAL_PERF_DIR:-$ROOT_DIR/perf}"
+RUNTIME_STATE_DIR="${QDRANT_LOCAL_RUNTIME_STATE_DIR:-$ROOT_DIR/runtime_state}"
 REGISTRY_PATH="${QDRANT_LOCAL_REGISTRY_PATH:-$ROOT_DIR/ip_registry.txt}"
 
 if command -v docker >/dev/null 2>&1; then
@@ -30,7 +30,7 @@ if [[ -n "$CONTAINER_RUNTIME" ]]; then
 fi
 
 rm -f "$REGISTRY_PATH"
-rm -f "$PERF_DIR/workflow_start.txt" "$PERF_DIR/workflow_stop.txt"
+rm -f "$RUNTIME_STATE_DIR/workflow_start.txt" "$RUNTIME_STATE_DIR/workflow_stop.txt"
 rm -f "$ROOT_DIR"/*.txt "$ROOT_DIR"/*.csv "$ROOT_DIR"/*.out "$ROOT_DIR"/*.json "$ROOT_DIR"/*.yaml
 rm -f "$ROOT_DIR"/insert_*_rank_*.npy "$ROOT_DIR"/query_*_rank_*.npy
 rm -f "$ROOT_DIR"/insert_times.csv "$ROOT_DIR"/query_times.csv

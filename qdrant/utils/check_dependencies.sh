@@ -9,7 +9,7 @@ fi
 
 required_paths=(
     "qdrant.sif"
-    "perf/perf"
+    "runtime_state/perf"
     "runtime/cluster/launchQdrantNode.sh"
     "runtime/cluster/launch.sh"
     "scripts/gen_dirs.py"

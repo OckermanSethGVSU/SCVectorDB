@@ -37,7 +37,7 @@ P2P_PORT="${QDRANT_LOCAL_P2P_PORT:-6335}"
 DATA_DIR="${QDRANT_LOCAL_DATA_DIR:-$RUN_DIR/.local/qdrant/storage}"
 CONFIG_DIR="${QDRANT_LOCAL_CONFIG_DIR:-$RUN_DIR/.local/qdrant/config}"
 SNAPSHOT_DIR="${QDRANT_LOCAL_SNAPSHOT_DIR:-$RUN_DIR/.local/qdrant/snapshots}"
-PERF_DIR="${RUN_DIR}/perf"
+RUNTIME_STATE_DIR="${RUN_DIR}/runtime_state"
 STANDARD_BINARY_PATH="${STANDARD_BINARY_PATH:-}"
 MIXED_BINARY_PATH="${MIXED_BINARY_PATH:-}"
 QUERY_DEBUG_RESULTS="${QUERY_DEBUG_RESULTS:-true}"
@@ -48,7 +48,7 @@ export QDRANT_REST_PORT="$HTTP_PORT"
 export QDRANT_GRPC_PORT="$GRPC_PORT"
 export QDRANT_URL="http://${HOST}:${GRPC_PORT}"
 
-mkdir -p "$DATA_DIR" "$CONFIG_DIR" "$SNAPSHOT_DIR" "$PERF_DIR"
+mkdir -p "$DATA_DIR" "$CONFIG_DIR" "$SNAPSHOT_DIR" "$RUNTIME_STATE_DIR"
 
 pick_binary() {
     local override="$1"
@@ -134,7 +134,7 @@ start_qdrant() {
     fi
 
     printf '0,%s,%s\n' "$HOST" "$P2P_PORT" > "$QDRANT_REGISTRY_PATH"
-    rm -f "$PERF_DIR/workflow_start.txt" "$PERF_DIR/workflow_stop.txt"
+    rm -f "$RUNTIME_STATE_DIR/workflow_start.txt" "$RUNTIME_STATE_DIR/workflow_stop.txt"
 
     echo "Waiting for Qdrant health check on http://${HOST}:${HTTP_PORT}/healthz ..."
     for _ in {1..60}; do
@@ -259,7 +259,7 @@ move_standard_npy_files() {
 }
 
 finalize_local_run() {
-    touch flag.txt "$PERF_DIR/flag.txt"
+    touch flag.txt "$RUNTIME_STATE_DIR/flag.txt"
     mkdir -p systemStats
     shopt -s nullglob
     local system_files=(./*_system_*.csv)

@@ -92,7 +92,7 @@ done
 while true; do
   all_running=1
   for ((rank=0; rank<=MAX_RANK; rank++)); do
-    if [ ! -e "./perf/qdrant_running${rank}.txt" ]; then
+    if [ ! -e "./runtime_state/qdrant_running${rank}.txt" ]; then
       all_running=0
       break
     fi
@@ -166,7 +166,7 @@ if [ -z "$RESTORE_DIR" ]; then
     # tell the profs to close and give them time to do so
     if [[ "$TASK" == "INSERT" ]]; then
         touch flag.txt
-        touch ./perf/flag.txt
+        touch ./runtime_state/flag.txt
         sleep 30
         mkdir systemStats/
         mv *_system_*.csv systemStats/
@@ -182,7 +182,7 @@ if [ -z "$RESTORE_DIR" ]; then
         summarize_standard_run INSERT uploadNPY
         
         touch flag.txt
-        touch ./perf/flag.txt
+        touch ./runtime_state/flag.txt
         sleep 30
         mkdir systemStats/
         mv *_system_*.csv systemStats/
@@ -204,7 +204,7 @@ if [[ "$TASK" == "QUERY" ]]; then
     summarize_standard_run QUERY queryNPY
 
     touch flag.txt
-    touch ./perf/flag.txt
+    touch ./runtime_state/flag.txt
     sleep 30
     mkdir systemStats/
     mv *_system_*.csv systemStats/
@@ -249,7 +249,7 @@ if [[ "$TASK" == "MIXED" ]]; then
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 "${MIXED_TIMELINE_ARGS[@]}"
 
     touch flag.txt
-    touch ./perf/flag.txt
+    touch ./runtime_state/flag.txt
     sleep 30
     mkdir systemStats/
     mv *_system_*.csv systemStats/

@@ -2,7 +2,7 @@
 
 if [[ "$PERF" == "STAT" || "$PERF" == "TRACE" ]]; then
     apt-get update && apt-get install -y libatomic1 libelf-dev libdw-dev libslang2-dev libperl-dev python3-dev libnuma-dev libtraceevent-dev curl
-    export PATH="/perf/:$PATH"
+    export PATH="/runtime_state/:$PATH"
 fi
 
 healthcheck() {
@@ -68,7 +68,7 @@ if [[ $RANK -eq 0 ]]; then
         if NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" healthcheck "$IP_ADDR" "$HTTP_PORT"; then
             echo "Rank ${RANK} qdrant ${IP_ADDR}:{P2P_PORT} is healthy"
             healthy=true
-            touch /perf/qdrant_running${RANK}.txt
+            touch /runtime_state/qdrant_running${RANK}.txt
             break
         fi
         sleep 1
@@ -85,7 +85,7 @@ if [[ $RANK -eq 0 ]]; then
   done
 else
   # wait until the first rank is online
-  TARGET="/perf/qdrant_running0.txt"
+  TARGET="/runtime_state/qdrant_running0.txt"
   while [ ! -e "$TARGET" ]; do
     sleep 0.1
   done
@@ -104,7 +104,7 @@ else
         if NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" healthcheck "$IP_ADDR" "$HTTP_PORT"; then
             echo "Rank ${RANK} qdrant ${IP_ADDR}:{P2P_PORT} is healthy"
             healthy=true
-            touch /perf/qdrant_running${RANK}.txt
+            touch /runtime_state/qdrant_running${RANK}.txt
             break
         fi
         sleep 1
@@ -125,7 +125,7 @@ else
 fi
 
 # wait until the file exists
-TARGET="/perf/workflow_start.txt"
+TARGET="/runtime_state/workflow_start.txt"
 while [ ! -e "$TARGET" ]; do
   sleep 0.1
 done
@@ -133,20 +133,20 @@ done
 
 if [[ "$PERF" == "TRACE" ]]; then
     echo "Rank ${RANK} Launching perf record"
-    /perf/perf record -F 99 --call-graph fp -g --proc-map-timeout 5000 -o /perf/perf${RANK}.data  -p "$QDRANT_PID" &
+    /runtime_state/perf record -F 99 --call-graph fp -g --proc-map-timeout 5000 -o /runtime_state/perf${RANK}.data  -p "$QDRANT_PID" &
     PERF_PID=$!
 
 elif [[ "$PERF" == "STAT" ]]; then
     echo "Rank ${RANK} Launching perf stat"
     DEFAULT_PERF_STAT_EVENTS="cycles,instructions,branches,branch-misses,cache-misses"
     PERF_STAT_EVENTS="${PERF_EVENTS:-$DEFAULT_PERF_STAT_EVENTS}"
-    /perf/perf stat  -e "$PERF_STAT_EVENTS" -o /perf/perf${RANK}.data  -p "$QDRANT_PID" &
+    /runtime_state/perf stat  -e "$PERF_STAT_EVENTS" -o /runtime_state/perf${RANK}.data  -p "$QDRANT_PID" &
     PERF_PID=$!
 fi
 
 
 # wait until the file exists
-TARGET="/perf/workflow_stop.txt"
+TARGET="/runtime_state/workflow_stop.txt"
 while [ ! -e "$TARGET" ]; do
   sleep 0.1
 done
@@ -160,7 +160,7 @@ fi
 
 
 # wait until our main script signals it is safe to close
-TARGET="/perf/flag.txt"
+TARGET="/runtime_state/flag.txt"
 while [ ! -e "$TARGET" ]; do
   sleep 0.1
 done

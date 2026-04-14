@@ -437,8 +437,8 @@ engine_copy_payload() {
         fi
 
         copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "profile.py" "gen_dirs.py" "mapping.py"
-        if [[ -d "$ENGINE_DIR/perf" ]]; then
-            copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "perf"
+        if [[ -d "$ENGINE_DIR/runtime_state" ]]; then
+            copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "runtime_state"
         fi
 
         copy_engine_items "$ENGINE_DIR/clients/standard" "$target_dir" "standard"

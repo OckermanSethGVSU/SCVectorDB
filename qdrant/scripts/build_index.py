@@ -40,7 +40,7 @@ def get_line(path, line_no):
 
 
 def mark_perf_event(filename):
-    perf_dir = "perf"
+    perf_dir = "runtime_state"
     os.makedirs(perf_dir, exist_ok=True)
     open(os.path.join(perf_dir, filename), "a").close()
 

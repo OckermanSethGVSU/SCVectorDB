@@ -892,7 +892,7 @@ async fn run_upload(
     let mut elapsed_count_times = Vec::new();
 
     if rank == 0 {
-        File::create("./perf/workflow_start.txt")?;
+        File::create("./runtime_state/workflow_start.txt")?;
         sleep(Duration::from_secs(3)).await;
     }
     barrier.wait().await;
@@ -958,7 +958,7 @@ async fn run_upload(
     let global_end = Utc::now();
 
     if rank == 0 {
-        File::create("./perf/workflow_stop.txt")?;
+        File::create("./runtime_state/workflow_stop.txt")?;
         sleep(Duration::from_secs(3)).await;
     }
 
@@ -1256,7 +1256,7 @@ async fn run_upload_streaming(
     let mut elapsed_count_times = Vec::new();
 
     if rank == 0 {
-        File::create("./perf/workflow_start.txt")?;
+        File::create("./runtime_state/workflow_start.txt")?;
         sleep(Duration::from_secs(3)).await;
     }
     barrier.wait().await;
@@ -1328,7 +1328,7 @@ async fn run_upload_streaming(
     let global_end = Utc::now();
 
     if rank == 0 {
-        File::create("./perf/workflow_stop.txt")?;
+        File::create("./runtime_state/workflow_stop.txt")?;
         sleep(Duration::from_secs(3)).await;
     }
 
