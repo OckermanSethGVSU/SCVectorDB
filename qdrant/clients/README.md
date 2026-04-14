@@ -4,13 +4,13 @@ This directory contains the Rust client projects used by the Qdrant workflows in
 
 ## Projects
 
-- `standard`: current combined insert/query client used by `qdrant/main.sh`
+- `batch_client`: current combined insert/query client used by `qdrant/main.sh`
 - `upload`: older upload-only client kept for experiments
 - `query`: older query-only client kept for experiments
 - `mixed`: mixed insert/query runner with per-worker JSONL event logs
 - `build.sh`: helper that builds a named Rust project and copies the produced binary into the current directory
 
-## `standard`
+## `batch_client`
 
 ### Behavior
 
@@ -134,7 +134,7 @@ Query mode:
 From `qdrant/clients`:
 
 ```bash
-./build.sh standard
+./build.sh batch_client
 ./build.sh mixed
 ```
 
@@ -147,14 +147,14 @@ Older projects can also be built:
 
 Expected binary paths after build:
 
-- `qdrant/clients/standard/standard`
+- `qdrant/clients/batch_client/batch_client`
 - `qdrant/clients/mixed/mixed`
 - `qdrant/clients/upload/upload`
 - `qdrant/clients/query/query`
 
 ## Local Workflow
 
-The main local workflow is driven by `qdrant/local_main.sh`, which starts a disposable local Qdrant instance and runs either the standard client or the mixed client depending on `TASK`.
+The main local workflow is driven by `qdrant/local_main.sh`, which starts a disposable local Qdrant instance and runs either the `batch_client` or the mixed client depending on `TASK`.
 
 Example:
 
@@ -166,7 +166,7 @@ STREAMING=true ./local_main.sh
 
 Useful overrides:
 
-- `RUST_BINARY=/path/to/standard`
+- `RUST_BINARY=/path/to/batch_client`
 - `VECTOR_DIM=8`
 - `DISTANCE_METRIC=Dot`
 - `TEST_ROWS=16`

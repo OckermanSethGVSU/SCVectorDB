@@ -417,8 +417,8 @@ engine_copy_payload() {
     fi
 
     if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
-        copy_engine_items "$ENGINE_DIR/clients/standard" "$target_dir" "standard"
-        copy_engine_items "$ENGINE_DIR/clients/standard/src" "$target_dir/rustSrc" "main.rs"
+        copy_engine_items "$ENGINE_DIR/clients/batch_client" "$target_dir" "batch_client"
+        copy_engine_items "$ENGINE_DIR/clients/batch_client/src" "$target_dir/rustSrc" "main.rs"
         if [[ "$TASK" == "MIXED" ]]; then
             if [[ -f "$ENGINE_DIR/clients/mixed/target/release/mixed" ]]; then
                 copy_engine_items "$ENGINE_DIR/clients/mixed/target/release" "$target_dir" "mixed"
@@ -441,8 +441,8 @@ engine_copy_payload() {
 
         copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "profile.py" "gen_dirs.py" "mapping.py"
 
-        copy_engine_items "$ENGINE_DIR/clients/standard" "$target_dir" "standard"
-        copy_engine_items "$ENGINE_DIR/clients/standard/src" "$target_dir/rustSrc" "main.rs"
+        copy_engine_items "$ENGINE_DIR/clients/batch_client" "$target_dir" "batch_client"
+        copy_engine_items "$ENGINE_DIR/clients/batch_client/src" "$target_dir/rustSrc" "main.rs"
         if [[ "$TASK" == "MIXED" ]]; then
             if [[ -f "$ENGINE_DIR/clients/mixed/target/release/mixed" ]]; then
                 copy_engine_items "$ENGINE_DIR/clients/mixed/target/release" "$target_dir" "mixed"
