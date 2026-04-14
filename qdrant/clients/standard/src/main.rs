@@ -1037,9 +1037,9 @@ async fn write_upload_header(csv_path: &str, lock: &Mutex<()>) -> anyhow::Result
     w.write_record([
         "rank",
         "sanity_check",
-        "loop_duration",
-        "wait_period",
-        "total",
+        "loop_duration_s",
+        "wait_period_s",
+        "total_s",
         "start_loop_utc",
         "end_loop_utc",
         "global_end_utc",
@@ -1588,9 +1588,9 @@ async fn write_query_header(csv_path: &str, lock: &Mutex<()>) -> anyhow::Result<
 
     w.write_record([
         "rank",
-        "loop_duration",
-        "wait_period",
-        "total",
+        "loop_duration_s",
+        "wait_period_s",
+        "total_s",
         "start_loop_utc",
         "end_loop_utc",
         "global_end_utc",

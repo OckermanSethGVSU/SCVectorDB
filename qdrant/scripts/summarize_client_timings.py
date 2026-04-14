@@ -7,6 +7,18 @@ from pathlib import Path
 import numpy as np
 
 
+SUMMARY_HEADER = [
+    "scope",
+    "operation",
+    "total_ms",
+    "mean_ms",
+    "std_ms",
+    "p99_ms",
+    "ops_per_s",
+    "vecs_per_s",
+]
+
+
 def env_required(name: str) -> str:
     value = os.getenv(name)
     if value is None or value.strip() == "":
@@ -41,12 +53,12 @@ def summarize_npy(path: Path, rank: int, name: str, batch_size: int):
     return [rank, name, total_ms, float(np.mean(arr)), float(np.std(arr)), float(np.percentile(arr, 99)), ops_per_sec, vecs_per_sec], arr
 
 
-def aggregate_stats(name: str, arr: np.ndarray, total_time_sec: float, corpus_size: int):
+def aggregate_stats(label: str, arr: np.ndarray, total_time_sec: float, corpus_size: int):
     total_ms = float(np.sum(arr))
     op_count = len(arr)
     ops_per_sec = op_count / total_time_sec if total_time_sec else 0.0
     vecs_per_sec = corpus_size / total_time_sec if total_time_sec else 0.0
-    return ["all", name, total_ms, float(np.mean(arr)), float(np.std(arr)), float(np.percentile(arr, 99)), ops_per_sec, vecs_per_sec]
+    return ["aggregate", label, total_ms, float(np.mean(arr)), float(np.std(arr)), float(np.percentile(arr, 99)), ops_per_sec, vecs_per_sec]
 
 
 def extract_total_time(csv_path: Path) -> float:
@@ -54,7 +66,12 @@ def extract_total_time(csv_path: Path) -> float:
         reader = csv.DictReader(f)
         for row in reader:
             if row.get("rank") == "0":
-                return float(row["total"])
+                total_value = row.get("total_s")
+                if total_value is None:
+                    raise RuntimeError(
+                        f"missing total_s column in {csv_path}; saw columns {reader.fieldnames}"
+                    )
+                return float(total_value)
     raise RuntimeError(f"rank 0 total not found in {csv_path}")
 
 
@@ -138,7 +155,7 @@ def main():
 
     with rank_summary_path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["rank", "operation", "total", "mean", "std", "p99", "rank_op/s", "rank_v/s"])
+        writer.writerow(SUMMARY_HEADER)
 
     all_op = []
 
@@ -166,8 +183,8 @@ def main():
 
     with summary_path.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["rank", "operation", "total", "mean", "std", "p99", "rank_op/s", "rank_v/s"])
-        writer.writerow(aggregate_stats("op", stacked_op, total_time_sec, corpus_size))
+        writer.writerow(SUMMARY_HEADER)
+        writer.writerow(aggregate_stats(main_name, stacked_op, total_time_sec, corpus_size))
 
 
 if __name__ == "__main__":

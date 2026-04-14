@@ -412,6 +412,9 @@ engine_copy_payload() {
     local target_dir="$1"
 
     mkdir -p "$target_dir/rustSrc"
+    if [[ -d "$ENGINE_DIR/runtime_state" ]]; then
+        copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "runtime_state"
+    fi
 
     if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
         copy_engine_items "$ENGINE_DIR/clients/standard" "$target_dir" "standard"
@@ -437,9 +440,6 @@ engine_copy_payload() {
         fi
 
         copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "profile.py" "gen_dirs.py" "mapping.py"
-        if [[ -d "$ENGINE_DIR/runtime_state" ]]; then
-            copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "runtime_state"
-        fi
 
         copy_engine_items "$ENGINE_DIR/clients/standard" "$target_dir" "standard"
         copy_engine_items "$ENGINE_DIR/clients/standard/src" "$target_dir/rustSrc" "main.rs"
