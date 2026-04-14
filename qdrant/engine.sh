@@ -414,61 +414,65 @@ engine_copy_payload() {
     mkdir -p "$target_dir/rustSrc"
 
     if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
-        copy_engine_items "$ENGINE_DIR/rustCode/multiClientOP" "$target_dir" "multiClientOP"
-        copy_engine_items "$ENGINE_DIR/rustCode/multiClientOP/src" "$target_dir/rustSrc" "main.rs"
+        copy_engine_items "$ENGINE_DIR/clients/standard" "$target_dir" "standard"
+        copy_engine_items "$ENGINE_DIR/clients/standard/src" "$target_dir/rustSrc" "main.rs"
         if [[ "$TASK" == "MIXED" ]]; then
-            if [[ -f "$ENGINE_DIR/rustCode/mixedRunner/target/release/mixedrunner" ]]; then
-                copy_engine_items "$ENGINE_DIR/rustCode/mixedRunner/target/release" "$target_dir" "mixedrunner"
-            elif [[ -f "$ENGINE_DIR/rustCode/mixedRunner/mixedrunner" ]]; then
-                copy_engine_items "$ENGINE_DIR/rustCode/mixedRunner" "$target_dir" "mixedrunner"
+            if [[ -f "$ENGINE_DIR/clients/mixed/target/release/mixed" ]]; then
+                copy_engine_items "$ENGINE_DIR/clients/mixed/target/release" "$target_dir" "mixed"
+            elif [[ -f "$ENGINE_DIR/clients/mixed/mixed" ]]; then
+                copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed"
             fi
-            if [[ -f "$ENGINE_DIR/rustCode/mixedRunner/src/main.rs" ]]; then
-                cp "$ENGINE_DIR/rustCode/mixedRunner/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
+            if [[ -f "$ENGINE_DIR/clients/mixed/src/main.rs" ]]; then
+                cp "$ENGINE_DIR/clients/mixed/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
             fi
         fi
     else
         copy_engine_items "$ENGINE_DIR" "$target_dir" "qdrant.sif"
-        copy_engine_items "$ENGINE_DIR/qdrantSetup" "$target_dir" "launchQdrantNode.sh" "launch.sh"
+        copy_engine_items "$ENGINE_DIR/runtime/cluster" "$target_dir" "launchQdrantNode.sh" "launch.sh"
 
         if [[ -n "$QDRANT_EXECUTABLE" && -f "$ENGINE_DIR/qdrantBuilds/${QDRANT_EXECUTABLE}" ]]; then
             copy_engine_items "$ENGINE_DIR/qdrantBuilds" "$target_dir" "$QDRANT_EXECUTABLE"
             mv "$target_dir/$QDRANT_EXECUTABLE" "$target_dir/qdrant"
         fi
 
-        copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" "profile.py" "gen_dirs.py" "mapping.py"
+        copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "profile.py" "gen_dirs.py" "mapping.py"
         if [[ -d "$ENGINE_DIR/perf" ]]; then
             copy_engine_items "$ENGINE_DIR" "$target_dir" "perf"
         fi
 
-        copy_engine_items "$ENGINE_DIR/rustCode/multiClientOP" "$target_dir" "multiClientOP"
-        copy_engine_items "$ENGINE_DIR/rustCode/multiClientOP/src" "$target_dir/rustSrc" "main.rs"
+        copy_engine_items "$ENGINE_DIR/clients/standard" "$target_dir" "standard"
+        copy_engine_items "$ENGINE_DIR/clients/standard/src" "$target_dir/rustSrc" "main.rs"
         if [[ "$TASK" == "MIXED" ]]; then
-            if [[ -f "$ENGINE_DIR/rustCode/mixedRunner/target/release/mixedrunner" ]]; then
-                copy_engine_items "$ENGINE_DIR/rustCode/mixedRunner/target/release" "$target_dir" "mixedrunner"
-            elif [[ -f "$ENGINE_DIR/rustCode/mixedRunner/mixedrunner" ]]; then
-                copy_engine_items "$ENGINE_DIR/rustCode/mixedRunner" "$target_dir" "mixedrunner"
+            if [[ -f "$ENGINE_DIR/clients/mixed/target/release/mixed" ]]; then
+                copy_engine_items "$ENGINE_DIR/clients/mixed/target/release" "$target_dir" "mixed"
+            elif [[ -f "$ENGINE_DIR/clients/mixed/mixed" ]]; then
+                copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed"
             fi
-            if [[ -f "$ENGINE_DIR/rustCode/mixedRunner/src/main.rs" ]]; then
-                cp "$ENGINE_DIR/rustCode/mixedRunner/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
+            if [[ -f "$ENGINE_DIR/clients/mixed/src/main.rs" ]]; then
+                cp "$ENGINE_DIR/clients/mixed/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
             fi
         fi
     fi
 
     if [[ -n "$RESTORE_DIR" ]]; then
-        copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" "fix_peer_id.py" "status.py"
+        copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "fix_peer_id.py" "collection_status.py"
+        mv "$target_dir/collection_status.py" "$target_dir/status.py"
     fi
 
-    copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" "multi_client_summary.py"
+    copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "summarize_client_timings.py"
+    mv "$target_dir/summarize_client_timings.py" "$target_dir/multi_client_summary.py"
 
     if [[ -z "$RESTORE_DIR" ]]; then
-        copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" "configureTopo.py"
+        copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "configure_collection.py"
+        mv "$target_dir/configure_collection.py" "$target_dir/configureTopo.py"
     fi
 
     if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
-        copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" "index.py"
+        copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "build_index.py"
+        mv "$target_dir/build_index.py" "$target_dir/index.py"
     fi
 
     if [[ "$TASK" == "MIXED" ]]; then
-        copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" "mixed_timeline.py"
+        copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "mixed_timeline.py"
     fi
 }

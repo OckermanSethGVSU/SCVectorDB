@@ -4,14 +4,13 @@ This directory contains the Rust client projects used by the Qdrant workflows in
 
 ## Projects
 
-- `multiClientOP`: current combined insert/query client used by `qdrant/main.sh`
-- `multiClientUpload`: older upload-only client kept for experiments
-- `multiClientQuery`: older query-only client kept for experiments
-- `mixedrunner`: mixed insert/query runner with per-worker JSONL event logs
-- `compile.sh`: helper that builds a named Rust project and copies the produced binary into the current directory
-- `run_mixed.sh`: convenience wrapper for launching `mixedrunner` with the current environment
+- `standard`: current combined insert/query client used by `qdrant/main.sh`
+- `upload`: older upload-only client kept for experiments
+- `query`: older query-only client kept for experiments
+- `mixed`: mixed insert/query runner with per-worker JSONL event logs
+- `build.sh`: helper that builds a named Rust project and copies the produced binary into the current directory
 
-## `multiClientOP`
+## `standard`
 
 ### Behavior
 
@@ -53,7 +52,7 @@ Query mode:
 - `QUERY_TOP_K` or `TOP_K` (optional; defaults to `10`)
 - `QUERY_STREAMING` or `STREAMING` (optional; `true` enables direct batch reads instead of eager full-file load)
 
-## `multiClientUpload`
+## `upload`
 
 ### Behavior
 
@@ -71,7 +70,7 @@ Query mode:
 - `UPLOAD_BATCH_SIZE`
 - `UPLOAD_BALANCE_STRATEGY`
 
-## `multiClientQuery`
+## `query`
 
 ### Behavior
 
@@ -91,7 +90,7 @@ Query mode:
 - `QUERY_BALANCE_STRATEGY`
 - `QUERY_DEBUG_RESULTS` (optional)
 
-## `mixedrunner`
+## `mixed`
 
 ### Behavior
 
@@ -132,47 +131,42 @@ Query mode:
 
 ## Build
 
-From `qdrant/rustCode`:
+From `qdrant/clients`:
 
 ```bash
-./compile.sh multiClientOP
-./compile.sh mixedrunner
+./build.sh standard
+./build.sh mixed
 ```
 
 Older projects can also be built:
 
 ```bash
-./compile.sh multiClientUpload
-./compile.sh multiClientQuery
+./build.sh upload
+./build.sh query
 ```
 
 Expected binary paths after build:
 
-- `qdrant/rustCode/multiClientOP/multiClientOP`
-- `qdrant/rustCode/mixedrunner/mixedrunner`
-- `qdrant/rustCode/multiClientUpload/multiClientUpload`
-- `qdrant/rustCode/multiClientQuery/multiClientQuery`
+- `qdrant/clients/standard/standard`
+- `qdrant/clients/mixed/mixed`
+- `qdrant/clients/upload/upload`
+- `qdrant/clients/query/query`
 
-## Local Harness
+## Local Workflow
 
-A small local integration harness lives under `qdrant/local_test_harness`:
-
-- `gen_test_npy.py`: writes a deterministic float32 `.npy`
-- `verify_qdrant_points.py`: checks that local Qdrant contains the expected ids and vectors
-- `verify_query_results.py`: checks `query_result_ids.npy` against brute-force expected top-k ids
-- `run_local_qdrant_test.sh`: launches a disposable Docker Qdrant, creates `singleShard`, runs `multiClientOP`, verifies inserted points, and optionally verifies query mode too
+The main local workflow is driven by `qdrant/local_main.sh`, which starts a disposable local Qdrant instance and runs either the standard client or the mixed client depending on `TASK`.
 
 Example:
 
 ```bash
 cd qdrant
-./local_test_harness/run_local_qdrant_test.sh
-STREAMING=true ./local_test_harness/run_local_qdrant_test.sh
+./local_main.sh
+STREAMING=true ./local_main.sh
 ```
 
 Useful overrides:
 
-- `RUST_BINARY=/path/to/multiClientOP`
+- `RUST_BINARY=/path/to/standard`
 - `VECTOR_DIM=8`
 - `DISTANCE_METRIC=Dot`
 - `TEST_ROWS=16`

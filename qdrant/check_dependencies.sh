@@ -10,17 +10,17 @@ fi
 required_paths=(
     "qdrant.sif"
     "perf/perf"
-    "qdrantSetup/launchQdrantNode.sh"
-    "qdrantSetup/launch.sh"
-    "generalPython/gen_dirs.py"
-    "generalPython/mapping.py"
-    "generalPython/profile.py"
-    "generalPython/configureTopo.py"
-    "generalPython/insert_multi_client_summary.py"
-    "generalPython/index.py"
+    "runtime/cluster/launchQdrantNode.sh"
+    "runtime/cluster/launch.sh"
+    "scripts/gen_dirs.py"
+    "scripts/mapping.py"
+    "scripts/profile.py"
+    "scripts/configure_collection.py"
+    "scripts/insert_multi_client_summary.py"
+    "scripts/build_index.py"
     "main.sh"
-    "rustCode/multiClientUpload/multiClientUpload"
-    "rustCode/multiClientUpload/src/main.rs"
+    "clients/upload/upload"
+    "clients/upload/src/main.rs"
 )
 
 present=()

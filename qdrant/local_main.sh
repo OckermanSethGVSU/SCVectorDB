@@ -72,15 +72,15 @@ pick_binary() {
 
 STANDARD_BINARY_PATH="$(pick_binary \
     "$STANDARD_BINARY_PATH" \
-    "$ROOT_DIR/rustCode/multiClientOP/target/release/multiClientOP" \
-    "$ROOT_DIR/rustCode/multiClientOP/target/debug/multiClientOP" \
-    "$ROOT_DIR/multiClientOP")"
+    "$ROOT_DIR/clients/standard/target/release/standard" \
+    "$ROOT_DIR/clients/standard/target/debug/standard" \
+    "$ROOT_DIR/standard")"
 
 MIXED_BINARY_PATH="$(pick_binary \
     "$MIXED_BINARY_PATH" \
-    "$ROOT_DIR/rustCode/mixedRunner/target/release/mixedrunner" \
-    "$ROOT_DIR/rustCode/mixedRunner/target/debug/mixedrunner" \
-    "$ROOT_DIR/mixedrunner")"
+    "$ROOT_DIR/clients/mixed/target/release/mixed" \
+    "$ROOT_DIR/clients/mixed/target/debug/mixed" \
+    "$ROOT_DIR/mixed")"
 
 ensure_runtime_tools() {
     if command -v docker >/dev/null 2>&1; then
@@ -99,14 +99,14 @@ ensure_runtime_tools() {
 ensure_binaries() {
     if [[ "$TASK" == "MIXED" || "$WORKLOAD_MODE" == "mixed" ]]; then
         if [[ ! -x "$MIXED_BINARY_PATH" ]]; then
-            echo "Missing mixedrunner binary at $MIXED_BINARY_PATH" >&2
-            echo "Build it with: (cd $ROOT_DIR/rustCode/mixedRunner && cargo build --release)" >&2
+            echo "Missing mixed binary at $MIXED_BINARY_PATH" >&2
+            echo "Build it with: (cd $ROOT_DIR/clients/mixed && cargo build --release)" >&2
             exit 1
         fi
     else
         if [[ ! -x "$STANDARD_BINARY_PATH" ]]; then
-            echo "Missing multiClientOP binary at $STANDARD_BINARY_PATH" >&2
-            echo "Build it with: (cd $ROOT_DIR/rustCode/multiClientOP && cargo build --release)" >&2
+            echo "Missing standard binary at $STANDARD_BINARY_PATH" >&2
+            echo "Build it with: (cd $ROOT_DIR/clients/standard && cargo build --release)" >&2
             exit 1
         fi
     fi
@@ -156,7 +156,7 @@ setup_local_collection() {
     fi
 
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-        python3 ./configureTopo.py
+        python3 ./configure_collection.py
 }
 
 standard_collection_name() {
@@ -180,62 +180,58 @@ prepare_cluster_state() {
 run_insert() {
     echo "Running local insert workflow..."
     export ACTIVE_TASK="INSERT"
-    export COLLECTION_NAME="$(standard_collection_name)"
-    export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:-}"
-    export INSERT_CLIENTS_PER_WORKER="${INSERT_CLIENTS_PER_WORKER:-1}"
-    export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:-1}"
-    export INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:-NO_BALANCE}"
-    export INSERT_FILEPATH="${INSERT_FILEPATH:?INSERT_FILEPATH is required}"
-    export INSERT_STREAMING
+    COLLECTION_NAME="$(standard_collection_name)"
+    INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:-}"
+    INSERT_CLIENTS_PER_WORKER="${INSERT_CLIENTS_PER_WORKER:-1}"
+    INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:-1}"
+    INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:-NO_BALANCE}"
+    INSERT_FILEPATH="${INSERT_FILEPATH:?INSERT_FILEPATH is required}"
     "$STANDARD_BINARY_PATH"
 }
 
 run_query() {
     echo "Running local query workflow..."
     export ACTIVE_TASK="QUERY"
-    export COLLECTION_NAME="$(standard_collection_name)"
-    export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:-}"
-    export QUERY_CLIENTS_PER_WORKER="${QUERY_CLIENTS_PER_WORKER:-1}"
-    export TOTAL_QUERY_CLIENTS="${TOTAL_QUERY_CLIENTS:-}"
-    export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:-1}"
-    export QUERY_BALANCE_STRATEGY="${QUERY_BALANCE_STRATEGY:-NO_BALANCE}"
-    export QUERY_FILEPATH="${QUERY_FILEPATH:?QUERY_FILEPATH is required}"
-    export QUERY_DEBUG_RESULTS
-    export QUERY_STREAMING
+    COLLECTION_NAME="$(standard_collection_name)"
+    QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:-}"
+    QUERY_CLIENTS_PER_WORKER="${QUERY_CLIENTS_PER_WORKER:-1}"
+    TOTAL_QUERY_CLIENTS="${TOTAL_QUERY_CLIENTS:-}"
+    QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:-1}"
+    QUERY_BALANCE_STRATEGY="${QUERY_BALANCE_STRATEGY:-NO_BALANCE}"
+    QUERY_FILEPATH="${QUERY_FILEPATH:?QUERY_FILEPATH is required}"
     "$STANDARD_BINARY_PATH"
 }
 
 run_mixed() {
     echo "Running local mixed insert/query workflow..."
-    export RESULT_PATH
-    export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:-}"
-    export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:-}"
-    export INSERT_FILEPATH="${INSERT_FILEPATH:?INSERT_FILEPATH is required}"
-    export QUERY_FILEPATH="${QUERY_FILEPATH:?QUERY_FILEPATH is required}"
-    export INSERT_CLIENTS_PER_WORKER="${INSERT_CLIENTS_PER_WORKER:-1}"
-    export QUERY_CLIENTS_PER_WORKER="${QUERY_CLIENTS_PER_WORKER:-1}"
-    export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:-1}"
-    export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:-1}"
-    export INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:-NO_BALANCE}"
-    export QUERY_BALANCE_STRATEGY="${QUERY_BALANCE_STRATEGY:-NO_BALANCE}"
-    export MIXED_CORPUS_SIZE="${MIXED_CORPUS_SIZE:-$INSERT_CORPUS_SIZE}"
-    export MIXED_DATA_FILEPATH="${MIXED_DATA_FILEPATH:-$INSERT_FILEPATH}"
-    export MIXED_QUERY_CLIENTS_PER_WORKER="${MIXED_QUERY_CLIENTS_PER_WORKER:-$QUERY_CLIENTS_PER_WORKER}"
-    export MIXED_INSERT_CLIENTS_PER_WORKER="${MIXED_INSERT_CLIENTS_PER_WORKER:-$INSERT_CLIENTS_PER_WORKER}"
-    export INSERT_MODE="${INSERT_MODE:-}"
-    export INSERT_OPS_PER_SEC="${INSERT_OPS_PER_SEC:-}"
-    export INSERT_START_ID="${INSERT_START_ID:-0}"
-    export QUERY_MODE="${QUERY_MODE:-}"
-    export QUERY_OPS_PER_SEC="${QUERY_OPS_PER_SEC:-}"
-    export COLLECTION_NAME="${COLLECTION_NAME:-singleShard}"
-    export TOP_K="${TOP_K:-}"
-    export QUERY_EF_SEARCH="${QUERY_EF_SEARCH:-}"
-    export RPC_TIMEOUT="${RPC_TIMEOUT:-}"
-    export QDRANT_REGISTRY_PATH="${QDRANT_REGISTRY_PATH:-$RUN_DIR/ip_registry.txt}"
-    export INSERT_BATCH_MIN="${INSERT_BATCH_MIN:-}"
-    export INSERT_BATCH_MAX="${INSERT_BATCH_MAX:-}"
-    export QUERY_BATCH_MIN="${QUERY_BATCH_MIN:-}"
-    export QUERY_BATCH_MAX="${QUERY_BATCH_MAX:-}"
+    INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:-}"
+    QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:-}"
+    INSERT_FILEPATH="${INSERT_FILEPATH:?INSERT_FILEPATH is required}"
+    QUERY_FILEPATH="${QUERY_FILEPATH:?QUERY_FILEPATH is required}"
+    INSERT_CLIENTS_PER_WORKER="${INSERT_CLIENTS_PER_WORKER:-1}"
+    QUERY_CLIENTS_PER_WORKER="${QUERY_CLIENTS_PER_WORKER:-1}"
+    INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:-1}"
+    QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:-1}"
+    INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:-NO_BALANCE}"
+    QUERY_BALANCE_STRATEGY="${QUERY_BALANCE_STRATEGY:-NO_BALANCE}"
+    MIXED_CORPUS_SIZE="${MIXED_CORPUS_SIZE:-$INSERT_CORPUS_SIZE}"
+    MIXED_DATA_FILEPATH="${MIXED_DATA_FILEPATH:-$INSERT_FILEPATH}"
+    MIXED_QUERY_CLIENTS_PER_WORKER="${MIXED_QUERY_CLIENTS_PER_WORKER:-$QUERY_CLIENTS_PER_WORKER}"
+    MIXED_INSERT_CLIENTS_PER_WORKER="${MIXED_INSERT_CLIENTS_PER_WORKER:-$INSERT_CLIENTS_PER_WORKER}"
+    INSERT_MODE="${INSERT_MODE:-}"
+    INSERT_OPS_PER_SEC="${INSERT_OPS_PER_SEC:-}"
+    INSERT_START_ID="${INSERT_START_ID:-0}"
+    QUERY_MODE="${QUERY_MODE:-}"
+    QUERY_OPS_PER_SEC="${QUERY_OPS_PER_SEC:-}"
+    COLLECTION_NAME="${COLLECTION_NAME:-singleShard}"
+    TOP_K="${TOP_K:-}"
+    QUERY_EF_SEARCH="${QUERY_EF_SEARCH:-}"
+    RPC_TIMEOUT="${RPC_TIMEOUT:-}"
+    QDRANT_REGISTRY_PATH="${QDRANT_REGISTRY_PATH:-$RUN_DIR/ip_registry.txt}"
+    INSERT_BATCH_MIN="${INSERT_BATCH_MIN:-}"
+    INSERT_BATCH_MAX="${INSERT_BATCH_MAX:-}"
+    QUERY_BATCH_MIN="${QUERY_BATCH_MIN:-}"
+    QUERY_BATCH_MAX="${QUERY_BATCH_MAX:-}"
     mkdir -p "$RESULT_PATH"
     "$MIXED_BINARY_PATH"
 }
@@ -248,7 +244,7 @@ summarize_standard_run() {
     local npy_files=("$npy_dir"/*.npy)
     shopt -u nullglob
     (( ${#npy_files[@]} > 0 )) || return 0
-    ACTIVE_TASK="$task_name" python3 ./multi_client_summary.py --npy-dir "$npy_dir" --output-dir .
+    ACTIVE_TASK="$task_name" python3 ./summarize_client_timings.py --npy-dir "$npy_dir" --output-dir .
 }
 
 move_standard_npy_files() {
@@ -275,12 +271,12 @@ finalize_local_run() {
 
 run_restore_status() {
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-        python3 ./status.py
+        python3 ./collection_status.py
 }
 
 run_index() {
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-        python3 ./index.py
+        python3 ./build_index.py
 }
 
 run_mixed_timeline() {

@@ -8,7 +8,7 @@ Main HPC entrypoint:
 
 Local smoke-test entrypoint:
 
-- `local_test.sh`
+- `local_main.sh`
 
 ## Current workflow capabilities
 
@@ -29,20 +29,20 @@ Local smoke-test entrypoint:
 
 - `pbs_submit_manager.sh`: parameter sweep and PBS script generation
 - `main.sh`: runtime orchestration for cluster launch, ingest, query, and index paths
-- `local_test.sh`: local container-backed test for standard or mixed runs
+- `local_main.sh`: local container-backed workflow for standard or mixed runs
 - `check_dependencies.sh`: dependency validation helper
-- `qdrantSetup/`: cluster launch scripts and local collection/data preparation
-- `generalPython/`: topology setup, profiling, summaries, index/status helpers
-- `rustCode/`: Rust clients and build helpers
+- `runtime/cluster/`: cluster launch scripts for PBS runs
+- `scripts/`: collection setup, profiling, summaries, index/status helpers
+- `clients/`: Rust clients and build helper
 
 ## Current Rust clients used here
 
-See `rustCode/README.md` for the full breakdown. The important projects are:
+See `clients/README.md` for the full breakdown. The important projects are:
 
-- `rustCode/multiClientOP/`: current combined insert/query client used by `main.sh`
-- `rustCode/mixedrunner/`: mixed insert/query runner with JSONL event logs
-- `rustCode/multiClientUpload/`: older upload-only client kept in the repo
-- `rustCode/multiClientQuery/`: older query-only client kept in the repo
+- `clients/standard/`: current combined insert/query client used by `main.sh`
+- `clients/mixed/`: mixed insert/query runner with JSONL event logs
+- `clients/upload/`: older upload-only client kept in the repo
+- `clients/query/`: older query-only client kept in the repo
 
 ## HPC runtime flow (`main.sh`)
 
@@ -51,11 +51,11 @@ See `rustCode/README.md` for the full breakdown. The important projects are:
 3. Generate per-rank storage/config directories.
 4. Launch Qdrant worker ranks across compute nodes.
 5. Start profiling helpers on the client and worker nodes.
-6. Wait for cluster readiness and run `configureTopo.py`.
-7. Run `./multiClientOP` with `ACTIVE_TASK=INSERT` for ingest.
-8. Run `python3 multi_client_summary.py` and move `.npy` timing outputs into `uploadNPY/`.
-9. If `TASK=INDEX`, run `generalPython/index.py`.
-10. If `TASK=QUERY`, run `./multiClientOP` again with `ACTIVE_TASK=QUERY`, then summarize results.
+6. Wait for cluster readiness and run `configure_collection.py`.
+7. Run `./standard` with `ACTIVE_TASK=INSERT` for ingest.
+8. Run `python3 summarize_client_timings.py` and move `.npy` timing outputs into `uploadNPY/`.
+9. If `TASK=INDEX`, run `scripts/build_index.py`.
+10. If `TASK=QUERY`, run `./standard` again with `ACTIVE_TASK=QUERY`, then summarize results.
 
 ## Important submit variables (`pbs_submit_manager.sh`)
 
@@ -98,37 +98,37 @@ See `rustCode/README.md` for the full breakdown. The important projects are:
 - `WALLTIME`
 - `queue`
 
-## Local test script (`local_test.sh`)
+## Local test script (`local_main.sh`)
 
-`local_test.sh` starts a local Qdrant container, prepares a local collection plus synthetic `.npy` files, and then runs either:
+`local_main.sh` starts a local Qdrant container, prepares a local collection plus synthetic `.npy` files, and then runs either:
 
-- `standard` mode: insert followed by query via `multiClientOP`
+- `standard` mode: insert followed by query via `standard`
 - `mixed` mode: the Rust mixed runner with configurable insert/query worker counts and pacing
 
 Examples:
 
 ```bash
-./local_test.sh
-./local_test.sh --mixed
-./local_test.sh --mixed --insert-clients 2 --query-clients 2 --mode max
-./local_test.sh --mixed --insert-clients 1 --query-clients 1 --insert-mode rate --insert-ops-per-sec 100 --query-mode max
+./local_main.sh
+./local_main.sh --mixed
+./local_main.sh --mixed --insert-clients 2 --query-clients 2 --mode max
+./local_main.sh --mixed --insert-clients 1 --query-clients 1 --insert-mode rate --insert-ops-per-sec 100 --query-mode max
 ```
 
 ## Build notes
 
-Build Rust clients from `qdrant/rustCode`:
+Build Rust clients from `qdrant/clients`:
 
 ```bash
-cd rustCode
-./compile.sh multiClientOP
-./compile.sh mixedrunner
+cd clients
+./build.sh standard
+./build.sh mixed
 ```
 
 Older client projects can also be built if needed:
 
 ```bash
-./compile.sh multiClientUpload
-./compile.sh multiClientQuery
+./build.sh upload
+./build.sh query
 ```
 
 ## Dependency check
@@ -159,4 +159,4 @@ Local mixed runs produce:
 
 - `pbs_submit_manager.sh` still writes `submit.sh` in the working directory and stages workflow files from there.
 - In the current submit manager, `qsub $target_file` is commented out, so submission is not automatic until you re-enable it.
-- The Rust Qdrant client uses gRPC. For local mixed runs, `local_test.sh` now points `QDRANT_URL` at the local gRPC port.
+- The Rust Qdrant client uses gRPC. For local mixed runs, `local_main.sh` points `QDRANT_URL` at the local gRPC port.

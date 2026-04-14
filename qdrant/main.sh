@@ -8,7 +8,7 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
     source /eagle/projects/radix-io/sockerman/cleanQdrant/qdrantEnv/bin/activate
 
     cd /eagle/projects/radix-io/sockerman/SCVectorDB/qdrant/$myDIR
-    exec > >(tee output.log) 2>&1
+
 elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
     module load frameworks
@@ -129,7 +129,7 @@ summarize_standard_run() {
     local npy_files=("$npy_dir"/*.npy)
     shopt -u nullglob
     (( ${#npy_files[@]} > 0 )) || return 0
-    ACTIVE_TASK="$task_name" python3 multi_client_summary.py --npy-dir "$npy_dir" --output-dir .
+    ACTIVE_TASK="$task_name" python3 summarize_client_timings.py --npy-dir "$npy_dir" --output-dir .
 }
 
 move_standard_npy_files() {
@@ -154,20 +154,14 @@ if [ -z "$RESTORE_DIR" ]; then
     # Setup the cluster 
     TARGET_FILE="ready.flag"
     while [[ ! -e "$TARGET_FILE" ]]; do
-        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 configureTopo.py
+        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 configure_collection.py
         sleep 30
     done
     rm $TARGET_FILE
     sleep 3
 
-    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
-    export INSERT_CLIENTS_PER_WORKER=$INSERT_CLIENTS_PER_WORKER
-    export INSERT_FILEPATH=$INSERT_FILEPATH
-    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
-    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
-    export INSERT_STREAMING=$INSERT_STREAMING
     export ACTIVE_TASK="INSERT"
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./standard
     
     # tell the profs to close and give them time to do so
     if [[ "$TASK" == "INSERT" ]]; then
@@ -184,7 +178,7 @@ if [ -z "$RESTORE_DIR" ]; then
     if [[ "$TASK" == "INDEX" ]]; then
 
         # TODO: parameterize index
-        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
+        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 build_index.py
         summarize_standard_run INSERT uploadNPY
         
         touch flag.txt
@@ -194,24 +188,16 @@ if [ -z "$RESTORE_DIR" ]; then
         mv *_system_*.csv systemStats/
     fi
 else
-    export EXPECTED_CORPUS_SIZE=$EXPECTED_CORPUS_SIZE
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 status.py
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 collection_status.py
 fi
 
 
 if [[ "$TASK" == "QUERY" ]]; then
     # index the data
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 build_index.py
 
-    export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
-    export QUERY_CLIENTS_PER_WORKER=$QUERY_CLIENTS_PER_WORKER
-    export TOTAL_QUERY_CLIENTS=$TOTAL_QUERY_CLIENTS
-    export QUERY_FILEPATH=$QUERY_FILEPATH
-    export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
-    export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
-    export QUERY_STREAMING=$QUERY_STREAMING
     export ACTIVE_TASK="QUERY"
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./standard
 
     move_standard_npy_files queryNPY
     summarize_standard_run INSERT uploadNPY
@@ -231,46 +217,11 @@ if [[ "$TASK" == "MIXED" ]]; then
 
     if [[ -z "$RESTORE_DIR"  ]]; then
         # index the data
-        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
+        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 build_index.py
     fi
 
-    # Reuses these vars from insert
-    export INSERT_CLIENTS_PER_WORKER=$INSERT_CLIENTS_PER_WORKER
-    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
-    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
-
-    # Reuses these query vars
-    export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
-    export QUERY_CLIENTS_PER_WORKER=$QUERY_CLIENTS_PER_WORKER
-    export QUERY_FILEPATH=$QUERY_FILEPATH
-    export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
-    export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
-
-    # Actual important mixed vars
-    export MIXED_CORPUS_SIZE=$MIXED_CORPUS_SIZE
-    export MIXED_DATA_FILEPATH=$MIXED_DATA_FILEPATH
-    export MIXED_QUERY_CLIENTS_PER_WORKER=$MIXED_QUERY_CLIENTS_PER_WORKER
-    export MIXED_INSERT_CLIENTS_PER_WORKER=$MIXED_INSERT_CLIENTS_PER_WORKER
-    export RESULT_PATH=$RESULT_PATH
-    export INSERT_MODE=$INSERT_MODE
-    export INSERT_OPS_PER_SEC=$INSERT_OPS_PER_SEC
-    export INSERT_START_ID=$INSERT_START_ID
-    export QUERY_MODE=$QUERY_MODE
-    export QUERY_OPS_PER_SEC=$QUERY_OPS_PER_SEC
-    
-    # optimal vars included for completeness 
-    export COLLECTION_NAME=$COLLECTION_NAME
-    export TOP_K=$TOP_K
-    export QUERY_EF_SEARCH=$QUERY_EF_SEARCH
-    export RPC_TIMEOUT=$RPC_TIMEOUT
-    export QDRANT_REGISTRY_PATH=$QDRANT_REGISTRY_PATH
-    export INSERT_BATCH_MIN=$INSERT_BATCH_MIN
-    export INSERT_BATCH_MAX=$INSERT_BATCH_MAX
-    export QUERY_BATCH_MIN=$QUERY_BATCH_MIN
-    export QUERY_BATCH_MAX=$QUERY_BATCH_MAX
-
     export ACTIVE_TASK="MIXED"
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixedRunner
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixed
 
     MIXED_TIMELINE_METRIC="dot"
     if [[ "$DISTANCE_METRIC" == "COSINE" ]]; then

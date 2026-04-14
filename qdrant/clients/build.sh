@@ -29,7 +29,6 @@ fi
 # Resolve to an absolute path (nice for safety)
 PROJ_DIR="$(cd "$PROJ_DIR" && pwd)"
 
-# Executable name == directory name
 BIN_NAME="$(basename "$PROJ_DIR")"
 
 echo "Building Rust project in: $PROJ_DIR"

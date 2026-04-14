@@ -1,27 +1,5 @@
 #!/bin/bash
 
-# apt-get update && apt install -y \
-#     build-essential \
-#     flex bison \
-#     libelf-dev \
-#     libdw-dev \
-#     libunwind-dev \
-#     libzstd-dev \
-#     libnuma-dev \
-#     libssl-dev \
-#     libperl-dev \
-#     python3-dev \
-#     libiberty-dev \
-#     zlib1g-dev \
-#     wget \
-#     libatomic1 \
-#     libelf-dev \
-#     libdw-dev \
-#     libslang2-dev \
-#     libperl-dev \
-#     python3-dev \
-#     libnuma-dev \
-#     libtraceevent-dev
 if [[ "$PERF" == "STAT" || "$PERF" == "TRACE" ]]; then
     apt-get update && apt-get install -y libatomic1 libelf-dev libdw-dev libslang2-dev libperl-dev python3-dev libnuma-dev libtraceevent-dev curl
     export PATH="/perf/:$PATH"
@@ -77,8 +55,6 @@ IP_ADDR=$1
 P2P_PORT=$2
 RANK=$3
 USEPERF=$4
-
-# echo "${IP_ADDR},${P2P_PORT},${RANK},${USEPERF}"
 
 if [[ $RANK -eq 0 ]]; then
   while true; do
