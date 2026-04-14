@@ -1,86 +1,112 @@
 # SCVectorDB
 
-SCVectorDB is a collection of PBS-oriented HPC workflows for large-scale vector database experiments. The repository currently contains working workflows for Qdrant and Milvus, plus early Weaviate scaffolding and graphing utilities used for post-run analysis.
+SCVectorDB contains HPC workflows for vector database experiments across Qdrant, Milvus, and Weaviate.
 
-## Top-level layout
+## Layout
 
 ```text
 .
-├── README.md
+├── pbs_submit_manager.sh
+├── common/
 ├── graphing/
 ├── milvus/
 ├── qdrant/
-└── weaivate/
+└── weaviate/
 ```
 
-## Current repository contents
+## Unified submit flow
 
-- `qdrant/`: Qdrant cluster launch, ingest/query clients, local test helpers, and Rust mixed insert/query runner.
-- `milvus/`: Milvus standalone/distributed workflows, Go client binaries, and mixed insert/query runner for timeline-style experiments.
-- `graphing/`: notebooks and scripts for analyzing insert/query/index outputs.
-- `weaivate/`: early workflow scaffolding for Weaviate.
+The repository now uses a single top-level submit entrypoint:
 
-## Common execution model
+```bash
+./pbs_submit_manager.sh --help
+./pbs_submit_manager.sh --help --engine qdrant
+./pbs_submit_manager.sh --engine qdrant --config path/to/run.env
+./pbs_submit_manager.sh --generate-only --engine qdrant --config path/to/run.env
+```
 
-Most HPC workflows in this repo follow the same pattern:
+Behavior:
 
-1. Set experiment variables in `pbs_submit_manager.sh`.
-2. Generate a run-specific PBS submission script with exported runtime variables.
-3. Stage workflow scripts, binaries, and site-specific assets into a run directory.
-4. Append the workflow entrypoint (`main.sh`) to the generated script.
-5. Submit with `qsub` when ready.
+- normal execution generates the run directory and submits if `RUN_MODE=PBS`
+- `--generate-only` generates the run directory but does not submit
+- `--help --engine <engine>` prints the engine variables, defaults, and requirement status
+
+Each engine keeps its engine-specific logic in its own directory:
+
+- `qdrant/engine.sh`
+- `milvus/engine.sh`
+- `weaviate/engine.sh`
+
+Shared submit helpers live in:
+
+- `common/submit_lib.sh`
+
+## Config model
+
+Runs can be configured with:
+
+- `--set KEY=value`
+- `--config path/to/file.env`
+
+Config files are plain `KEY=value` env-style files. Example:
+
+```bash
+ENGINE=qdrant
+TASK=QUERY
+RUN_MODE=local
+PLATFORM=AURORA
+WALLTIME=00:10:00
+QUEUE=debug-scaling
+ACCOUNT=myproj
+INSERT_FILEPATH=/path/to/base.npy
+QUERY_FILEPATH=/path/to/query.npy
+```
+
+## Current engine status
+
+- `qdrant/`: actively migrated to the unified interface and current focus
+- `milvus/`: using the unified top-level interface with engine-specific logic in `milvus/`
+- `weaviate/`: using the unified top-level interface with engine-specific logic in `weaviate/`
 
 ## Environment expectations
 
-These workflows assume an HPC environment with most or all of the following:
+These workflows assume some combination of:
 
-- PBS Pro (`qsub`, `$PBS_NODEFILE`)
-- MPI (`mpirun`)
+- PBS Pro
+- MPI / `mpirun`
 - Apptainer
-- Python 3 and project-specific Python environments
-- `jq`
-- Site module system (`module` / `ml`)
-- Optional DAOS helpers (`launch-dfuse.sh`, `clean-dfuse.sh`)
+- Python 3
+- site modules
+- optional DAOS helpers
 
-Most submitted runs also rely on site-specific absolute paths for:
+Most HPC runs still depend on site-specific paths for:
 
-- container images or executables
+- datasets
 - Python environments
-- dataset `.npy` files
-- prebuilt client binaries
-- output base directories
+- container images or server executables
+- output/storage locations
 
-## Local vs HPC usage
+## Qdrant quick start
 
-- Use `qdrant/local_test.sh` for a local container-backed smoke test of Qdrant clients.
-- Use `qdrant/pbs_submit_manager.sh` and `milvus/pbs_submit_manager.sh` for full HPC runs.
-- The local Qdrant script can now run either the standard insert-then-query path or the Rust mixed runner.
-
-## Quick start
-
-### Qdrant
+Inspect variables:
 
 ```bash
-cd qdrant
-bash pbs_submit_manager.sh
+./pbs_submit_manager.sh --help --engine qdrant
 ```
 
-For a local container-backed test:
+Generate only:
 
 ```bash
-cd qdrant
-./local_test.sh
-./local_test.sh --mixed --insert-clients 1 --query-clients 1 --mode max
+./pbs_submit_manager.sh --generate-only --engine qdrant --config qdrant_run.env
 ```
 
-### Milvus
+Normal run:
 
 ```bash
-cd milvus
-bash pbs_submit_manager.sh
+./pbs_submit_manager.sh --engine qdrant --config qdrant_run.env
 ```
 
 ## Notes
 
-- Site-specific values in each submit manager still need to be reviewed before submitting jobs.
-- Generated local test artifacts such as `.local/`, `ip_registry.txt`, `local_test_data/`, and Rust `target/` directories are not part of the intended source tree.
+- Generated run directories include `run_config.env`, which is the resolved run configuration used by `submit.sh`.
+- Generated artifacts, local data, and build outputs should generally not be committed.
