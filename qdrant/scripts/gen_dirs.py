@@ -6,21 +6,6 @@ from mpi4py import MPI
 
 
 parser = argparse.ArgumentParser()
-# parser.add_argument(
-#     "--search_threads",
-#     type=int,
-#     default=0,
-#     help="Number of search threads (default: 0)",
-# )
-
-
-# parser.add_argument(
-#     "--search_threads",
-#     type=int,
-#     default=0,
-#     help="Number of search threads (default: 0)",
-# )
-
 parser.add_argument(
     "--storage_medium",
     type=str,
@@ -35,12 +20,18 @@ parser.add_argument(
     help="The path for DAOS",
 )
 
+parser.add_argument(
+    "--log_level",
+    type=str,
+    default="ERROR",
+    help="Qdrant log level to write into generated config files",
+)
+
 args = parser.parse_args()
-# search_threads = args.search_threads
-# number_segments = args.number_segments
+
 storage_medium = args.storage_medium
 DAOS_PATH = args.path
-
+log_level = args.log_level
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 
@@ -53,7 +44,6 @@ base_ports = {
 tick_period_ms = 100
 
 # === Ensure config directory exists ===
-
 if storage_medium == "memory":
     targetBase = "/dev/shm/qdrantDir"
     print("Using memory for persistence",flush=True)
@@ -71,23 +61,14 @@ dirs = ["config","data","snapshots/"]
 for dir in dirs:
     path  = f"{targetBase}/{dir}/node{rank}"
 
-    # path  = f"/dev/shm/qdrantDIR/{dir}/node{rank}"
     if os.path.exists(path):
         shutil.rmtree(path)
     os.makedirs(path, exist_ok=True)
 
 
 # === Generate configs ===
-
 node_dir = f"{targetBase}/config/node{rank}"
 os.makedirs(node_dir, exist_ok=True)
-
-exe = os.environ.get("QDRANT_EXECUTABLE")
-if exe == "qdrantInsertTracing":
-    log_level = "ERROR,qdrant::insert_path=debug" 
-else:
-    log_level = "ERROR" 
-
 
 config = {
     "log_level": log_level,
@@ -101,21 +82,8 @@ config = {
         "p2p": {
             "port": base_ports["p2p"] + rank * 100
         },
-        
-        # "consensus": {
-        #     "tick_period_ms": tick_period_ms
-        # }
     },
-    # "storage": {
-    #     "performance": {
-    #         "max_search_threads" : search_threads
-    #     },
-    #     # "optimizers":{
-    #     #     "default_segment_number" : number_segments,
-    #     #     # "max_segment_size_kb" : 160000000
-    #     # }
 
-    # }
 }
 
 if storage_medium == "DAOS":
@@ -127,23 +95,14 @@ config_path = os.path.join(node_dir, "config.yaml")
 with open(config_path, "w") as f:
     yaml.dump(config, f, sort_keys=False)
 
-
-
-
 config_path = os.path.join("./", "config.yaml")
 with open(config_path, "w") as f:
     yaml.dump(config, f, sort_keys=False)
 
 
-# === Create new data and snapshot directories ===
+# === Create snapshot directories ===
 node_dir = f"{targetBase}/snapshots/node{rank}"
 os.makedirs(node_dir, exist_ok=True)
-# node_dir = f"./qdrantDIR/data/node{rank}"
-# os.makedirs(node_dir, exist_ok=True)
-# node_dir = f"/dev/shm/qdrantDIR/data/node{rank}"
-# node_dir = f"./qdrantDIR/snapshots/node{rank}"
-# node_dir = f"/dev/shm/qdrantDIR/snapshots/node{rank}"
-# os.makedirs(node_dir, exist_ok=True)
 
 
 print(f"✅ Generated dirs in {targetBase} for node {rank}", flush=True)

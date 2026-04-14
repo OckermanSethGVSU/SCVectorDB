@@ -18,6 +18,7 @@ register_qdrant_var "QUEUE" "required" "" "preemptable debug debug-scaling prod 
 
 # Engine/runtime selection
 register_qdrant_var "QDRANT_EXECUTABLE" "default" "qdrant" "qdrant qdrantInsertTracing qdrantQueryTrace" "Qdrant executable variant"
+register_qdrant_var "LOG_LEVEL" "default" "ERROR" "" "Qdrant log level passed to generated node configs"
 register_qdrant_var "VECTOR_DIM" "default" "200" "" "Vector dimension"
 register_qdrant_var "DISTANCE_METRIC" "default" "IP" "IP COSINE L2" "Distance metric"
 register_qdrant_var "GPU_INDEX" "default" "False" "True False" "Whether to use GPU indexing"

@@ -41,7 +41,7 @@ cat $PBS_NODEFILE > all_nodefile.txt
 
 # create configs for each rank, 1 launched per node
 mpirun -n $TOTAL --ppn $WORKERS_PER_NODE --cpu-bind none --hostfile worker_nodefile.txt  \
-    python3 gen_dirs.py --storage_medium $STORAGE_MEDIUM --path /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
+    python3 gen_dirs.py --storage_medium $STORAGE_MEDIUM --path /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR --log_level "$LOG_LEVEL"
 
 # launch qdrant nodes
 for ((i=0; i<NODES; i++)); do
