@@ -52,44 +52,6 @@ Query mode:
 - `QUERY_TOP_K` or `TOP_K` (optional; defaults to `10`)
 - `QUERY_STREAMING` or `STREAMING` (optional; `true` enables direct batch reads instead of eager full-file load)
 
-## `upload`
-
-### Behavior
-
-- Older upload-only client
-- Spawns `N_WORKERS * UPLOAD_CLIENTS_PER_WORKER` async upload clients
-- Uses `UPLOAD_BALANCE_STRATEGY` with `NO_BALANCE` / `WORKER_BALANCE`
-- Writes timing `.csv` and `.npy` outputs
-
-### Environment variables consumed
-
-- `N_WORKERS`
-- `CORPUS_SIZE`
-- `UPLOAD_CLIENTS_PER_WORKER`
-- `DATA_FILEPATH`
-- `UPLOAD_BATCH_SIZE`
-- `UPLOAD_BALANCE_STRATEGY`
-
-## `query`
-
-### Behavior
-
-- Older query-only client
-- Spawns `N_WORKERS * QUERY_CLIENTS_PER_WORKER` async query clients
-- Uses `QUERY_BALANCE_STRATEGY` with `NO_BALANCE` / `WORKER_BALANCE`
-- Supports optional result debugging via `QUERY_DEBUG_RESULTS`
-
-### Environment variables consumed
-
-- `N_WORKERS`
-- `QUERY_SET_SIZE`
-- `QUERY_CLIENTS_PER_WORKER`
-- `TOTAL_QUERY_CLIENTS` (optional; overrides `QUERY_CLIENTS_PER_WORKER` by deriving `TOTAL_QUERY_CLIENTS / N_WORKERS`, which must divide evenly)
-- `QUERY_FILEPATH`
-- `QUERY_BATCH_SIZE`
-- `QUERY_BALANCE_STRATEGY`
-- `QUERY_DEBUG_RESULTS` (optional)
-
 ## `mixed`
 
 ### Behavior
