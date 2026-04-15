@@ -12,6 +12,7 @@ declare -gA QDRANT_CHOICES=()
 declare -gA QDRANT_DESC=()
 declare -gA QDRANT_VALUES=()
 
+# Clear all schema registry tables before loading qdrant/schema.sh.
 qdrant_schema_reset() {
     QDRANT_VAR_ORDER=()
     QDRANT_REQUIRED_KIND=()
@@ -22,6 +23,8 @@ qdrant_schema_reset() {
     QDRANT_VALUES=()
 }
 
+# Register one user-facing Qdrant variable in the schema registry.
+# Called only from qdrant/schema.sh.
 register_qdrant_var() {
     local name="$1"
     local required_kind="$2"
@@ -38,11 +41,14 @@ register_qdrant_var() {
     QDRANT_DESC["$name"]="$description"
 }
 
+# Load qdrant/schema.sh into the in-memory registry.
 qdrant_load_schema() {
     qdrant_schema_reset
     source "$ENGINE_DIR/schema.sh"
 }
 
+# Split a raw schema value into an array. Empty raw values become one empty item
+# so default-empty variables still participate in combo generation.
 qdrant_split_raw_values() {
     local raw_value="$1"
     local output_name="$2"
@@ -58,6 +64,7 @@ qdrant_split_raw_values() {
     fi
 }
 
+# Return the first value from a single-or-sweep raw value.
 qdrant_first_raw_value() {
     local raw_value="$1"
     local values=()
@@ -66,6 +73,8 @@ qdrant_first_raw_value() {
     printf '%s\n' "${values[0]}"
 }
 
+# Export the first resolved value for each schema variable as a shell global.
+# The manager uses these globals when generating one concrete combo at a time.
 qdrant_assign_globals_from_values() {
     local var_name
     local first_value
@@ -80,6 +89,9 @@ qdrant_assign_globals_from_values() {
     fi
 }
 
+# Capture the current shell globals back into QDRANT_VALUES.
+# This lets common manager settings and previous combo assignments re-enter
+# the schema-backed value map before overrides are applied.
 qdrant_sync_values_from_current_globals() {
     local var_name
     local raw_value
@@ -91,6 +103,7 @@ qdrant_sync_values_from_current_globals() {
     done
 }
 
+# Initialize all schema-backed values from their schema defaults.
 qdrant_apply_defaults() {
     local var_name
 
@@ -99,6 +112,8 @@ qdrant_apply_defaults() {
     done
 }
 
+# Apply env/CLI/config overrides of the form NAME_OVERRIDE=value.
+# Uppercase override names are also accepted for compatibility.
 qdrant_apply_overrides_from_env() {
     local var_name
     local override_name
@@ -116,6 +131,8 @@ qdrant_apply_overrides_from_env() {
     done
 }
 
+# Return success when value is allowed by a variable's choices list.
+# Empty choices means any value is allowed.
 qdrant_value_in_choices() {
     local value="$1"
     local choices_raw="$2"
@@ -136,6 +153,8 @@ qdrant_value_in_choices() {
     return 1
 }
 
+# Evaluate a simple REQUIRED_IF condition against current globals.
+# Supported form: OTHER_VAR=value1|value2.
 qdrant_condition_matches_current() {
     local condition="$1"
     local lhs
@@ -161,6 +180,7 @@ qdrant_condition_matches_current() {
     return 1
 }
 
+# Return success when a variable is required under the current settings.
 qdrant_var_is_required_current() {
     local var_name="$1"
     local required_kind="${QDRANT_REQUIRED_KIND[$var_name]}"
@@ -179,6 +199,7 @@ qdrant_var_is_required_current() {
     esac
 }
 
+# Validate required variables and choice constraints for the current values.
 qdrant_validate_current_values() {
     local var_name
     local raw_value
@@ -205,6 +226,7 @@ qdrant_validate_current_values() {
     done
 }
 
+# Print the schema registry as the qdrant help table.
 qdrant_print_registry_table() {
     local include_mode="$1"
     local var_name
@@ -237,6 +259,7 @@ qdrant_print_registry_table() {
     done
 }
 
+# Print Qdrant-specific help for the unified submit manager.
 qdrant_print_help() {
     cat <<'EOF'
 Qdrant Help
@@ -256,6 +279,7 @@ EOF
     qdrant_print_registry_table "vars"
 }
 
+# Print the currently resolved Qdrant settings in schema order.
 qdrant_print_resolved_summary() {
     local var_name
 
@@ -267,6 +291,7 @@ qdrant_print_resolved_summary() {
     echo
 }
 
+# Format the current CORES value for user-facing labels.
 qdrant_cores_label() {
     if [[ -n "${CORES_CURRENT:-}" ]]; then
         printf '%s\n' "$CORES_CURRENT"
@@ -275,6 +300,8 @@ qdrant_cores_label() {
     fi
 }
 
+# Return the optional run-name segment for CORES.
+# Empty CORES intentionally omits the segment from generated run dirs.
 qdrant_cores_segment() {
     if [[ -n "${CORES_CURRENT:-}" ]]; then
         printf '%s\n' "_CORES$(qdrant_cores_label)"
@@ -283,6 +310,8 @@ qdrant_cores_segment() {
     fi
 }
 
+# Recursively expand all schema values into a Cartesian product of combos.
+# Each emitted combo is a semicolon-delimited list of NAME=value assignments.
 qdrant_emit_combos_recursive() {
     local index="$1"
     local prefix="$2"
@@ -305,6 +334,7 @@ qdrant_emit_combos_recursive() {
     done
 }
 
+# Engine hook: load schema defaults for the qdrant engine.
 engine_set_defaults() {
     qdrant_load_schema
     qdrant_apply_defaults
@@ -312,12 +342,16 @@ engine_set_defaults() {
     REQUIRES_DAOS="false"
 }
 
+# Engine hook: apply CLI/config/env overrides after common defaults are loaded.
 engine_apply_overrides() {
     qdrant_sync_values_from_current_globals
     qdrant_apply_overrides_from_env
     qdrant_assign_globals_from_values
 }
 
+# Engine hook: validate global config and compute derived values.
+# INSERT_START_ID is derived here so mixed inserts can avoid colliding with
+# preloaded point IDs even when INSERT_CORPUS_SIZE is empty.
 engine_validate_config() {
     qdrant_validate_current_values
 
@@ -334,14 +368,17 @@ engine_validate_config() {
     fi
 }
 
+# Engine hook: print the resolved engine settings.
 engine_print_summary() {
     qdrant_print_resolved_summary
 }
 
+# Engine hook: print qdrant-specific help.
 engine_show_help() {
     qdrant_print_help
 }
 
+# Engine hook: describe one generated combo for preview/debug output.
 engine_preview_combo() {
     local run_dir_name="$1"
 
@@ -356,10 +393,13 @@ engine_preview_combo() {
 EOF
 }
 
+# Engine hook: emit every generated schema combo.
 engine_iterate_matrix() {
     qdrant_emit_combos_recursive 0 ""
 }
 
+# Engine hook: load one semicolon-delimited combo into concrete globals used
+# while creating a single run directory.
 engine_load_combo() {
     local assignment
     local key
@@ -383,10 +423,12 @@ engine_load_combo() {
     REQUIRES_DAOS="false"
 }
 
+# Engine hook: validate a single expanded combo.
 engine_validate_combo() {
     qdrant_validate_current_values
 }
 
+# Engine hook: build the generated run directory name for the current combo.
 engine_make_run_dir_name() {
     local timestamp
 
@@ -394,6 +436,7 @@ engine_make_run_dir_name() {
     echo "${TASK}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_${timestamp}"
 }
 
+# Engine hook: choose the runtime script appended into submit.sh.
 engine_main_script_path() {
     if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
         echo "local_main.sh"
@@ -402,6 +445,8 @@ engine_main_script_path() {
     fi
 }
 
+# Engine hook: write schema-backed values into run_config.env.
+# Derived values that are not schema entries should be emitted explicitly here.
 engine_emit_runtime_env() {
     local var_name
     local raw_value
@@ -413,6 +458,9 @@ engine_emit_runtime_env() {
     printf 'INSERT_START_ID=%s\n' "${INSERT_START_ID:-}"
 }
 
+# Engine hook: copy the required runtime payload into a generated run directory.
+# Missing required items fail generation; optional runtime_state seed content is
+# copied only when present.
 engine_copy_payload() {
     local target_dir="$1"
 
