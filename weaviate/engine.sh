@@ -1,99 +1,88 @@
 #!/bin/bash
 
+source "$ROOT_DIR/common/engine_schema_lib.sh"
+
 ENGINE_NAME="weaviate"
+ENGINE_SCHEMA_PREFIX="WEAVIATE"
+schema_engine_init "weaviate" "$ENGINE_SCHEMA_PREFIX" "Weaviate"
+
+weaviate_print_help() {
+    cat <<'EOF'
+Weaviate Help
+=============
+
+Use `--set NAME=value` to override any variable.
+Any variable may be a single value or a sweep list separated by spaces.
+
+Command examples:
+  ./pbs_submit_manager.sh --engine weaviate --set TASK=insert --set PLATFORM=AURORA --set WALLTIME=01:00:00 --set QUEUE=debug-scaling --set ACCOUNT=myproj
+  ./pbs_submit_manager.sh --generate-only --engine weaviate --set TASK=query_bs --set PLATFORM=AURORA --set WALLTIME=01:00:00 --set QUEUE=debug-scaling --set ACCOUNT=myproj
+
+Variables
+---------
+EOF
+    echo
+    schema_print_registry_table "$ENGINE_SCHEMA_PREFIX"
+}
 
 engine_set_defaults() {
-    BASE_DIR="$(pwd)"
-
-    WORKERS_PER_NODE=(4)
-    QUERY_BATCH_SIZE=(256)
-    UPLOAD_CLIENTS_PER_WORKER=(16)
-    UPLOAD_BATCH_SIZE=(2048)
-
-    TASK=""
-    usePerf="false"
-    CORPUS_SIZE=10000000
-    UPLOAD_BALANCE_STRATEGY="WORKER_BALANCE"
-    GPU_INDEX="false"
-
-    DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy"
-    QUERY_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy"
-    VECTOR_DIM=2560
-    DISTANCE_METRIC="COSINE"
-
-    QUERY_WORKLOAD=100000
-    QUERY_TOPK=10
-    QUERY_EF=64
-
-    WEAVIATE_CLIENT_BINARY="test"
+    schema_load "$ENGINE_SCHEMA_PREFIX" "$ENGINE_DIR/schema.sh"
+    schema_apply_defaults "$ENGINE_SCHEMA_PREFIX"
+    schema_assign_globals_from_values "$ENGINE_SCHEMA_PREFIX"
     REQUIRES_DAOS="false"
 }
 
 engine_apply_overrides() {
-    apply_array_override WORKERS_PER_NODE
-    apply_array_override QUERY_BATCH_SIZE
-    apply_array_override UPLOAD_CLIENTS_PER_WORKER
-    apply_array_override UPLOAD_BATCH_SIZE
-
-    apply_scalar_override BASE_DIR
-    apply_scalar_override TASK
-    apply_scalar_override usePerf
-    apply_scalar_override CORPUS_SIZE
-    apply_scalar_override UPLOAD_BALANCE_STRATEGY
-    apply_scalar_override GPU_INDEX
-    apply_scalar_override DATA_FILEPATH
-    apply_scalar_override QUERY_FILEPATH
-    apply_scalar_override VECTOR_DIM
-    apply_scalar_override DISTANCE_METRIC
-    apply_scalar_override QUERY_WORKLOAD
-    apply_scalar_override QUERY_TOPK
-    apply_scalar_override QUERY_EF
-    apply_scalar_override WEAVIATE_CLIENT_BINARY
+    schema_sync_values_from_current_globals "$ENGINE_SCHEMA_PREFIX"
+    schema_apply_overrides_from_env "$ENGINE_SCHEMA_PREFIX"
+    if [[ -z "${WEAVIATE_VALUES[BASE_DIR]:-}" ]]; then
+        WEAVIATE_VALUES["BASE_DIR"]="$(pwd)"
+    fi
+    schema_assign_globals_from_values "$ENGINE_SCHEMA_PREFIX"
 }
 
 engine_validate_config() {
-    [[ -n "${TASK:-}" ]] || {
-        echo "Missing required Weaviate setting: TASK" >&2
-        exit 1
-    }
+    schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
+}
 
-    case "$TASK" in
-        insert|index|query_bs|query_core)
-            ;;
-        *)
-            echo "Invalid Weaviate TASK='$TASK'." >&2
-            exit 1
-            ;;
-    esac
+engine_print_summary() {
+    schema_print_resolved_summary "$ENGINE_SCHEMA_PREFIX"
+}
+
+engine_show_help() {
+    weaviate_print_help
 }
 
 engine_iterate_matrix() {
-    local n
-    local w
-    local ucpw
-    local qbs
-    local ubs
-    local c
-
-    for n in "${NODES[@]}"; do
-        for w in "${WORKERS_PER_NODE[@]}"; do
-            for ucpw in "${UPLOAD_CLIENTS_PER_WORKER[@]}"; do
-                for qbs in "${QUERY_BATCH_SIZE[@]}"; do
-                    for ubs in "${UPLOAD_BATCH_SIZE[@]}"; do
-                        for c in "${CORES[@]}"; do
-                            echo "${n}|${w}|${ucpw}|${qbs}|${ubs}|${c}"
-                        done
-                    done
-                done
-            done
-        done
-    done
+    schema_emit_combos_recursive "$ENGINE_SCHEMA_PREFIX" 0 ""
 }
 
 engine_load_combo() {
-    IFS='|' read -r NODES_CURRENT WORKERS_PER_NODE_CURRENT UPLOAD_CLIENTS_CURRENT QUERY_BATCH_CURRENT UPLOAD_BATCH_CURRENT CORES_CURRENT <<< "$1"
+    local assignment
+    local key
+    local value
+
+    IFS=';' read -r -a assignments <<< "$1"
+    for assignment in "${assignments[@]}"; do
+        [[ -n "$assignment" ]] || continue
+        key="${assignment%%=*}"
+        value="${assignment#*=}"
+        printf -v "$key" '%s' "$value"
+    done
+
+    NODES_CURRENT="$NODES"
+    WORKERS_PER_NODE_CURRENT="$WORKERS_PER_NODE"
+    UPLOAD_CLIENTS_CURRENT="$UPLOAD_CLIENTS_PER_WORKER"
+    QUERY_BATCH_CURRENT="$QUERY_BATCH_SIZE"
+    UPLOAD_BATCH_CURRENT="$UPLOAD_BATCH_SIZE"
+    CORES_CURRENT="$CORES"
     TOTAL_NODES=$((NODES_CURRENT + 1))
     JOB_NAME="${TASK}_${NODES_CURRENT}n_${WORKERS_PER_NODE_CURRENT}w_${CORES_CURRENT}c_q${QUERY_BATCH_CURRENT}"
+    REQUIRES_DAOS="false"
+}
+
+engine_validate_combo() {
+    schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
 }
 
 engine_make_run_dir_name() {
@@ -118,30 +107,14 @@ engine_main_script_path() {
 }
 
 engine_emit_runtime_env() {
-    cat <<EOF
-NODES=${NODES_CURRENT}
-WORKERS_PER_NODE=${WORKERS_PER_NODE_CURRENT}
-TASK=${TASK}
-VECTOR_DIM=${VECTOR_DIM}
-DISTANCE_METRIC=${DISTANCE_METRIC}
-STORAGE_MEDIUM=${STORAGE_MEDIUM}
-CORPUS_SIZE=${CORPUS_SIZE}
-USEPERF=${usePerf}
-CORES=${CORES_CURRENT}
-QUERY_BATCH_SIZE=${QUERY_BATCH_CURRENT}
-UPLOAD_BATCH_SIZE=${UPLOAD_BATCH_CURRENT}
-UPLOAD_CLIENTS_PER_WORKER=${UPLOAD_CLIENTS_CURRENT}
-DATA_FILEPATH=${DATA_FILEPATH}
-QUERY_FILEPATH=${QUERY_FILEPATH}
-UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}
-PLATFORM=${PLATFORM}
-GPU_INDEX=${GPU_INDEX}
-BASE_DIR=${BASE_DIR}
-QUERY_WORKLOAD=${QUERY_WORKLOAD}
-QUERY_TOPK=${QUERY_TOPK}
-QUERY_EF=${QUERY_EF}
-WEAVIATE_CLIENT_BINARY=${WEAVIATE_CLIENT_BINARY}
-EOF
+    schema_emit_runtime_env "$ENGINE_SCHEMA_PREFIX"
+
+    printf 'NODES=%s\n' "$NODES_CURRENT"
+    printf 'WORKERS_PER_NODE=%s\n' "$WORKERS_PER_NODE_CURRENT"
+    printf 'CORES=%s\n' "$CORES_CURRENT"
+    printf 'QUERY_BATCH_SIZE=%s\n' "$QUERY_BATCH_CURRENT"
+    printf 'UPLOAD_BATCH_SIZE=%s\n' "$UPLOAD_BATCH_CURRENT"
+    printf 'UPLOAD_CLIENTS_PER_WORKER=%s\n' "$UPLOAD_CLIENTS_CURRENT"
 }
 
 engine_copy_payload() {
