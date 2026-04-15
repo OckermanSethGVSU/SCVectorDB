@@ -8,6 +8,8 @@
 # This defines the engine-specific register function expected by schema.sh,
 # e.g. register_qdrant_var, while the actual registry behavior lives here.
 
+# Initialize one schema registry and create the engine-specific registration
+# function that schema.sh will call, e.g. register_qdrant_var.
 schema_engine_init() {
     local schema_lower="$1"
     local schema_prefix="$2"
@@ -25,6 +27,7 @@ schema_engine_init() {
     eval "register_${schema_lower}_var() { schema_register_var \"$schema_prefix\" \"\$@\"; }"
 }
 
+# Clear a schema registry before re-sourcing schema.sh.
 schema_reset() {
     local schema_prefix="$1"
     local -n order_ref="${schema_prefix}_VAR_ORDER"
@@ -44,6 +47,11 @@ schema_reset() {
     values_ref=()
 }
 
+# Add one variable definition to the active registry.
+#
+# Arguments after schema_prefix are:
+#   name required_kind default choices description [required_if]
+# required_kind is usually required, optional, or conditional.
 schema_register_var() {
     local schema_prefix="$1"
     local name="$2"
@@ -68,6 +76,7 @@ schema_register_var() {
     desc_ref["$name"]="$description"
 }
 
+# Reload schema.sh into a clean registry.
 schema_load() {
     local schema_prefix="$1"
     local schema_file="$2"
@@ -76,6 +85,8 @@ schema_load() {
     source "$schema_file"
 }
 
+# Split a raw schema value into sweep entries. Empty values are preserved as a
+# single empty entry so optional blank variables still participate in combos.
 schema_split_raw_values() {
     local raw_value="$1"
     local output_name="$2"
@@ -91,6 +102,7 @@ schema_split_raw_values() {
     fi
 }
 
+# Return the scalar value used for global variables before combo expansion.
 schema_first_raw_value() {
     local raw_value="$1"
     local values=()
@@ -99,6 +111,10 @@ schema_first_raw_value() {
     printf '%s\n' "${values[0]}"
 }
 
+# Populate shell globals from the first value of each registered variable.
+#
+# This lets validation and summary code use normal variable names even though
+# the canonical source is the registry's VALUES map.
 schema_assign_globals_from_values() {
     local schema_prefix="$1"
     local -n order_ref="${schema_prefix}_VAR_ORDER"
@@ -116,6 +132,10 @@ schema_assign_globals_from_values() {
     fi
 }
 
+# Pull current shell globals back into the registry.
+#
+# This keeps legacy override paths and any engine-specific default mutations in
+# sync before environment overrides are applied.
 schema_sync_values_from_current_globals() {
     local schema_prefix="$1"
     local -n order_ref="${schema_prefix}_VAR_ORDER"
@@ -130,6 +150,7 @@ schema_sync_values_from_current_globals() {
     done
 }
 
+# Seed the runtime VALUES map from schema defaults.
 schema_apply_defaults() {
     local schema_prefix="$1"
     local -n order_ref="${schema_prefix}_VAR_ORDER"
@@ -142,6 +163,10 @@ schema_apply_defaults() {
     done
 }
 
+# Apply NAME_OVERRIDE or UPPERCASE_NAME_OVERRIDE values into the registry.
+#
+# The root submit manager translates --set NAME=value into these override
+# variables before loading the engine.
 schema_apply_overrides_from_env() {
     local schema_prefix="$1"
     local -n order_ref="${schema_prefix}_VAR_ORDER"
@@ -162,6 +187,7 @@ schema_apply_overrides_from_env() {
     done
 }
 
+# Return success when value is allowed by the optional choices list.
 schema_value_in_choices() {
     local value="$1"
     local choices_raw="$2"
@@ -181,6 +207,10 @@ schema_value_in_choices() {
     return 1
 }
 
+# Evaluate a simple conditional requirement expression.
+#
+# Supported format: VAR=value or VAR=value1|value2. The current scalar value of
+# VAR is compared against the allowed values.
 schema_condition_matches_current() {
     local condition="$1"
     local lhs
@@ -206,6 +236,7 @@ schema_condition_matches_current() {
     return 1
 }
 
+# Return success when a variable is required under the current settings.
 schema_var_is_required_current() {
     local schema_prefix="$1"
     local var_name="$2"
@@ -226,6 +257,9 @@ schema_var_is_required_current() {
     esac
 }
 
+# Validate all current values for required-ness and choices.
+#
+# Sweep variables validate every emitted value, not just the first scalar.
 schema_validate_current_values() {
     local schema_prefix="$1"
     local -n display_name_ref="${schema_prefix}_DISPLAY_NAME"
@@ -257,6 +291,7 @@ schema_validate_current_values() {
     done
 }
 
+# Print help output that describes every registered variable.
 schema_print_registry_table() {
     local schema_prefix="$1"
     local -n order_ref="${schema_prefix}_VAR_ORDER"
@@ -289,6 +324,7 @@ schema_print_registry_table() {
     done
 }
 
+# Print the resolved values after defaults and overrides have been applied.
 schema_print_resolved_summary() {
     local schema_prefix="$1"
     local -n display_name_ref="${schema_prefix}_DISPLAY_NAME"
@@ -305,6 +341,10 @@ schema_print_resolved_summary() {
     echo
 }
 
+# Emit the cartesian product of all registered variable values.
+#
+# Each output line is a semicolon-delimited assignment list consumed by
+# engine_load_combo.
 schema_emit_combos_recursive() {
     local schema_prefix="$1"
     local index="$2"
@@ -330,6 +370,7 @@ schema_emit_combos_recursive() {
     done
 }
 
+# Emit the current scalar globals as KEY=value lines for run_config.env.
 schema_emit_runtime_env() {
     local schema_prefix="$1"
     local -n order_ref="${schema_prefix}_VAR_ORDER"

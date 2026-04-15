@@ -7,6 +7,7 @@ ENGINE_NAME="qdrant"
 ENGINE_SCHEMA_PREFIX="QDRANT"
 schema_engine_init "qdrant" "$ENGINE_SCHEMA_PREFIX" "Qdrant"
 
+# Print Qdrant-specific help plus the schema variable table.
 qdrant_print_help() {
     cat <<'EOF'
 Qdrant Help
@@ -26,6 +27,7 @@ EOF
     schema_print_registry_table "$ENGINE_SCHEMA_PREFIX"
 }
 
+# Normalize the optional CORES value for names and preview output.
 qdrant_cores_label() {
     if [[ -n "${CORES_CURRENT:-}" ]]; then
         printf '%s\n' "$CORES_CURRENT"
@@ -34,6 +36,7 @@ qdrant_cores_label() {
     fi
 }
 
+# Load Qdrant schema defaults into the shared engine contract.
 engine_set_defaults() {
     schema_load "$ENGINE_SCHEMA_PREFIX" "$ENGINE_DIR/schema.sh"
     schema_apply_defaults "$ENGINE_SCHEMA_PREFIX"
@@ -41,6 +44,7 @@ engine_set_defaults() {
     REQUIRES_DAOS="false"
 }
 
+# Apply --set/env overrides and expose the resolved scalar globals.
 engine_apply_overrides() {
     schema_sync_values_from_current_globals "$ENGINE_SCHEMA_PREFIX"
     schema_apply_overrides_from_env "$ENGINE_SCHEMA_PREFIX"
@@ -48,6 +52,7 @@ engine_apply_overrides() {
     apply_scalar_override INSERT_START_ID
 }
 
+# Validate schema values and derive INSERT_START_ID when it was not provided.
 engine_validate_config() {
     schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
 
@@ -64,14 +69,17 @@ engine_validate_config() {
     fi
 }
 
+# Print resolved Qdrant settings before run directory generation/submission.
 engine_print_summary() {
     schema_print_resolved_summary "$ENGINE_SCHEMA_PREFIX"
 }
 
+# Entry point used by the root submit manager for --help --engine qdrant.
 engine_show_help() {
     qdrant_print_help
 }
 
+# Print one concise preview entry for a generated matrix combo.
 engine_preview_combo() {
     local run_dir_name="$1"
 
@@ -86,10 +94,12 @@ engine_preview_combo() {
 EOF
 }
 
+# Emit all schema sweep combinations for the root submit manager.
 engine_iterate_matrix() {
     schema_emit_combos_recursive "$ENGINE_SCHEMA_PREFIX" 0 ""
 }
 
+# Load one matrix combo into scalar globals used by naming and env emission.
 engine_load_combo() {
     local assignment
     local key
@@ -113,10 +123,12 @@ engine_load_combo() {
     REQUIRES_DAOS="false"
 }
 
+# Validate a loaded combo after sweep expansion.
 engine_validate_combo() {
     schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
 }
 
+# Build the Qdrant run directory name for the loaded combo.
 engine_make_run_dir_name() {
     local timestamp
 
@@ -124,6 +136,7 @@ engine_make_run_dir_name() {
     echo "${TASK}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_${timestamp}"
 }
 
+# Select the launch script copied into submit.sh for local vs PBS runs.
 engine_main_script_path() {
     if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
         echo "local_main.sh"
@@ -132,11 +145,13 @@ engine_main_script_path() {
     fi
 }
 
+# Emit run_config.env contents consumed by Qdrant main/local_main scripts.
 engine_emit_runtime_env() {
     schema_emit_runtime_env "$ENGINE_SCHEMA_PREFIX"
     printf 'INSERT_START_ID=%s\n' "${INSERT_START_ID:-}"
 }
 
+# Stage the Qdrant binaries, launch scripts, and task-specific helper scripts.
 engine_copy_payload() {
     local target_dir="$1"
 

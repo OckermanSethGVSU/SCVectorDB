@@ -6,6 +6,7 @@ ENGINE_NAME="weaviate"
 ENGINE_SCHEMA_PREFIX="WEAVIATE"
 schema_engine_init "weaviate" "$ENGINE_SCHEMA_PREFIX" "Weaviate"
 
+# Print Weaviate-specific help plus the schema variable table.
 weaviate_print_help() {
     cat <<'EOF'
 Weaviate Help
@@ -25,6 +26,7 @@ EOF
     schema_print_registry_table "$ENGINE_SCHEMA_PREFIX"
 }
 
+# Load Weaviate schema defaults into the shared engine contract.
 engine_set_defaults() {
     schema_load "$ENGINE_SCHEMA_PREFIX" "$ENGINE_DIR/schema.sh"
     schema_apply_defaults "$ENGINE_SCHEMA_PREFIX"
@@ -32,6 +34,7 @@ engine_set_defaults() {
     REQUIRES_DAOS="false"
 }
 
+# Apply --set/env overrides and fill BASE_DIR from the current directory.
 engine_apply_overrides() {
     schema_sync_values_from_current_globals "$ENGINE_SCHEMA_PREFIX"
     schema_apply_overrides_from_env "$ENGINE_SCHEMA_PREFIX"
@@ -41,22 +44,27 @@ engine_apply_overrides() {
     schema_assign_globals_from_values "$ENGINE_SCHEMA_PREFIX"
 }
 
+# Validate required values and schema choices after overrides are resolved.
 engine_validate_config() {
     schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
 }
 
+# Print resolved Weaviate settings before run directory generation/submission.
 engine_print_summary() {
     schema_print_resolved_summary "$ENGINE_SCHEMA_PREFIX"
 }
 
+# Entry point used by the root submit manager for --help --engine weaviate.
 engine_show_help() {
     weaviate_print_help
 }
 
+# Emit all schema sweep combinations for the root submit manager.
 engine_iterate_matrix() {
     schema_emit_combos_recursive "$ENGINE_SCHEMA_PREFIX" 0 ""
 }
 
+# Load one matrix combo into scalar globals used by naming and env emission.
 engine_load_combo() {
     local assignment
     local key
@@ -81,10 +89,12 @@ engine_load_combo() {
     REQUIRES_DAOS="false"
 }
 
+# Validate a loaded combo after sweep expansion.
 engine_validate_combo() {
     schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
 }
 
+# Build the Weaviate run directory name for the loaded combo.
 engine_make_run_dir_name() {
     local timestamp
     timestamp="$(date +"%Y-%m-%d_%H_%M_%S")"
@@ -102,10 +112,12 @@ engine_make_run_dir_name() {
     esac
 }
 
+# Select the Weaviate launch script copied into submit.sh.
 engine_main_script_path() {
     echo "main.sh"
 }
 
+# Emit run_config.env contents consumed by the Weaviate launch scripts.
 engine_emit_runtime_env() {
     schema_emit_runtime_env "$ENGINE_SCHEMA_PREFIX"
 
@@ -117,6 +129,7 @@ engine_emit_runtime_env() {
     printf 'UPLOAD_CLIENTS_PER_WORKER=%s\n' "$UPLOAD_CLIENTS_CURRENT"
 }
 
+# Stage the Weaviate launch files, client binary, and optional perf assets.
 engine_copy_payload() {
     local target_dir="$1"
     copy_engine_items "$ENGINE_DIR/weaviateSetup" "$target_dir" \

@@ -4,6 +4,10 @@ source "$ENGINE_DIR/utils/utils.sh"
 
 ENGINE_NAME="milvus"
 
+# Set Milvus defaults used before CLI/env overrides are applied.
+#
+# Milvus has not yet been converted to schema.sh, so this function still owns
+# the default values directly.
 engine_set_defaults() {
     NODES=(1)
     CORES=(112)
@@ -105,6 +109,7 @@ engine_set_defaults() {
     REQUIRES_DAOS="false"
 }
 
+# Apply root-manager overrides and derive dependent Milvus storage defaults.
 engine_apply_overrides() {
     apply_overrides
 
@@ -121,6 +126,7 @@ engine_apply_overrides() {
     fi
 }
 
+# Validate required Milvus settings and derive INSERT_START_ID.
 engine_validate_config() {
     [[ -n "${TASK:-}" ]] || {
         echo "Missing required Milvus setting: TASK" >&2
@@ -136,10 +142,12 @@ engine_validate_config() {
     fi
 }
 
+# Print the resolved Milvus configuration using the legacy summary helper.
 engine_print_summary() {
     print_config_summary
 }
 
+# Emit the legacy Milvus sweep matrix as pipe-delimited combo records.
 engine_iterate_matrix() {
     local num_nodes
     local query_bs
@@ -157,6 +165,7 @@ engine_iterate_matrix() {
     done
 }
 
+# Load one legacy matrix combo into scalar globals used by naming/env emission.
 engine_load_combo() {
     IFS='|' read -r NODES_CURRENT QUERY_BATCH_CURRENT INSERT_BATCH_CURRENT CORES_CURRENT <<< "$1"
     TOTAL_NODES=$((NODES_CURRENT + 1))
@@ -169,10 +178,12 @@ engine_load_combo() {
     fi
 }
 
+# Validate a loaded Milvus combo against scheduler/resource constraints.
 engine_validate_combo() {
     validate_programmatic_submit_config "$NODES_CURRENT" "$CORES_CURRENT" "$INSERT_BATCH_CURRENT" "$QUERY_BATCH_CURRENT"
 }
 
+# Build the Milvus run directory name for the loaded task and combo.
 engine_make_run_dir_name() {
     local timestamp
     local corpus_size_for_dir
@@ -226,6 +237,7 @@ engine_make_run_dir_name() {
     esac
 }
 
+# Select the launch script copied into submit.sh for local vs PBS runs.
 engine_main_script_path() {
     if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
         echo "local_main.sh"
@@ -234,6 +246,7 @@ engine_main_script_path() {
     fi
 }
 
+# Emit run_config.env contents consumed by Milvus launch/client scripts.
 engine_emit_runtime_env() {
     cat <<EOF
 NODES=${NODES_CURRENT}
@@ -344,6 +357,7 @@ EOF
     fi
 }
 
+# Stage Milvus containers, launch scripts, clients, and task-specific helpers.
 engine_copy_payload() {
     local target_dir="$1"
 
