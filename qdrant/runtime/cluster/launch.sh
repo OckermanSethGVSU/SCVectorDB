@@ -166,3 +166,5 @@ while [ ! -e "$TARGET" ]; do
 done
 
 echo "Rank ${RANK} closing"
+kill "$QDRANT_PID" 2>/dev/null || true
+wait "$QDRANT_PID" 2>/dev/null || true

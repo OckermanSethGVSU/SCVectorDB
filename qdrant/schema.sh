@@ -14,7 +14,7 @@
 # The order in this file controls the order shown in `--help --engine qdrant`.
 
 # Core execution mode and platform
-register_qdrant_var "TASK" "required" "" "INSERT INDEX QUERY MIXED" "Experiment task"
+register_qdrant_var "TASK" "required" "" "INSERT INDEX QUERY MIXED LAUNCH" "Experiment task"
 register_qdrant_var "RUN_MODE" "default" "PBS" "PBS local" "Run under PBS or create a local harness"
 register_qdrant_var "PLATFORM" "required" "" "POLARIS AURORA" "Target platform"
 register_qdrant_var "ACCOUNT" "required" "" "" "PBS project/account to charge for the run"

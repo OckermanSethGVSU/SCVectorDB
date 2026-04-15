@@ -174,11 +174,28 @@ finalize_cluster_run() {
     fi
 }
 
+wait_for_launch_stop_flag() {
+    touch ./runtime_state/workflow_start.txt ./runtime_state/workflow_stop.txt
+    echo "TASK=LAUNCH: Qdrant cluster is up and will stay running until you create flag.txt or runtime_state/flag.txt in this run directory."
+
+    while [[ ! -e flag.txt && ! -e ./runtime_state/flag.txt ]]; do
+        sleep 1
+    done
+
+    echo "TASK=LAUNCH: stop flag detected; stopping Qdrant cluster."
+    touch flag.txt ./runtime_state/flag.txt
+    sleep 30
+}
+
 
 ########## Workflow ###############
 line=$(head -n 1 ip_registry.txt)
 IFS=',' read -r id ip port <<< "$line"
 port=$((port - 1))
+
+if [[ "$TASK" == "LAUNCH" ]]; then
+    wait_for_launch_stop_flag
+else
 
 if [ -z "$RESTORE_DIR" ]; then
     
@@ -280,6 +297,8 @@ if [[ "$TASK" == "MIXED" ]]; then
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 "${MIXED_TIMELINE_ARGS[@]}"
 
     finalize_cluster_run
+fi
+
 fi
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then

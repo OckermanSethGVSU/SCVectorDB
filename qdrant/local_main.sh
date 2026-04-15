@@ -99,6 +99,10 @@ ensure_runtime_tools() {
 }
 
 ensure_binaries() {
+    if [[ "$TASK" == "LAUNCH" ]]; then
+        return 0
+    fi
+
     if [[ "$TASK" == "MIXED" || "$WORKLOAD_MODE" == "mixed" ]]; then
         if [[ ! -x "$MIXED_BINARY_PATH" ]]; then
             echo "Missing mixed binary at $MIXED_BINARY_PATH" >&2
@@ -150,6 +154,13 @@ start_qdrant() {
     echo "Qdrant did not become healthy within 60 seconds." >&2
     echo "Inspect logs with: ${CONTAINER_RUNTIME} logs ${CONTAINER_NAME}" >&2
     exit 1
+}
+
+stop_qdrant() {
+    if "$CONTAINER_RUNTIME" ps --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+        echo "Stopping Qdrant container '$CONTAINER_NAME'..."
+        "$CONTAINER_RUNTIME" stop "$CONTAINER_NAME" >/dev/null
+    fi
 }
 
 setup_local_collection() {
@@ -290,6 +301,18 @@ finalize_local_run() {
     fi
 }
 
+wait_for_launch_stop_flag() {
+    echo "TASK=LAUNCH: Qdrant is up and will stay running until you create flag.txt or runtime_state/flag.txt in this run directory."
+
+    while [[ ! -e flag.txt && ! -e "$RUNTIME_STATE_DIR/flag.txt" ]]; do
+        sleep 1
+    done
+
+    echo "TASK=LAUNCH: stop flag detected."
+    touch flag.txt "$RUNTIME_STATE_DIR/flag.txt"
+    stop_qdrant
+}
+
 run_restore_status() {
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
         python3 ./collection_status.py
@@ -340,6 +363,12 @@ main() {
     ensure_runtime_tools
     ensure_binaries
     start_qdrant
+
+    if [[ "$TASK" == "LAUNCH" ]]; then
+        wait_for_launch_stop_flag
+        return 0
+    fi
+
     prepare_cluster_state
 
     if [[ -n "$RESTORE_DIR" ]]; then
@@ -392,7 +421,7 @@ main() {
         return 0
     fi
 
-    if [[ "$TASK" != "INSERT" && "$TASK" != "INDEX" && "$TASK" != "QUERY" && "$TASK" != "MIXED" ]]; then
+    if [[ "$TASK" != "INSERT" && "$TASK" != "INDEX" && "$TASK" != "QUERY" && "$TASK" != "MIXED" && "$TASK" != "LAUNCH" ]]; then
         echo "Unsupported TASK '$TASK' for local_main.sh" >&2
         exit 1
     fi
