@@ -1,4 +1,17 @@
 #!/bin/bash
+#
+# Qdrant schema format:
+#   register_qdrant_var "NAME" "REQUIREMENT" "DEFAULT" "CHOICES" "DESCRIPTION" ["REQUIRED_IF"]
+#
+# REQUIREMENT:
+#   required    - caller must provide a value; DEFAULT should normally be empty.
+#   default     - DEFAULT is used when the caller does not override the variable.
+#   conditional - variable is required only when REQUIRED_IF matches the current config.
+#
+# CHOICES is a space-separated allowlist. Leave it empty to allow any value.
+# REQUIRED_IF currently supports one condition in the form OTHER_VAR=value1|value2.
+# Every registered variable may be set to one value or a space-separated sweep list.
+# The order in this file controls the order shown in `--help --engine qdrant`.
 
 # Core execution mode and platform
 register_qdrant_var "TASK" "required" "" "INSERT INDEX QUERY MIXED" "Experiment task"
