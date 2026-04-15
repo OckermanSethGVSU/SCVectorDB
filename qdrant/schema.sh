@@ -30,6 +30,9 @@ register_qdrant_var "WALLTIME" "required" "" "" "PBS walltime"
 register_qdrant_var "QUEUE" "required" "" "preemptable debug debug-scaling prod capacity" "PBS queue name"
 
 # Engine/runtime selection
+register_qdrant_var "BASE_DIR" "default" "" "" "Base Qdrant directory containing generated run directories; auto-filled by the submit manager when empty"
+register_qdrant_var "ENV_PATH" "default" "" "" "Python virtual environment path to activate for PBS runs"
+register_qdrant_var "ALLOW_SYSTEM_PYTHON" "default" "False" "True False" "Allow PBS runs to use the already-loaded Python environment when ENV_PATH is empty"
 register_qdrant_var "QDRANT_EXECUTABLE" "default" "qdrant" "qdrant qdrantInsertTracing qdrantQueryTrace" "Qdrant executable variant"
 register_qdrant_var "LOG_LEVEL" "default" "ERROR" "" "Qdrant log level passed to generated node configs"
 register_qdrant_var "VECTOR_DIM" "default" "200" "" "Vector dimension"

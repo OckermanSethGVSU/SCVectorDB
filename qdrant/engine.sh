@@ -56,6 +56,24 @@ engine_apply_overrides() {
 engine_validate_config() {
     schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
 
+    if [[ "${RUN_MODE^^}" == "PBS" && -z "${ENV_PATH:-}" && "${ALLOW_SYSTEM_PYTHON:-False}" != "True" ]]; then
+        cat >&2 <<'EOF'
+Qdrant PBS runs require ENV_PATH by default so the Python environment is explicit.
+
+Set one of these on the command line:
+  --set ENV_PATH=/path/to/python/env
+
+Or, if the job's loaded modules/current environment already provide every Python dependency:
+  --set ALLOW_SYSTEM_PYTHON=True
+
+You can also put the same setting in your config file:
+  ENV_PATH=/path/to/python/env
+  # or
+  ALLOW_SYSTEM_PYTHON=True
+EOF
+        return 1
+    fi
+
     if [[ -z "${INSERT_START_ID:-}" ]]; then
         if [[ -n "$RESTORE_DIR" ]]; then
             INSERT_START_ID=$EXPECTED_CORPUS_SIZE
@@ -147,6 +165,10 @@ engine_main_script_path() {
 
 # Emit run_config.env contents consumed by Qdrant main/local_main scripts.
 engine_emit_runtime_env() {
+    if [[ -z "${BASE_DIR:-}" ]]; then
+        BASE_DIR="$ENGINE_DIR"
+    fi
+
     schema_emit_runtime_env "$ENGINE_SCHEMA_PREFIX"
     printf 'INSERT_START_ID=%s\n' "${INSERT_START_ID:-}"
 }

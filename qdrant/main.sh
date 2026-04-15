@@ -1,3 +1,27 @@
+if [[ -z "${ENV_PATH:-}" && "${ALLOW_SYSTEM_PYTHON:-False}" != "True" ]]; then
+    cat >&2 <<'EOF'
+Error: ENV_PATH must be set unless ALLOW_SYSTEM_PYTHON=True.
+
+Set one of these in run_config.env:
+  ENV_PATH=/path/to/python/env
+
+Or, if the job's loaded modules/current environment already provide every Python dependency:
+  ALLOW_SYSTEM_PYTHON=True
+EOF
+    exit 1
+fi
+
+if [[ -z "${myDIR:-}" ]]; then
+    echo "Error: myDIR must be set to the generated Qdrant run directory name." >&2
+    exit 1
+fi
+
+if [[ -z "${BASE_DIR:-}" ]]; then
+    BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+RUN_DIR="${RUN_DIR:-$BASE_DIR/$myDIR}"
+
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
     ml spack-pe-base/0.8.1
@@ -5,15 +29,24 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml apptainer/main
     ml load e2fsprogs
     module use /soft/modulefiles; module load conda; conda activate base
-    source /eagle/projects/radix-io/sockerman/cleanQdrant/qdrantEnv/bin/activate
-
-    cd /eagle/projects/radix-io/sockerman/SCVectorDB/qdrant/$myDIR
+    if [[ -n "${ENV_PATH:-}" ]]; then
+        echo "Activating Python environment: $ENV_PATH"
+        source "$ENV_PATH/bin/activate"
+    else
+        echo "ENV_PATH not set; using current Python environment: $(command -v python3)"
+    fi
+    cd "$RUN_DIR"
 
 elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
     module load frameworks
-    source /lus/flare/projects/radix-io/sockerman/temp/qdrant/newEnv/bin/activate
-    cd /lus/flare/projects/radix-io/sockerman/temp/qdrant/$myDIR
+    if [[ -n "${ENV_PATH:-}" ]]; then
+        echo "Activating Python environment: $ENV_PATH"
+        source "$ENV_PATH/bin/activate"
+    else
+        echo "ENV_PATH not set; using current Python environment: $(command -v python3)"
+    fi
+    cd "$RUN_DIR"
 fi
 
 
