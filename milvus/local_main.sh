@@ -121,13 +121,13 @@ pick_binary() {
 
 STANDARD_BINARY_PATH="$(pick_binary \
     "$STANDARD_BINARY_PATH" \
-    "$ROOT_DIR/goCode/multiClientOP/multiClientOP" \
-    "$ROOT_DIR/multiClientOP")"
+    "$ROOT_DIR/clients/batch_client/batch_client" \
+    "$ROOT_DIR/batch_client")"
 
 MIXED_BINARY_PATH="$(pick_binary \
     "$MIXED_BINARY_PATH" \
-    "$ROOT_DIR/goCode/mixedRunner/mixedRunner" \
-    "$ROOT_DIR/mixedRunner")"
+    "$ROOT_DIR/clients/mixed/mixed" \
+    "$ROOT_DIR/mixed")"
 
 resolve_mixed_insert_start_id() {
     if [[ "$TASK" != "MIXED" || -n "${INSERT_START_ID:-}" ]]; then
@@ -164,12 +164,12 @@ ensure_runtime_tools() {
 
     if [[ "$TASK" == "MIXED" ]]; then
         if [[ ! -x "$MIXED_BINARY_PATH" ]]; then
-            echo "Missing mixedrunner binary at $MIXED_BINARY_PATH" >&2
+            echo "Missing mixed binary at $MIXED_BINARY_PATH" >&2
             exit 1
         fi
     else
         if [[ ! -x "$STANDARD_BINARY_PATH" ]]; then
-            echo "Missing multiClientOP binary at $STANDARD_BINARY_PATH" >&2
+            echo "Missing batch_client binary at $STANDARD_BINARY_PATH" >&2
             exit 1
         fi
     fi
@@ -368,8 +368,8 @@ prepare_distributed_support_files() {
 
     if [[ -f "$RUN_DIR/replace_unified.py" ]]; then
         replace_source="$RUN_DIR/replace_unified.py"
-    elif [[ -f "$ROOT_DIR/generalPython/replace_unified.py" ]]; then
-        replace_source="$ROOT_DIR/generalPython/replace_unified.py"
+    elif [[ -f "$ROOT_DIR/scripts/replace_unified.py" ]]; then
+        replace_source="$ROOT_DIR/scripts/replace_unified.py"
     fi
 
     if [[ -z "$replace_source" ]]; then
@@ -385,8 +385,8 @@ prepare_distributed_support_files() {
         return 0
     fi
 
-    if [[ -f "$ROOT_DIR/cpuMilvus/configs/unified_milvus.yaml" ]]; then
-        config_source="$ROOT_DIR/cpuMilvus/configs/unified_milvus.yaml"
+    if [[ -f "$ROOT_DIR/runtime/configs/unified_milvus.yaml" ]]; then
+        config_source="$ROOT_DIR/runtime/configs/unified_milvus.yaml"
     elif [[ -f "$RUN_DIR/unified_milvus.yaml" ]]; then
         config_source="$RUN_DIR/unified_milvus.yaml"
     fi

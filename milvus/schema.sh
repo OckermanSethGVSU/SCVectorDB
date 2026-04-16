@@ -31,7 +31,7 @@ register_milvus_var "QUEUE" "required" "" "preemptable debug debug-scaling prod 
 register_milvus_var "MODE" "default" "DISTRIBUTED" "DISTRIBUTED STANDALONE" "Milvus deployment mode"
 register_milvus_var "ENV_PATH" "default" "/lus/flare/projects/radix-io/sockerman/milvusEnv/" "" "Python environment path"
 register_milvus_var "MILVUS_BUILD_DIR" "default" "cpuMilvus" "" "Milvus build directory"
-register_milvus_var "MILVUS_CONFIG_DIR" "default" "cpuMilvus" "" "Milvus config directory"
+register_milvus_var "MILVUS_CONFIG_DIR" "default" "runtime" "" "Milvus config directory"
 register_milvus_var "PERF" "default" "NONE" "NONE STAT TRACE" "Performance collection mode"
 register_milvus_var "PERF_EVENTS" "default" "topdown-be-bound,topdown-mem-bound,topdown-retiring,topdown-fe-bound,topdown-bad-spec" "" "Comma-separated perf stat events"
 register_milvus_var "WAL" "default" "woodpecker" "" "Milvus WAL mode"

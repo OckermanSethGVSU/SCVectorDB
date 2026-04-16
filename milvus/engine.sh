@@ -171,21 +171,21 @@ engine_copy_payload() {
     local target_dir="$1"
 
     if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
-        copy_engine_items "$ENGINE_DIR/goCode/multiClientOP" "$target_dir" "multiClientOP" "main.go"
+        copy_engine_items "$ENGINE_DIR/clients/batch_client" "$target_dir" "batch_client" "main.go"
         if [[ -f "$target_dir/main.go" ]]; then
-            mv "$target_dir/main.go" "$target_dir/multiClient.go"
+            mv "$target_dir/main.go" "$target_dir/batch_client_main.go"
         fi
-        copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" \
+        copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" \
             "multi_client_summary.py" \
             "bulk_upload_import.py" \
             "bulk_upload_import_mc.py" \
             "replace_unified.py"
         copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "npy_inspect.py"
         mkdir -p "$target_dir/configs"
-        copy_engine_items "$ENGINE_DIR/cpuMilvus/configs" "$target_dir/configs" "unified_milvus.yaml"
+        copy_engine_items "$ENGINE_DIR/runtime/configs" "$target_dir/configs" "unified_milvus.yaml"
 
         if [[ "$TASK" == "MIXED" ]]; then
-            copy_engine_items "$ENGINE_DIR/goCode/mixedRunner" "$target_dir" "mixedRunner" "main.go"
+            copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed" "main.go"
             if [[ -f "$target_dir/main.go" ]]; then
                 mv "$target_dir/main.go" "$target_dir/mixed_main.go"
             fi
@@ -193,9 +193,9 @@ engine_copy_payload() {
         fi
 
         if [[ -z "$RESTORE_DIR" ]]; then
-            copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" "setup_collection.py"
+            copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "setup_collection.py"
             if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
-                copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" "index.py"
+                copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "index.py"
             fi
         else
             copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "status.py"
@@ -203,10 +203,10 @@ engine_copy_payload() {
     else
         if [[ "$MODE" == "STANDALONE" ]]; then
             copy_engine_items "$ENGINE_DIR/sifs" "$target_dir" "milvus.sif"
-            copy_engine_items "$ENGINE_DIR/milvusSetup" "$target_dir" "standaloneLaunch.sh" "execute.sh"
+            copy_engine_items "$ENGINE_DIR/runtime/cluster" "$target_dir" "standaloneLaunch.sh" "execute.sh"
         elif [[ "$MODE" == "DISTRIBUTED" ]]; then
             copy_engine_items "$ENGINE_DIR/sifs" "$target_dir" "milvus.sif" "etcd_v3.5.18.sif" "minio.sif"
-            copy_engine_items "$ENGINE_DIR/milvusSetup" "$target_dir" \
+            copy_engine_items "$ENGINE_DIR/runtime/cluster" "$target_dir" \
                 "execute.sh" \
                 "launch_etcd.sh" \
                 "launch_minio.sh" \
@@ -221,7 +221,7 @@ engine_copy_payload() {
             copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "launch_otel.sh" "otel_config.yaml" "analyze_traces.py"
         fi
 
-        copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" \
+        copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" \
             "net_mapping.py" \
             "replace_unified.py" \
             "profile.py" \
@@ -231,13 +231,13 @@ engine_copy_payload() {
             "bulk_upload_import_mc.py"
         copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "npy_inspect.py"
 
-        copy_engine_items "$ENGINE_DIR/goCode/multiClientOP" "$target_dir" "multiClientOP" "main.go"
+        copy_engine_items "$ENGINE_DIR/clients/batch_client" "$target_dir" "batch_client" "main.go"
         if [[ -f "$target_dir/main.go" ]]; then
-            mv "$target_dir/main.go" "$target_dir/multiClient.go"
+            mv "$target_dir/main.go" "$target_dir/batch_client_main.go"
         fi
 
         if [[ "$TASK" == "MIXED" ]]; then
-            copy_engine_items "$ENGINE_DIR/goCode/mixedRunner" "$target_dir" "mixedRunner" "main.go"
+            copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed" "main.go"
             if [[ -f "$target_dir/main.go" ]]; then
                 mv "$target_dir/main.go" "$target_dir/mixed_main.go"
             fi
@@ -245,9 +245,9 @@ engine_copy_payload() {
         fi
 
         if [[ -z "$RESTORE_DIR" ]]; then
-            copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" "setup_collection.py"
+            copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "setup_collection.py"
             if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
-                copy_engine_items "$ENGINE_DIR/generalPython" "$target_dir" "index.py"
+                copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "index.py"
             fi
         else
             copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "status.py"

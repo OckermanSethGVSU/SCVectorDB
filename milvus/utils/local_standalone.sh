@@ -37,7 +37,7 @@ write_standalone_registry_files() {
     local -a target_dirs=(
         "$PWD"
         "$REPO_ROOT"
-        "$REPO_ROOT/goCode/multiClientInsert"
+        "$REPO_ROOT/clients/batch_client"
     )
     local dir
     local registry_line="0,${proxy_host},${proxy_port},${metrics_port}"

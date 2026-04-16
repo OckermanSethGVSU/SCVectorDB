@@ -330,7 +330,7 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
 
     
     # setup ETCD/Minio info which all parts will need
-    cp -r ${BASE_DIR}/cpuMilvus/configs/ .
+    cp -r ${BASE_DIR}/runtime/configs/ .
     rm ./configs/milvus.yaml
     python3 replace_unified.py --mode distributed
 
@@ -424,7 +424,7 @@ run_direct_insert() {
     export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
     export INSERT_STREAMING=$INSERT_STREAMING
 
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
 
     env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
 
@@ -564,7 +564,7 @@ if [[ "$TASK" == "QUERY" ]]; then
     export QUERY_STREAMING=$QUERY_STREAMING
 
 
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
 
     env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
 
@@ -632,7 +632,7 @@ if [[ "$TASK" == "MIXED" ]]; then
     export QUERY_CLIENTS=${MIXED_QUERY_CLIENTS_PER_PROXY:-$QUERY_CLIENTS_PER_PROXY}
     mkdir -p "$MIXED_RESULT_PATH"
 
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixedRunner
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixed
 
     MIXED_TIMELINE_METRIC="dot"
     if [[ "$DISTANCE_METRIC" == "COSINE" ]]; then

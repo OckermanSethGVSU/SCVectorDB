@@ -37,12 +37,12 @@ Main HPC entrypoint:
 - `pbs_submit_manager.sh`: sweep configuration and PBS script generation
 - `main.sh`: runtime orchestration for standalone and distributed runs
 - `check_dependencies.sh`: dependency validation helper
-- `milvusSetup/`: launch scripts for Milvus, etcd, and MinIO
-- `generalPython/`: collection setup, profiling, polling, indexing, summaries, and helper scripts
-- `goCode/multiClientOP/`: main Go client used by `main.sh`
-- `goCode/mixedrunner/`: mixed insert/query Go runner with JSONL event logs
-- `goCode/run_mixed.sh`: example launcher for the mixed runner
-- `cpuMilvus/configs/`: Milvus config templates used at runtime
+- `runtime/cluster/`: launch scripts for Milvus, etcd, and MinIO
+- `runtime/configs/`: Milvus config templates used at runtime
+- `scripts/`: collection setup, profiling, polling, indexing, summaries, and helper scripts
+- `clients/batch_client/`: main Go client used by `main.sh`
+- `clients/mixed/`: mixed insert/query Go runner with JSONL event logs
+- `clients/run_mixed.sh`: example launcher for the mixed runner
 - `utils/`: tracing helpers, status scripts, local standalone helpers, and timeline analysis
 
 ## HPC runtime flow (`main.sh`)
@@ -53,11 +53,11 @@ Main HPC entrypoint:
    - standalone Milvus on one worker node, or
    - distributed etcd/MinIO plus Milvus service roles across worker nodes.
 4. Wait for readiness and determine the reachable Milvus address.
-5. For insert/index paths, configure the collection with `generalPython/setup_collection.py`.
+5. For insert/index paths, configure the collection with `scripts/setup_collection.py`.
 6. For `TASK=INSERT` and the preload insert step of `TASK=QUERY`, choose the write path with `INSERT_METHOD`:
    - `traditional`: run the Go multi-client insert workload
-   - `bulk`: run `generalPython/bulk_upload_import.py`
-   - alternative pipelined helper: `generalPython/bulk_upload_import_mc.py` writes local bulk files and uploads them to MinIO with `mc cp` as each batch is committed, deleting staged files after successful upload by default
+   - `bulk`: run `scripts/bulk_upload_import.py`
+   - alternative pipelined helper: `scripts/bulk_upload_import_mc.py` writes local bulk files and uploads them to MinIO with `mc cp` as each batch is committed, deleting staged files after successful upload by default
    - when `INSERT_METHOD=bulk`, choose the bulk transport with `BULK_UPLOAD_TRANSPORT`:
      - `writer`: current `RemoteBulkWriter` path
      - `mc`: local writer plus pipelined `mc cp`
@@ -65,7 +65,7 @@ Main HPC entrypoint:
      - `memory`: `/dev/shm/<run>/bulk-import-stage`
      - `lustre`: `<run>/bulk-import-stage`
      - `SSD`: `/local/scratch/<run>/bulk-import-stage`
-7. If `TASK=INDEX`, run `generalPython/index_data.py`.
+7. If `TASK=INDEX`, run `scripts/index.py`.
 8. Write timing outputs, summaries, optional tracing data, and worker logs.
 
 ## Important submit variables (`pbs_submit_manager.sh`)
@@ -120,19 +120,19 @@ Main HPC entrypoint:
 
 ## Go clients
 
-Build from `milvus/goCode`:
+Build from `milvus/clients`:
 
 ```bash
-cd goCode
-./build.sh multiClientOP
-./build.sh mixedrunner
+cd clients
+./build.sh batch_client
+./build.sh mixed
 ```
 
 Important binaries/scripts:
 
-- `goCode/multiClientOP/multiClientOP`: insert/query client used by `main.sh`
-- `goCode/mixedrunner/mixedrunner`: mixed insert/query runner
-- `goCode/run_mixed.sh`: example mixed-runner invocation
+- `clients/batch_client/batch_client`: insert/query client used by `main.sh`
+- `clients/mixed/mixed`: mixed insert/query runner
+- `clients/run_mixed.sh`: example mixed-runner invocation
 
 ## Mixed runner notes
 

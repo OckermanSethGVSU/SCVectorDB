@@ -2,8 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RUNNER_DIR="$SCRIPT_DIR/mixedrunner"
-export PROXY_REGISTRY_PATH="$SCRIPT_DIR/multiClientOP/PROXY_registry.txt"
+RUNNER_DIR="$SCRIPT_DIR/mixed"
+export PROXY_REGISTRY_PATH="$SCRIPT_DIR/batch_client/PROXY_registry.txt"
 
 export NUM_PROXIES=1
 

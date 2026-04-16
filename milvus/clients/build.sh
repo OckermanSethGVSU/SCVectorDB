@@ -22,7 +22,6 @@ if ! ls *.go >/dev/null 2>&1; then
     exit 1
 fi
 
-# Binary name = directory name
 BIN_NAME=$(basename "$DIR")
 
 echo "Building Go project in: $DIR"
