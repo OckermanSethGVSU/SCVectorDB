@@ -1,137 +1,63 @@
 #!/bin/bash
 
+source "$ROOT_DIR/common/engine_schema_lib.sh"
 source "$ENGINE_DIR/utils/utils.sh"
 
 ENGINE_NAME="milvus"
+ENGINE_SCHEMA_PREFIX="MILVUS"
+schema_engine_init "milvus" "$ENGINE_SCHEMA_PREFIX" "Milvus"
 
-# Set Milvus defaults used before CLI/env overrides are applied.
-#
-# Milvus has not yet been converted to schema.sh, so this function still owns
-# the default values directly.
+milvus_print_help() {
+    cat <<'EOF'
+Milvus Help
+===========
+
+Use `--set NAME=value` to override any variable.
+Any variable may be a single value or a sweep list separated by spaces.
+
+Command examples:
+  ./pbs_submit_manager.sh --engine milvus --set TASK=QUERY --set PLATFORM=AURORA --set WALLTIME=01:00:00 --set QUEUE=debug-scaling --set ACCOUNT=myproj
+  ./pbs_submit_manager.sh --generate-only --engine milvus --set TASK=INSERT --set INSERT_BATCH_SIZE="256 512" --set PLATFORM=AURORA --set WALLTIME=01:00:00 --set QUEUE=debug-scaling --set ACCOUNT=myproj
+
+Variables
+---------
+EOF
+    echo
+    schema_print_registry_table "$ENGINE_SCHEMA_PREFIX"
+}
+
 engine_set_defaults() {
-    NODES=(1)
-    CORES=(112)
-
-    ENV_PATH="/lus/flare/projects/radix-io/sockerman/milvusEnv/"
-    MILVUS_BUILD_DIR="cpuMilvus"
-    MILVUS_CONFIG_DIR="cpuMilvus"
-
-    TASK=""
-    RUN_MODE="PBS"
-    MODE="DISTRIBUTED"
-    STORAGE_MEDIUM="memory"
-    PERF="NONE"
-    PERF_EVENTS="topdown-be-bound,topdown-mem-bound,topdown-retiring,topdown-fe-bound,topdown-bad-spec"
-    WAL="woodpecker"
-    GPU_INDEX="False"
-    TRACING="False"
-    DEBUG="False"
-    BASE_DIR="$(pwd)"
-    MINIO_MODE="stripped"
-    MINIO_MEDIUM="lustre"
-    ETCD_MEDIUM="memory"
-    LOCAL_SHARED_STORAGE_PATH=""
-
-    INSERT_CORPUS_SIZE=10000000
-    INSERT_CLIENTS_PER_PROXY=8
-    INSERT_METHOD="traditional"
-    BULK_UPLOAD_TRANSPORT="mc"
-    BULK_UPLOAD_STAGING_MEDIUM="memory"
-    IMPORT_PROCESSES=204
-    INSERT_BALANCE_STRATEGY="WORKER"
-    INSERT_STREAMING="True"
-    INSERT_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/mergedData/embeddings_merged.npy"
-    INSERT_BATCH_SIZE=(512)
-
-    VECTOR_DIM=2560
-    DISTANCE_METRIC="IP"
-    INIT_FLAT_INDEX="FALSE"
-    SHARDS="16"
-    DML_CHANNELS=16
-    FLUSH_BEFORE_INDEX="TRUE"
-
-    QUERY_CORPUS_SIZE=100000
-    QUERY_CLIENTS_PER_PROXY=1
-    QUERY_BALANCE_STRATEGY="NONE"
-    QUERY_STREAMING="False"
-    QUERY_BATCH_SIZE=(32)
-    QUERY_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy"
-
-    INSERT_MODE="max"
-    INSERT_OPS_PER_SEC=""
-    MIXED_INSERT_BATCH_SIZE=32
-    QUERY_MODE="max"
-    QUERY_OPS_PER_SEC=""
-    MIXED_QUERY_BATCH_SIZE=32
-    MIXED_RESULT_PATH="mixed_logs"
-    MIXED_CORPUS_SIZE=1000000
-    MIXED_QUERY_CLIENTS_PER_PROXY=1
-    MIXED_INSERT_CLIENTS_PER_PROXY=1
-    MIXED_DATA_FILEPATH="/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/10M_part2.npy"
-
-    COLLECTION_NAME=""
-    VECTOR_FIELD=""
-    ID_FIELD=""
-    TOP_K=""
-    QUERY_EF_SEARCH=""
-    SEARCH_CONSISTENCY=""
-    RPC_TIMEOUT=""
-
-    BULK_IMPORT_PREPARE_ONLY="TRUE"
-    BULK_IMPORT_REQUEST_PATH=""
-    BULK_IMPORT_LOAD_REQUEST=""
-    BULK_IMPORT_SUMMARY_PATH=""
-
-    MIXED_INSERT_BATCH_MIN=""
-    MIXED_INSERT_BATCH_MAX=""
-    MIXED_QUERY_BATCH_MIN=""
-    MIXED_QUERY_BATCH_MAX=""
-    INSERT_BATCH_MIN=""
-    INSERT_BATCH_MAX=""
-    QUERY_BATCH_MIN=""
-    QUERY_BATCH_MAX=""
-
-    RESTORE_DIR=""
-    EXPECTED_CORPUS_SIZE=10000000
-
-    ETCD_MODE="single"
-    STREAMING_NODES=2
-    STREAMING_NODES_PER_CN=2
-    QUERY_NODES=1
-    QUERY_NODES_PER_CN=1
-    DATA_NODES=1
-    DATA_NODES_PER_CN=1
-    COORDINATOR_NODES=1
-    COORDINATOR_NODES_PER_CN=1
-    NUM_PROXIES=1
-    NUM_PROXIES_PER_CN=1
-
+    schema_load "$ENGINE_SCHEMA_PREFIX" "$ENGINE_DIR/schema.sh"
+    schema_apply_defaults "$ENGINE_SCHEMA_PREFIX"
+    schema_assign_globals_from_values "$ENGINE_SCHEMA_PREFIX"
     REQUIRES_DAOS="false"
 }
 
-# Apply root-manager overrides and derive dependent Milvus storage defaults.
 engine_apply_overrides() {
-    apply_overrides
+    schema_sync_values_from_current_globals "$ENGINE_SCHEMA_PREFIX"
+    schema_apply_overrides_from_env "$ENGINE_SCHEMA_PREFIX"
 
-    if [[ -z "$ETCD_MEDIUM" ]]; then
-        ETCD_MEDIUM="$STORAGE_MEDIUM"
+    if [[ -z "${MILVUS_VALUES[BASE_DIR]:-}" ]]; then
+        MILVUS_VALUES["BASE_DIR"]="$(pwd)"
     fi
 
-    if [[ -z "$MINIO_MODE" ]]; then
-        if [[ "$MODE" == "DISTRIBUTED" ]]; then
-            MINIO_MODE="stripped"
+    if [[ -z "${MILVUS_VALUES[ETCD_MEDIUM]:-}" ]]; then
+        MILVUS_VALUES["ETCD_MEDIUM"]="${MILVUS_VALUES[STORAGE_MEDIUM]:-}"
+    fi
+
+    if [[ -z "${MILVUS_VALUES[MINIO_MODE]:-}" ]]; then
+        if [[ "${MILVUS_VALUES[MODE]:-}" == "DISTRIBUTED" ]]; then
+            MILVUS_VALUES["MINIO_MODE"]="stripped"
         else
-            MINIO_MODE="off"
+            MILVUS_VALUES["MINIO_MODE"]="off"
         fi
     fi
+
+    schema_assign_globals_from_values "$ENGINE_SCHEMA_PREFIX"
 }
 
-# Validate required Milvus settings and derive INSERT_START_ID.
 engine_validate_config() {
-    [[ -n "${TASK:-}" ]] || {
-        echo "Missing required Milvus setting: TASK" >&2
-        exit 1
-    }
+    schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
 
     if [[ -n "${INSERT_START_ID:-}" ]]; then
         INSERT_START_ID="$INSERT_START_ID"
@@ -142,32 +68,35 @@ engine_validate_config() {
     fi
 }
 
-# Print the resolved Milvus configuration using the legacy summary helper.
 engine_print_summary() {
-    print_config_summary
+    schema_print_resolved_summary "$ENGINE_SCHEMA_PREFIX"
 }
 
-# Emit the legacy Milvus sweep matrix as pipe-delimited combo records.
+engine_show_help() {
+    milvus_print_help
+}
+
 engine_iterate_matrix() {
-    local num_nodes
-    local query_bs
-    local upload_bs
-    local num_cores
-
-    for num_nodes in "${NODES[@]}"; do
-        for query_bs in "${QUERY_BATCH_SIZE[@]}"; do
-            for upload_bs in "${INSERT_BATCH_SIZE[@]}"; do
-                for num_cores in "${CORES[@]}"; do
-                    echo "${num_nodes}|${query_bs}|${upload_bs}|${num_cores}"
-                done
-            done
-        done
-    done
+    schema_emit_combos_recursive "$ENGINE_SCHEMA_PREFIX" 0 ""
 }
 
-# Load one legacy matrix combo into scalar globals used by naming/env emission.
 engine_load_combo() {
-    IFS='|' read -r NODES_CURRENT QUERY_BATCH_CURRENT INSERT_BATCH_CURRENT CORES_CURRENT <<< "$1"
+    local assignment
+    local key
+    local value
+
+    IFS=';' read -r -a assignments <<< "$1"
+    for assignment in "${assignments[@]}"; do
+        [[ -n "$assignment" ]] || continue
+        key="${assignment%%=*}"
+        value="${assignment#*=}"
+        printf -v "$key" '%s' "$value"
+    done
+
+    NODES_CURRENT="$NODES"
+    QUERY_BATCH_CURRENT="$QUERY_BATCH_SIZE"
+    INSERT_BATCH_CURRENT="$INSERT_BATCH_SIZE"
+    CORES_CURRENT="$CORES"
     TOTAL_NODES=$((NODES_CURRENT + 1))
     JOB_NAME="${TASK,,}_${MODE,,}_${NODES_CURRENT}n_${CORES_CURRENT}c_q${QUERY_BATCH_CURRENT}"
 
@@ -178,12 +107,11 @@ engine_load_combo() {
     fi
 }
 
-# Validate a loaded Milvus combo against scheduler/resource constraints.
 engine_validate_combo() {
+    schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
     validate_programmatic_submit_config "$NODES_CURRENT" "$CORES_CURRENT" "$INSERT_BATCH_CURRENT" "$QUERY_BATCH_CURRENT"
 }
 
-# Build the Milvus run directory name for the loaded task and combo.
 engine_make_run_dir_name() {
     local timestamp
     local corpus_size_for_dir
@@ -237,7 +165,6 @@ engine_make_run_dir_name() {
     esac
 }
 
-# Select the launch script copied into submit.sh for local vs PBS runs.
 engine_main_script_path() {
     if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
         echo "local_main.sh"
@@ -246,115 +173,8 @@ engine_main_script_path() {
     fi
 }
 
-# Emit run_config.env contents consumed by Milvus launch/client scripts.
 engine_emit_runtime_env() {
-    cat <<EOF
-NODES=${NODES_CURRENT}
-PLATFORM=${PLATFORM}
-BASE_DIR=${BASE_DIR}
-ENV_PATH=${ENV_PATH}
-MILVUS_BUILD_DIR=${MILVUS_BUILD_DIR}
-MILVUS_CONFIG_DIR=${MILVUS_CONFIG_DIR}
-TASK=${TASK}
-RUN_MODE=${RUN_MODE}
-MODE=${MODE}
-STORAGE_MEDIUM=${STORAGE_MEDIUM}
-CORES=${CORES_CURRENT}
-WAL=${WAL}
-INSERT_DATA_FILEPATH=${INSERT_DATA_FILEPATH}
-INSERT_METHOD=${INSERT_METHOD}
-BULK_UPLOAD_TRANSPORT=${BULK_UPLOAD_TRANSPORT}
-BULK_UPLOAD_STAGING_MEDIUM=${BULK_UPLOAD_STAGING_MEDIUM}
-INSERT_BALANCE_STRATEGY=${INSERT_BALANCE_STRATEGY}
-INSERT_STREAMING=${INSERT_STREAMING}
-INSERT_CORPUS_SIZE=${INSERT_CORPUS_SIZE}
-INSERT_BATCH_SIZE=${INSERT_BATCH_CURRENT}
-INSERT_CLIENTS_PER_PROXY=${INSERT_CLIENTS_PER_PROXY}
-IMPORT_PROCESSES=${IMPORT_PROCESSES}
-BULK_IMPORT_PREPARE_ONLY=${BULK_IMPORT_PREPARE_ONLY}
-BULK_IMPORT_REQUEST_PATH=${BULK_IMPORT_REQUEST_PATH}
-BULK_IMPORT_LOAD_REQUEST=${BULK_IMPORT_LOAD_REQUEST}
-BULK_IMPORT_SUMMARY_PATH=${BULK_IMPORT_SUMMARY_PATH}
-QUERY_DATA_FILEPATH=${QUERY_DATA_FILEPATH}
-QUERY_BALANCE_STRATEGY=${QUERY_BALANCE_STRATEGY}
-QUERY_STREAMING=${QUERY_STREAMING}
-QUERY_CORPUS_SIZE=${QUERY_CORPUS_SIZE}
-QUERY_BATCH_SIZE=${QUERY_BATCH_CURRENT}
-QUERY_CLIENTS_PER_PROXY=${QUERY_CLIENTS_PER_PROXY}
-MIXED_RESULT_PATH=${MIXED_RESULT_PATH}
-MIXED_INSERT_BATCH_SIZE=${MIXED_INSERT_BATCH_SIZE:-$INSERT_BATCH_CURRENT}
-MIXED_QUERY_BATCH_SIZE=${MIXED_QUERY_BATCH_SIZE:-$QUERY_BATCH_CURRENT}
-INSERT_MODE=${INSERT_MODE}
-INSERT_OPS_PER_SEC=${INSERT_OPS_PER_SEC}
-QUERY_MODE=${QUERY_MODE}
-QUERY_OPS_PER_SEC=${QUERY_OPS_PER_SEC}
-MIXED_CORPUS_SIZE=${MIXED_CORPUS_SIZE}
-MIXED_DATA_FILEPATH=${MIXED_DATA_FILEPATH}
-MIXED_QUERY_CLIENTS_PER_PROXY=${MIXED_QUERY_CLIENTS_PER_PROXY}
-MIXED_INSERT_CLIENTS_PER_PROXY=${MIXED_INSERT_CLIENTS_PER_PROXY}
-INSERT_START_ID=${INSERT_START_ID}
-COLLECTION_NAME=${COLLECTION_NAME}
-VECTOR_FIELD=${VECTOR_FIELD}
-ID_FIELD=${ID_FIELD}
-TOP_K=${TOP_K}
-QUERY_EF_SEARCH=${QUERY_EF_SEARCH}
-SEARCH_CONSISTENCY=${SEARCH_CONSISTENCY}
-RPC_TIMEOUT=${RPC_TIMEOUT}
-MIXED_INSERT_BATCH_MIN=${MIXED_INSERT_BATCH_MIN}
-MIXED_INSERT_BATCH_MAX=${MIXED_INSERT_BATCH_MAX}
-MIXED_QUERY_BATCH_MIN=${MIXED_QUERY_BATCH_MIN}
-MIXED_QUERY_BATCH_MAX=${MIXED_QUERY_BATCH_MAX}
-INSERT_BATCH_MIN=${INSERT_BATCH_MIN}
-INSERT_BATCH_MAX=${INSERT_BATCH_MAX}
-QUERY_BATCH_MIN=${QUERY_BATCH_MIN}
-QUERY_BATCH_MAX=${QUERY_BATCH_MAX}
-VECTOR_DIM=${VECTOR_DIM}
-DISTANCE_METRIC=${DISTANCE_METRIC}
-INIT_FLAT_INDEX=${INIT_FLAT_INDEX}
-SHARDS=${SHARDS}
-FLUSH_BEFORE_INDEX=${FLUSH_BEFORE_INDEX}
-GPU_INDEX=${GPU_INDEX}
-TRACING=${TRACING}
-PERF=${PERF}
-PERF_EVENTS=${PERF_EVENTS}
-DEBUG=${DEBUG}
-RESTORE_DIR=${RESTORE_DIR}
-EXPECTED_CORPUS_SIZE=${EXPECTED_CORPUS_SIZE}
-MINIO_MODE=${MINIO_MODE}
-MINIO_MEDIUM=${MINIO_MEDIUM}
-ETCD_MEDIUM=${ETCD_MEDIUM}
-LOCAL_SHARED_STORAGE_PATH=${LOCAL_SHARED_STORAGE_PATH}
-EOF
-
-    if [[ "$MODE" == "DISTRIBUTED" ]]; then
-        cat <<EOF
-ETCD_MODE=${ETCD_MODE}
-COORDINATOR_NODES=${COORDINATOR_NODES}
-COORDINATOR_NODES_PER_CN=${COORDINATOR_NODES_PER_CN}
-STREAMING_NODES=${STREAMING_NODES}
-STREAMING_NODES_PER_CN=${STREAMING_NODES_PER_CN}
-QUERY_NODES=${QUERY_NODES}
-QUERY_NODES_PER_CN=${QUERY_NODES_PER_CN}
-DATA_NODES=${DATA_NODES}
-DATA_NODES_PER_CN=${DATA_NODES_PER_CN}
-NUM_PROXIES=${NUM_PROXIES}
-NUM_PROXIES_PER_CN=${NUM_PROXIES_PER_CN}
-DML_CHANNELS=${DML_CHANNELS}
-EOF
-    else
-        cat <<EOF
-COORDINATOR_NODES=1
-COORDINATOR_NODES_PER_CN=1
-STREAMING_NODES=1
-STREAMING_NODES_PER_CN=1
-QUERY_NODES=1
-QUERY_NODES_PER_CN=1
-DATA_NODES=1
-DATA_NODES_PER_CN=1
-NUM_PROXIES=1
-NUM_PROXIES_PER_CN=1
-EOF
-    fi
+    schema_emit_runtime_env "$ENGINE_SCHEMA_PREFIX"
 }
 
 # Stage Milvus containers, launch scripts, clients, and task-specific helpers.
