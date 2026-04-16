@@ -52,7 +52,7 @@ engine_apply_overrides() {
     apply_scalar_override INSERT_START_ID
 }
 
-# Validate schema values and derive INSERT_START_ID when it was not provided.
+# Validate schema values.
 engine_validate_config() {
     schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
 
@@ -74,17 +74,7 @@ EOF
         return 1
     fi
 
-    if [[ -z "${INSERT_START_ID:-}" ]]; then
-        if [[ -n "$RESTORE_DIR" ]]; then
-            INSERT_START_ID=$EXPECTED_CORPUS_SIZE
-        elif [[ -n "$INSERT_CORPUS_SIZE" ]]; then
-            INSERT_START_ID=$INSERT_CORPUS_SIZE
-        elif [[ -n "$INSERT_FILEPATH" ]]; then
-            INSERT_START_ID="$(python3 -c 'import numpy as np, sys; arr = np.load(sys.argv[1], mmap_mode="r"); print(arr.shape[0])' "$INSERT_FILEPATH")"
-        else
-            INSERT_START_ID=0
-        fi
-    fi
+    INSERT_START_ID="${INSERT_START_ID:-}"
 }
 
 # Print resolved Qdrant settings before run directory generation/submission.
@@ -177,7 +167,7 @@ engine_emit_runtime_env() {
 engine_copy_payload() {
     local target_dir="$1"
 
-    mkdir -p "$target_dir/rustSrc"
+    mkdir -p "$target_dir/rustSrc" "$target_dir/runtime_state"
     if [[ -d "$ENGINE_DIR/runtime_state" ]]; then
         copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "runtime_state"
     fi
@@ -243,5 +233,6 @@ engine_copy_payload() {
 
     if [[ "$TASK" == "MIXED" ]]; then
         copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" "mixed_timeline.py"
+        copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "inspect.py"
     fi
 }
