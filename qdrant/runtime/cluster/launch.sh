@@ -66,7 +66,7 @@ if [[ $RANK -eq 0 ]]; then
     healthy=false
     for i in {1..30}; do
         if NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" healthcheck "$IP_ADDR" "$HTTP_PORT"; then
-            echo "Rank ${RANK} qdrant ${IP_ADDR}:{P2P_PORT} is healthy"
+            echo "Rank ${RANK} qdrant ${IP_ADDR}:${P2P_PORT} is healthy"
             healthy=true
             touch /runtime_state/qdrant_running${RANK}.txt
             break
@@ -78,7 +78,7 @@ if [[ $RANK -eq 0 ]]; then
         break
     fi
 
-    echo "Rank ${RANK} qdrant ${IP_ADDR}:{P2P_PORT} failed to become healthy, restarting..."
+    echo "Rank ${RANK} qdrant ${IP_ADDR}:${P2P_PORT} failed to become healthy, restarting..."
     kill "$QDRANT_PID" 2>/dev/null || true
     wait "$QDRANT_PID" 2>/dev/null || true
     sleep 5
@@ -102,7 +102,7 @@ else
     healthy=false
     for i in {1..30}; do
         if NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" healthcheck "$IP_ADDR" "$HTTP_PORT"; then
-            echo "Rank ${RANK} qdrant ${IP_ADDR}:{P2P_PORT} is healthy"
+            echo "Rank ${RANK} qdrant ${IP_ADDR}:${P2P_PORT} is healthy"
             healthy=true
             touch /runtime_state/qdrant_running${RANK}.txt
             break
@@ -111,11 +111,11 @@ else
     done
 
      if [[ "$healthy" == true ]]; then
-      echo "Rank ${RANK} qdrant ${IP_ADDR}:{P2P_PORT} is healthy"
+      echo "Rank ${RANK} qdrant ${IP_ADDR}:${P2P_PORT} is healthy"
         break   # 🚀 breaks out of the OUTER while loop
     fi
 
-    echo "Rank ${RANK} qdrant ${IP_ADDR}:{P2P_PORT} failed to become healthy, restarting..."
+    echo "Rank ${RANK} qdrant ${IP_ADDR}:${P2P_PORT} failed to become healthy, restarting..."
     kill "$QDRANT_PID" 2>/dev/null || true
     wait "$QDRANT_PID" 2>/dev/null || true
     sleep 5
