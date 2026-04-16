@@ -82,29 +82,18 @@ compute_local_shared_storage_path() {
     esac
 }
 
-resolve_inspect_script() {
-    if [[ -f "$BASE_DIR/$myDIR/inspect.py" ]]; then
-        printf '%s\n' "$BASE_DIR/$myDIR/inspect.py"
-    else
-        printf '%s\n' "$ROOT_DIR/utils/inspect.py"
-    fi
-}
-
 resolve_mixed_insert_start_id() {
     if [[ "$TASK" != "MIXED" || -n "${INSERT_START_ID:-}" ]]; then
         return 0
     fi
-
-    local inspect_script
-    inspect_script="$(resolve_inspect_script)"
 
     if [[ -n "${RESTORE_DIR:-}" ]]; then
         export INSERT_START_ID="${EXPECTED_CORPUS_SIZE:?EXPECTED_CORPUS_SIZE is required when RESTORE_DIR is set}"
     elif [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
         export INSERT_START_ID="$INSERT_CORPUS_SIZE"
     elif [[ -n "${INSERT_DATA_FILEPATH:-}" ]]; then
-        if ! export INSERT_START_ID="$(env "${PYTHON_ENV_VARS[@]}" python3 "$inspect_script" "$INSERT_DATA_FILEPATH")"; then
-            echo "Error: failed to derive INSERT_START_ID from INSERT_DATA_FILEPATH using inspect.py." >&2
+        if ! export INSERT_START_ID="$(env "${PYTHON_ENV_VARS[@]}" python3 ./npy_inspect.py "$INSERT_DATA_FILEPATH")"; then
+            echo "Error: failed to derive INSERT_START_ID from INSERT_DATA_FILEPATH using npy_inspect.py." >&2
             exit 1
         fi
     else

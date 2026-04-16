@@ -180,7 +180,7 @@ engine_copy_payload() {
             "bulk_upload_import.py" \
             "bulk_upload_import_mc.py" \
             "replace_unified.py"
-        copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "inspect.py"
+        copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "npy_inspect.py"
         mkdir -p "$target_dir/configs"
         copy_engine_items "$ENGINE_DIR/cpuMilvus/configs" "$target_dir/configs" "unified_milvus.yaml"
 
@@ -229,7 +229,7 @@ engine_copy_payload() {
             "multi_client_summary.py" \
             "bulk_upload_import.py" \
             "bulk_upload_import_mc.py"
-        copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "inspect.py"
+        copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "npy_inspect.py"
 
         copy_engine_items "$ENGINE_DIR/goCode/multiClientOP" "$target_dir" "multiClientOP" "main.go"
         if [[ -f "$target_dir/main.go" ]]; then
