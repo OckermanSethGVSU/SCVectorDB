@@ -47,6 +47,20 @@ def parse_batch_sizes(raw_value):
     return batch_sizes
 
 
+def env_required(name):
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        raise ValueError(f"{name} is required")
+    return value.strip()
+
+
+def env_optional_int(name):
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return None
+    return int(value.strip())
+
+
 def summarize_npy(path, run_label, rank, name, batch_size):
     arr = np.load(path) * 1000
     total_ms = np.sum(arr)
@@ -114,6 +128,18 @@ def discover_runs(base_dir, active_task, batch_sizes):
     return runs
 
 
+def resolve_corpus_size(active_task):
+    explicit = env_optional_int(f"{active_task}_CORPUS_SIZE")
+    if explicit is not None:
+        return explicit
+
+    data_path = Path(env_required(f"{active_task}_DATA_FILEPATH"))
+    arr = np.load(data_path, mmap_mode="r")
+    if arr.ndim != 2:
+        raise ValueError(f"expected 2D npy input at {data_path}, got shape {arr.shape}")
+    return int(arr.shape[0])
+
+
 def summarize_run(run_dir, batch_size, run_label, clients, clients_per_proxy, corpus_size):
     summary_rows = []
     all_prep = []
@@ -174,9 +200,9 @@ def main():
     if not active_task:
         raise ValueError("ACTIVE_TASK is required")
 
-    corpus_size = int(os.getenv(f"{active_task}_CORPUS_SIZE"))
-    clients_per_proxy = int(os.getenv(f"{active_task}_CLIENTS_PER_PROXY"))
-    clients = int(os.getenv("NUM_PROXIES"))
+    corpus_size = resolve_corpus_size(active_task)
+    clients_per_proxy = int(env_required(f"{active_task}_CLIENTS_PER_PROXY"))
+    clients = int(env_required("NUM_PROXIES"))
     batch_sizes = parse_batch_sizes(os.getenv(f"{active_task}_BATCH_SIZE", ""))
 
     base_dir = Path(".")
