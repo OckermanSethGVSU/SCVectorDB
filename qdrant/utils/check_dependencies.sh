@@ -8,7 +8,7 @@ if [[ "${1:-}" == "--missing-only" ]]; then
 fi
 
 required_paths=(
-    "sifs/qdrant.sif"
+    "sifs"
     "runtime_state/perf"
     "runtime/cluster/launchQdrantNode.sh"
     "runtime/cluster/launch.sh"

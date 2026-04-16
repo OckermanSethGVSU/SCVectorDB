@@ -74,6 +74,11 @@ EOF
         return 1
     fi
 
+    if [[ "${RUN_MODE^^}" == "PBS" && "$QDRANT_SIF" == */* ]]; then
+        echo "QDRANT_SIF must be a filename under $ENGINE_DIR/sifs, not a path: $QDRANT_SIF" >&2
+        return 1
+    fi
+
     INSERT_START_ID="${INSERT_START_ID:-}"
 }
 
@@ -187,12 +192,12 @@ engine_copy_payload() {
             cp "$ENGINE_DIR/clients/mixed/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
         fi
     else
-        if [[ ! -f "$ENGINE_DIR/sifs/qdrant.sif" ]]; then
-            echo "Required payload item missing: $ENGINE_DIR/sifs/qdrant.sif" >&2
-            echo "Run $ENGINE_DIR/setup_env.sh to download the Qdrant SIF." >&2
+        if [[ ! -f "$ENGINE_DIR/sifs/$QDRANT_SIF" ]]; then
+            echo "Required payload item missing: $ENGINE_DIR/sifs/$QDRANT_SIF" >&2
+            echo "Run $ENGINE_DIR/utils/download_sif.sh [version] to download a Qdrant SIF, then set QDRANT_SIF to that filename." >&2
             return 1
         fi
-        cp "$ENGINE_DIR/sifs/qdrant.sif" "$target_dir/qdrant.sif"
+        cp "$ENGINE_DIR/sifs/$QDRANT_SIF" "$target_dir/qdrant.sif"
         copy_engine_items "$ENGINE_DIR/runtime/cluster" "$target_dir" "launchQdrantNode.sh" "launch.sh"
 
         if [[ -n "$QDRANT_EXECUTABLE" ]]; then
