@@ -33,7 +33,7 @@ Insert mode:
 - `N_WORKERS`
 - `INSERT_CLIENTS_PER_WORKER`
 - `INSERT_CORPUS_SIZE`
-- `INSERT_FILEPATH`
+- `INSERT_DATA_FILEPATH`
 - `INSERT_BATCH_SIZE`
 - `INSERT_BALANCE_STRATEGY`
 - `INSERT_STREAMING` or `STREAMING` (optional; `true` enables direct batch reads instead of eager full-file load)
@@ -44,7 +44,7 @@ Query mode:
 - `N_WORKERS`
 - `QUERY_CLIENTS_PER_WORKER`
 - `QUERY_CORPUS_SIZE`
-- `QUERY_FILEPATH`
+- `QUERY_DATA_FILEPATH`
 - `QUERY_BATCH_SIZE`
 - `QUERY_BALANCE_STRATEGY`
 - `QUERY_DEBUG_RESULTS` (optional)
@@ -79,8 +79,8 @@ Query mode:
 - `N_WORKERS` (required only for `WORKER_BALANCE` or when deriving client totals from `*_CLIENTS_PER_WORKER`)
 - `INSERT_CLIENTS` / `QUERY_CLIENTS` (optional direct totals)
 - `INSERT_CLIENTS_PER_WORKER` / `QUERY_CLIENTS_PER_WORKER` (optional derived totals)
-- `INSERT_FILEPATH`, `INSERT_CORPUS_SIZE`, `INSERT_BATCH_SIZE`
-- `QUERY_FILEPATH`, `QUERY_CORPUS_SIZE`, `QUERY_BATCH_SIZE`
+- `INSERT_DATA_FILEPATH`, `INSERT_CORPUS_SIZE`, `INSERT_BATCH_SIZE`
+- `QUERY_DATA_FILEPATH`, `QUERY_CORPUS_SIZE`, `QUERY_BATCH_SIZE`
 - `INSERT_BATCH_MIN`, `INSERT_BATCH_MAX` (optional)
 - `QUERY_BATCH_MIN`, `QUERY_BATCH_MAX` (optional)
 - `INSERT_BALANCE_STRATEGY`, `QUERY_BALANCE_STRATEGY`
@@ -91,7 +91,7 @@ Query mode:
 - `RPC_TIMEOUT` (optional, e.g. `30s`, `5m`)
 - `INSERT_START_ID` (optional)
 
-For PBS `TASK=MIXED` runs, `qdrant/main.sh` supplies `INSERT_START_ID` before launching this client. If `INSERT_START_ID` is not set directly, the runtime uses `RESTORE_DIR`, `INSERT_CORPUS_SIZE`, or the staged `inspect.py` helper against `INSERT_FILEPATH` to derive the offset.
+For PBS `TASK=MIXED` runs, `qdrant/main.sh` supplies `INSERT_START_ID` before launching this client. If `INSERT_START_ID` is not set directly, the runtime uses `RESTORE_DIR`, `INSERT_CORPUS_SIZE`, or the staged `inspect.py` helper against `INSERT_DATA_FILEPATH` to derive the offset.
 
 ## Build
 

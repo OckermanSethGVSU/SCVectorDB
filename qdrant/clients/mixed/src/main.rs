@@ -535,7 +535,7 @@ fn parse_config() -> Result<Config> {
         vectors_path: PathBuf::from(required_string(value_with_args(
             &args,
             "query-vectors",
-            &["QUERY_FILEPATH", "QUERY_DATA_FILEPATH"],
+            &["QUERY_DATA_FILEPATH", "QUERY_FILEPATH"],
         ))?),
         batch: parse_batch_config(
             &args,

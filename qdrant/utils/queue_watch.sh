@@ -15,14 +15,14 @@ declare -A WATCH_GROUPED_VALUES=()
 
 # Example grouped preset dimension:
 # WATCH_VARIABLES=(DATASET QUERY_BATCH_SIZE CORES)
-# WATCH_GROUPED_VALUES[DATASET]=$'VECTOR_DIM=2560\tDISTANCE_METRIC=COSINE\tINSERT_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy\nVECTOR_DIM=200\tDISTANCE_METRIC=IP\tINSERT_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy'
+# WATCH_GROUPED_VALUES[DATASET]=$'VECTOR_DIM=2560\tDISTANCE_METRIC=COSINE\tINSERT_DATA_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy\nVECTOR_DIM=200\tDISTANCE_METRIC=IP\tINSERT_DATA_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy'
 # Query
-# WATCH_GROUPED_VALUES[DATASET]=$'VECTOR_DIM=200\tDISTANCE_METRIC=IP\tINSERT_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy\tQUERY_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy\tRESTORE_DIR=/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/yandex/\tQUERY_CORPUS_SIZE=100000\n'
-# WATCH_GROUPED_VALUES[DATASET]+=$'VECTOR_DIM=2560\tDISTANCE_METRIC=COSINE\tINSERT_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy\tQUERY_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy\tRESTORE_DIR=/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/pes2o/\tQUERY_CORPUS_SIZE=22723'
+# WATCH_GROUPED_VALUES[DATASET]=$'VECTOR_DIM=200\tDISTANCE_METRIC=IP\tINSERT_DATA_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy\tQUERY_DATA_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy\tRESTORE_DIR=/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/yandex/\tQUERY_CORPUS_SIZE=100000\n'
+# WATCH_GROUPED_VALUES[DATASET]+=$'VECTOR_DIM=2560\tDISTANCE_METRIC=COSINE\tINSERT_DATA_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy\tQUERY_DATA_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy\tRESTORE_DIR=/lus/flare/projects/radix-io/sockerman/temp/qdrant/10Mil/pes2o/\tQUERY_CORPUS_SIZE=22723'
 
 # index
-WATCH_GROUPED_VALUES[DATASET]=$'VECTOR_DIM=200\tDISTANCE_METRIC=IP\tINSERT_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy\tQUERY_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy\tQUERY_CORPUS_SIZE=100000\n'
-WATCH_GROUPED_VALUES[DATASET]+=$'VECTOR_DIM=2560\tDISTANCE_METRIC=COSINE\tINSERT_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy\tQUERY_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy\tQUERY_CORPUS_SIZE=22723'
+WATCH_GROUPED_VALUES[DATASET]=$'VECTOR_DIM=200\tDISTANCE_METRIC=IP\tINSERT_DATA_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/text2image1B/Yandex10M.npy\tQUERY_DATA_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy\tQUERY_CORPUS_SIZE=100000\n'
+WATCH_GROUPED_VALUES[DATASET]+=$'VECTOR_DIM=2560\tDISTANCE_METRIC=COSINE\tINSERT_DATA_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy\tQUERY_DATA_FILEPATH=/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy\tQUERY_CORPUS_SIZE=22723'
 QUEUES=(debug debug-scaling)
 
 

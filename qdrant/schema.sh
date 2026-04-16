@@ -45,7 +45,7 @@ register_qdrant_var "REBALANCE_TOPOLOGY" "default" "False" "True False" "Whether
 
 
 # Insert / preload workload
-register_qdrant_var "INSERT_FILEPATH" "conditional" "" "" "Insert corpus file path" "TASK=INSERT|INDEX|QUERY|MIXED"
+register_qdrant_var "INSERT_DATA_FILEPATH" "conditional" "" "" "Insert corpus file path" "TASK=INSERT|INDEX|QUERY|MIXED"
 register_qdrant_var "INSERT_CORPUS_SIZE" "default" "" "" "Total vectors available to preload; empty means use all rows in the file"
 register_qdrant_var "INSERT_BATCH_SIZE" "default" "512" "" "Insert batch size; single value or sweep list"
 register_qdrant_var "INSERT_CLIENTS_PER_WORKER" "default" "1" "" "Insert clients per worker"
@@ -53,7 +53,7 @@ register_qdrant_var "INSERT_BALANCE_STRATEGY" "default" "WORKER_BALANCE" "NO_BAL
 register_qdrant_var "INSERT_STREAMING" "default" "False" "True False" "Enable streaming insert behavior"
 
 # Query workload
-register_qdrant_var "QUERY_FILEPATH" "conditional" "" "" "Query vector file path" "TASK=QUERY|MIXED"
+register_qdrant_var "QUERY_DATA_FILEPATH" "conditional" "" "" "Query vector file path" "TASK=QUERY|MIXED"
 register_qdrant_var "QUERY_CORPUS_SIZE" "default" "" "" "Total queries to execute; empty means use all rows in the file"
 register_qdrant_var "QUERY_BATCH_SIZE" "default" "32" "" "Query batch size; single value or sweep list"
 register_qdrant_var "QUERY_CLIENTS_PER_WORKER" "conditional" "1" "" "Query clients per worker" "TASK=QUERY|MIXED"

@@ -92,9 +92,9 @@ def resolve_corpus_size(task: str) -> int:
         return explicit
 
     if task == "INSERT":
-        npy_path = Path(env_required("INSERT_FILEPATH"))
+        npy_path = Path(env_required("INSERT_DATA_FILEPATH"))
     else:
-        npy_path = Path(env_required("QUERY_FILEPATH"))
+        npy_path = Path(env_required("QUERY_DATA_FILEPATH"))
 
     arr = np.load(npy_path, mmap_mode="r")
     if arr.ndim != 2:

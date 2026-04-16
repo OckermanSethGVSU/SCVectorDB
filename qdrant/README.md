@@ -78,8 +78,8 @@ Common runtime knobs:
 
 Insert/query file inputs:
 
-- `INSERT_FILEPATH`
-- `QUERY_FILEPATH`
+- `INSERT_DATA_FILEPATH`
+- `QUERY_DATA_FILEPATH`
 - `INSERT_CORPUS_SIZE`
 - `QUERY_CORPUS_SIZE`
 
@@ -103,7 +103,7 @@ For `TASK=MIXED`, `INSERT_START_ID` is used as the ID offset for mixed inserts. 
 
 1. `RESTORE_DIR` set: use `EXPECTED_CORPUS_SIZE`
 2. `INSERT_CORPUS_SIZE` set: use `INSERT_CORPUS_SIZE`
-3. `INSERT_FILEPATH` set: run the staged `inspect.py` helper to read the `.npy` row count
+3. `INSERT_DATA_FILEPATH` set: run the staged `inspect.py` helper to read the `.npy` row count
 4. otherwise fail
 
 Use:

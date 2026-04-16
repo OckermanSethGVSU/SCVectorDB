@@ -299,10 +299,10 @@ fn load_config() -> anyhow::Result<RunConfig> {
         first_env(&[balance_key.as_str()]).with_context(|| format!("missing {balance_key}"))?;
 
     let npy_path = match active_task {
-        ActiveTask::Upload => first_env(&["INSERT_FILEPATH"])
-            .context("missing insert filepath env: tried INSERT_FILEPATH")?,
-        ActiveTask::Query => first_env(&["QUERY_FILEPATH"])
-            .context("missing query filepath env: tried QUERY_FILEPATH")?,
+        ActiveTask::Upload => first_env(&["INSERT_DATA_FILEPATH", "INSERT_FILEPATH"])
+            .context("missing insert filepath env: tried INSERT_DATA_FILEPATH, INSERT_FILEPATH")?,
+        ActiveTask::Query => first_env(&["QUERY_DATA_FILEPATH", "QUERY_FILEPATH"])
+            .context("missing query filepath env: tried QUERY_DATA_FILEPATH, QUERY_FILEPATH")?,
     };
 
     let debug_results = matches!(active_task, ActiveTask::Query)

@@ -37,13 +37,13 @@ if [[ "$TASK" == "MIXED" && -z "${INSERT_START_ID:-}" ]]; then
         INSERT_START_ID="$EXPECTED_CORPUS_SIZE"
     elif [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
         INSERT_START_ID="$INSERT_CORPUS_SIZE"
-    elif [[ -n "${INSERT_FILEPATH:-}" ]]; then
-        if ! INSERT_START_ID="$(python3 inspect.py "$INSERT_FILEPATH")"; then
-            echo "Error: failed to derive INSERT_START_ID from INSERT_FILEPATH using inspect.py." >&2
+    elif [[ -n "${INSERT_DATA_FILEPATH:-}" ]]; then
+        if ! INSERT_START_ID="$(python3 inspect.py "$INSERT_DATA_FILEPATH")"; then
+            echo "Error: failed to derive INSERT_START_ID from INSERT_DATA_FILEPATH using inspect.py." >&2
             exit 1
         fi
     else
-        echo "Error: TASK=MIXED requires INSERT_START_ID, INSERT_CORPUS_SIZE, RESTORE_DIR, or INSERT_FILEPATH." >&2
+        echo "Error: TASK=MIXED requires INSERT_START_ID, INSERT_CORPUS_SIZE, RESTORE_DIR, or INSERT_DATA_FILEPATH." >&2
         exit 1
     fi
     export INSERT_START_ID
@@ -308,7 +308,7 @@ if [[ "$TASK" == "MIXED" ]]; then
         mixed_timeline.py
         --log-dir "$RESULT_PATH"
         --insert-vectors "$MIXED_DATA_FILEPATH"
-        --query-vectors "$QUERY_FILEPATH"
+        --query-vectors "$QUERY_DATA_FILEPATH"
         --metric "$MIXED_TIMELINE_METRIC"
         --insert-id-offset "$INSERT_START_ID"
     )
@@ -324,7 +324,7 @@ if [[ "$TASK" == "MIXED" ]]; then
     fi
     if [[ -z "$RESTORE_DIR" ]]; then
         MIXED_TIMELINE_ARGS+=(
-            --init-vectors "$INSERT_FILEPATH"
+            --init-vectors "$INSERT_DATA_FILEPATH"
         )
         if [[ -n "$INSERT_CORPUS_SIZE" ]]; then
             MIXED_TIMELINE_ARGS+=(

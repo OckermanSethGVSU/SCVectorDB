@@ -25,7 +25,7 @@ print_config_summary() {
         echo "Restore Dir:              $RESTORE_DIR"
         echo "Expected Corpus Size:     $EXPECTED_CORPUS_SIZE"
     else
-        echo "Insert File:              $INSERT_FILEPATH"
+        echo "Insert File:              $INSERT_DATA_FILEPATH"
         echo "Insert Corpus Size:       $INSERT_CORPUS_SIZE"
         echo "Insert Batch Size:        ${INSERT_BATCH_SIZE[*]}"
         echo "Insert Clients/Worker:    $INSERT_CLIENTS_PER_WORKER"
@@ -34,7 +34,7 @@ print_config_summary() {
     fi
 
     if [[ "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
-        echo "Query File:               $QUERY_FILEPATH"
+        echo "Query File:               $QUERY_DATA_FILEPATH"
         echo "Query Corpus Size:        $QUERY_CORPUS_SIZE"
         echo "Query Batch Size:         ${QUERY_BATCH_SIZE[*]}"
         echo "Query Clients/Worker:     $QUERY_CLIENTS_PER_WORKER"
@@ -103,12 +103,12 @@ apply_overrides() {
     apply_scalar_override VECTOR_DIM
     apply_scalar_override DISTANCE_METRIC
     apply_scalar_override GPU_INDEX
-    apply_scalar_override INSERT_FILEPATH
+    apply_scalar_override INSERT_DATA_FILEPATH
     apply_scalar_override INSERT_CORPUS_SIZE
     apply_scalar_override INSERT_BALANCE_STRATEGY
     apply_scalar_override INSERT_CLIENTS_PER_WORKER
     apply_scalar_override INSERT_STREAMING
-    apply_scalar_override QUERY_FILEPATH
+    apply_scalar_override QUERY_DATA_FILEPATH
     apply_scalar_override QUERY_CORPUS_SIZE
     apply_scalar_override QUERY_BALANCE_STRATEGY
     apply_scalar_override QUERY_CLIENTS_PER_WORKER
