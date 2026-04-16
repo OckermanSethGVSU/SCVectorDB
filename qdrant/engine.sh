@@ -197,7 +197,12 @@ engine_copy_payload() {
             cp "$ENGINE_DIR/clients/mixed/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
         fi
     else
-        copy_engine_items "$ENGINE_DIR" "$target_dir" "qdrant.sif"
+        if [[ ! -f "$ENGINE_DIR/sifs/qdrant.sif" ]]; then
+            echo "Required payload item missing: $ENGINE_DIR/sifs/qdrant.sif" >&2
+            echo "Run $ENGINE_DIR/setup_env.sh to download the Qdrant SIF." >&2
+            return 1
+        fi
+        cp "$ENGINE_DIR/sifs/qdrant.sif" "$target_dir/qdrant.sif"
         copy_engine_items "$ENGINE_DIR/runtime/cluster" "$target_dir" "launchQdrantNode.sh" "launch.sh"
 
         if [[ -n "$QDRANT_EXECUTABLE" ]]; then
