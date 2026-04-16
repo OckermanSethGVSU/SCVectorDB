@@ -91,6 +91,8 @@ Query mode:
 - `RPC_TIMEOUT` (optional, e.g. `30s`, `5m`)
 - `INSERT_START_ID` (optional)
 
+For PBS `TASK=MIXED` runs, `qdrant/main.sh` supplies `INSERT_START_ID` before launching this client. If `INSERT_START_ID` is not set directly, the runtime uses `RESTORE_DIR`, `INSERT_CORPUS_SIZE`, or the staged `inspect.py` helper against `INSERT_FILEPATH` to derive the offset.
+
 ## Build
 
 From `qdrant/clients`:
