@@ -110,5 +110,9 @@ def monitorSystem(batch=-1, interval=1.0, stop_event=None):
     with open(f"{rank}_system_stats_final.csv", mode="w", newline="") as f:
         writer = csv.writer(f)
         writer.writerows(stats)
+    try:
+        os.remove(f"{rank}_system_stats.csv")
+    except FileNotFoundError:
+        pass
 
 monitorSystem()
