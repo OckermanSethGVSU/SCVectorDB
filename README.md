@@ -106,6 +106,24 @@ Normal run:
 ./pbs_submit_manager.sh --engine qdrant --config qdrant_run.env
 ```
 
+For PBS Qdrant runs, provide a Qdrant SIF before generating or submitting:
+
+```bash
+qdrant/utils/download_sif.sh 1.16.1
+```
+
+Then set `QDRANT_SIF` in the run config to the filename under `qdrant/sifs/`:
+
+```bash
+QDRANT_SIF=qdrant_v1.16.1.sif
+```
+
+Sample configs live under `qdrant/sampleConfigs/`:
+
+```bash
+./pbs_submit_manager.sh --generate-only --config qdrant/sampleConfigs/aurora_yandex_query.env
+```
+
 ## Notes
 
 - Generated run directories include `run_config.env`, which is the resolved run configuration used by `submit.sh`.
