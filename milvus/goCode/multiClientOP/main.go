@@ -1150,10 +1150,13 @@ func main() {
 	}
 
 	corpusEnv := fmt.Sprintf("%s_CORPUS_SIZE", activeTask)
-	CORPUS_SIZE_str := os.Getenv(corpusEnv)
-	CORPUS_SIZE, err := strconv.Atoi(CORPUS_SIZE_str)
-	if err != nil || CORPUS_SIZE <= 0 {
-		log.Fatalf("invalid %s=%q", corpusEnv, CORPUS_SIZE_str)
+	CORPUS_SIZE_str := strings.TrimSpace(os.Getenv(corpusEnv))
+	CORPUS_SIZE := 0
+	if CORPUS_SIZE_str != "" {
+		CORPUS_SIZE, err = strconv.Atoi(CORPUS_SIZE_str)
+		if err != nil || CORPUS_SIZE <= 0 {
+			log.Fatalf("invalid %s=%q", corpusEnv, CORPUS_SIZE_str)
+		}
 	}
 
 	dataPathEnv := fmt.Sprintf("%s_DATA_FILEPATH", activeTask)
@@ -1235,6 +1238,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to parse npy metadata for %s: %v", DATA_PATH, err)
 		}
+		if CORPUS_SIZE == 0 {
+			CORPUS_SIZE = meta.Rows
+		}
 		if CORPUS_SIZE > meta.Rows {
 			log.Fatalf("corpus size %d exceeds npy row count %d", CORPUS_SIZE, meta.Rows)
 		}
@@ -1249,6 +1255,9 @@ func main() {
 		shape := r.Shape
 		if len(shape) != 2 {
 			log.Fatalf("expected 2D npy input, got shape=%v", shape)
+		}
+		if CORPUS_SIZE == 0 {
+			CORPUS_SIZE = shape[0]
 		}
 		if CORPUS_SIZE > shape[0] {
 			log.Fatalf("corpus size %d exceeds npy row count %d", CORPUS_SIZE, shape[0])

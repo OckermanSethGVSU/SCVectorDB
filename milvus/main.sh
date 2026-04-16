@@ -82,6 +82,37 @@ compute_local_shared_storage_path() {
     esac
 }
 
+resolve_inspect_script() {
+    if [[ -f "$BASE_DIR/$myDIR/inspect.py" ]]; then
+        printf '%s\n' "$BASE_DIR/$myDIR/inspect.py"
+    else
+        printf '%s\n' "$ROOT_DIR/utils/inspect.py"
+    fi
+}
+
+resolve_mixed_insert_start_id() {
+    if [[ "$TASK" != "MIXED" || -n "${INSERT_START_ID:-}" ]]; then
+        return 0
+    fi
+
+    local inspect_script
+    inspect_script="$(resolve_inspect_script)"
+
+    if [[ -n "${RESTORE_DIR:-}" ]]; then
+        export INSERT_START_ID="${EXPECTED_CORPUS_SIZE:?EXPECTED_CORPUS_SIZE is required when RESTORE_DIR is set}"
+    elif [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
+        export INSERT_START_ID="$INSERT_CORPUS_SIZE"
+    elif [[ -n "${INSERT_DATA_FILEPATH:-}" ]]; then
+        if ! export INSERT_START_ID="$(env "${PYTHON_ENV_VARS[@]}" python3 "$inspect_script" "$INSERT_DATA_FILEPATH")"; then
+            echo "Error: failed to derive INSERT_START_ID from INSERT_DATA_FILEPATH using inspect.py." >&2
+            exit 1
+        fi
+    else
+        echo "Error: TASK=MIXED requires INSERT_START_ID, INSERT_CORPUS_SIZE, RESTORE_DIR, or INSERT_DATA_FILEPATH." >&2
+        exit 1
+    fi
+}
+
 PYTHON_ENV_VARS=(
     NO_PROXY=""
     no_proxy=""
@@ -161,6 +192,8 @@ fi
 # Activate Python env
 source $ENV_PATH/bin/activate
 cat $PBS_NODEFILE > all_nodefile.txt
+
+resolve_mixed_insert_start_id
 
 
 
@@ -398,7 +431,7 @@ run_direct_insert() {
     export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
     export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
     export INSERT_CLIENTS_PER_PROXY=$INSERT_CLIENTS_PER_PROXY
-    export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
+    export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
     export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
     export INSERT_STREAMING=$INSERT_STREAMING
 
@@ -429,7 +462,7 @@ run_bulk_insert() {
     if [[ -n "${BULK_IMPORT_LOAD_REQUEST:-}" ]]; then
         bulk_request_args+=(--load-import-request "$BULK_IMPORT_LOAD_REQUEST")
     else
-        export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
+        export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
         bulk_request_args+=(--input "$INSERT_DATA_FILEPATH")
     fi
 
@@ -454,16 +487,21 @@ run_bulk_insert() {
         bulk_transport_args+=(--writer-mode remote)
     fi
 
-    env "${PYTHON_ENV_VARS[@]}" python3 "$bulk_script" \
-        --processes "$IMPORT_PROCESSES" \
-        --corpus-size "$INSERT_CORPUS_SIZE" \
-        --collection "$COLLECTION_NAME" \
-        --vector-field "$VECTOR_FIELD" \
-        --id-field "$ID_FIELD" \
-        --vector-dim "$VECTOR_DIM" \
-        --batch-rows "$INSERT_BATCH_SIZE" \
-        "${bulk_transport_args[@]}" \
+    local bulk_args=(
+        --processes "$IMPORT_PROCESSES"
+        --collection "$COLLECTION_NAME"
+        --vector-field "$VECTOR_FIELD"
+        --id-field "$ID_FIELD"
+        --vector-dim "$VECTOR_DIM"
+        --batch-rows "$INSERT_BATCH_SIZE"
+        "${bulk_transport_args[@]}"
         "${bulk_request_args[@]}"
+    )
+    if [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
+        bulk_args+=(--corpus-size "$INSERT_CORPUS_SIZE")
+    fi
+
+    env "${PYTHON_ENV_VARS[@]}" python3 "$bulk_script" "${bulk_args[@]}"
 }
 
 run_insert_for_task() {
@@ -518,7 +556,7 @@ else
     export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
     export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
     export QUERY_CLIENTS_PER_PROXY=$QUERY_CLIENTS_PER_PROXY
-    export QUERY_DATA_FILEPATH=$QUERY_DATA_FILEPATH
+    export QUERY_DATA_FILEPATH="${QUERY_DATA_FILEPATH:?QUERY_DATA_FILEPATH is required}"
     export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
     export QUERY_STREAMING=$QUERY_STREAMING
     env "${PYTHON_ENV_VARS[@]}" python3 status.py
@@ -532,7 +570,7 @@ if [[ "$TASK" == "QUERY" ]]; then
     export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
     export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
     export QUERY_CLIENTS_PER_PROXY=$QUERY_CLIENTS_PER_PROXY
-    export QUERY_DATA_FILEPATH=$QUERY_DATA_FILEPATH
+    export QUERY_DATA_FILEPATH="${QUERY_DATA_FILEPATH:?QUERY_DATA_FILEPATH is required}"
     export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
     export QUERY_STREAMING=$QUERY_STREAMING
 
@@ -564,9 +602,9 @@ if [[ "$TASK" == "MIXED" ]]; then
         export MIXED_RESULT_PATH="$MIXED_RESULT_PATH"
     fi
 
-    export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
+    export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
     export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
-    export QUERY_DATA_FILEPATH=$QUERY_DATA_FILEPATH
+    export QUERY_DATA_FILEPATH="${QUERY_DATA_FILEPATH:?QUERY_DATA_FILEPATH is required}"
     export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
     export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
     export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
@@ -582,7 +620,7 @@ if [[ "$TASK" == "MIXED" ]]; then
     export QUERY_MODE=${QUERY_MODE:-max}
     export QUERY_OPS_PER_SEC=$QUERY_OPS_PER_SEC
     export MIXED_CORPUS_SIZE=$MIXED_CORPUS_SIZE
-    export MIXED_DATA_FILEPATH=$MIXED_DATA_FILEPATH
+    export MIXED_DATA_FILEPATH="${MIXED_DATA_FILEPATH:?MIXED_DATA_FILEPATH is required}"
     export MIXED_QUERY_CLIENTS_PER_PROXY=$MIXED_QUERY_CLIENTS_PER_PROXY
     export MIXED_INSERT_CLIENTS_PER_PROXY=$MIXED_INSERT_CLIENTS_PER_PROXY
     export COLLECTION_NAME=$COLLECTION_NAME
@@ -618,18 +656,22 @@ if [[ "$TASK" == "MIXED" ]]; then
         mixed_timeline.py
         --log-dir "$MIXED_RESULT_PATH"
         --insert-vectors "$MIXED_DATA_FILEPATH"
-        --insert-max-rows "$MIXED_CORPUS_SIZE"
         --query-vectors "$QUERY_DATA_FILEPATH"
-        --query-max-rows "$QUERY_CORPUS_SIZE"
         --metric "$MIXED_TIMELINE_METRIC"
         --insert-id-offset "$INSERT_START_ID"
     )
+    if [[ -n "$MIXED_CORPUS_SIZE" ]]; then
+        MIXED_TIMELINE_ARGS+=(--insert-max-rows "$MIXED_CORPUS_SIZE")
+    fi
+    if [[ -n "$QUERY_CORPUS_SIZE" ]]; then
+        MIXED_TIMELINE_ARGS+=(--query-max-rows "$QUERY_CORPUS_SIZE")
+    fi
 
     if [[ -z "$RESTORE_DIR" ]]; then
-        MIXED_TIMELINE_ARGS+=(
-            --init-vectors "$INSERT_DATA_FILEPATH"
-            --init-max-rows "$INSERT_CORPUS_SIZE"
-        )
+        MIXED_TIMELINE_ARGS+=(--init-vectors "$INSERT_DATA_FILEPATH")
+        if [[ -n "$INSERT_CORPUS_SIZE" ]]; then
+            MIXED_TIMELINE_ARGS+=(--init-max-rows "$INSERT_CORPUS_SIZE")
+        fi
     fi
 
     env "${PYTHON_ENV_VARS[@]}" python3 "${MIXED_TIMELINE_ARGS[@]}"

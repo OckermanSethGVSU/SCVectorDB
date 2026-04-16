@@ -59,12 +59,47 @@ engine_apply_overrides() {
 engine_validate_config() {
     schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
 
+    case "$TASK" in
+        INSERT|IMPORT)
+            if [[ -z "${INSERT_DATA_FILEPATH:-}" ]]; then
+                echo "Milvus variable 'INSERT_DATA_FILEPATH' is required for TASK=$TASK." >&2
+                return 1
+            fi
+            ;;
+        INDEX)
+            if [[ -z "${RESTORE_DIR:-}" && -z "${INSERT_DATA_FILEPATH:-}" ]]; then
+                echo "Milvus variable 'INSERT_DATA_FILEPATH' is required for TASK=INDEX when RESTORE_DIR is not set." >&2
+                return 1
+            fi
+            ;;
+        QUERY)
+            if [[ -z "${RESTORE_DIR:-}" && -z "${INSERT_DATA_FILEPATH:-}" ]]; then
+                echo "Milvus variable 'INSERT_DATA_FILEPATH' is required for TASK=QUERY when RESTORE_DIR is not set." >&2
+                return 1
+            fi
+            if [[ -z "${QUERY_DATA_FILEPATH:-}" ]]; then
+                echo "Milvus variable 'QUERY_DATA_FILEPATH' is required for TASK=QUERY." >&2
+                return 1
+            fi
+            ;;
+        MIXED)
+            if [[ -z "${RESTORE_DIR:-}" && -z "${INSERT_DATA_FILEPATH:-}" ]]; then
+                echo "Milvus variable 'INSERT_DATA_FILEPATH' is required for TASK=MIXED when RESTORE_DIR is not set." >&2
+                return 1
+            fi
+            if [[ -z "${QUERY_DATA_FILEPATH:-}" ]]; then
+                echo "Milvus variable 'QUERY_DATA_FILEPATH' is required for TASK=MIXED." >&2
+                return 1
+            fi
+            if [[ -z "${MIXED_DATA_FILEPATH:-}" ]]; then
+                echo "Milvus variable 'MIXED_DATA_FILEPATH' is required for TASK=MIXED." >&2
+                return 1
+            fi
+            ;;
+    esac
+
     if [[ -n "${INSERT_START_ID:-}" ]]; then
         INSERT_START_ID="$INSERT_START_ID"
-    elif [[ -n "$RESTORE_DIR" ]]; then
-        INSERT_START_ID="$EXPECTED_CORPUS_SIZE"
-    else
-        INSERT_START_ID="$INSERT_CORPUS_SIZE"
     fi
 }
 
@@ -114,55 +149,9 @@ engine_validate_combo() {
 
 engine_make_run_dir_name() {
     local timestamp
-    local corpus_size_for_dir
 
     timestamp="$(date +"%Y-%m-%d_%H_%M_%S")"
-    case "$TASK" in
-        INSERT)
-            if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                echo "${TASK}_${MODE}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_CPP${INSERT_CLIENTS_PER_PROXY}_uploadBS${INSERT_BATCH_CURRENT}_SN${STREAMING_NODES}_SPCN${STREAMING_NODES_PER_CN}_${timestamp}"
-            else
-                echo "${TASK}_${MODE}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_CPP${INSERT_CLIENTS_PER_PROXY}_uploadBS${INSERT_BATCH_CURRENT}_${timestamp}"
-            fi
-            ;;
-        IMPORT)
-            if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                echo "${TASK}_${MODE}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_P${IMPORT_PROCESSES}_BS${INSERT_BATCH_CURRENT}_CS${INSERT_CORPUS_SIZE}_${timestamp}"
-            else
-                echo "${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${CORES_CURRENT}_N${NODES_CURRENT}_P${IMPORT_PROCESSES}_BS${INSERT_BATCH_CURRENT}_CS${INSERT_CORPUS_SIZE}_${timestamp}"
-            fi
-            ;;
-        INDEX)
-            if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                echo "${TASK}_${MODE}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_${INSERT_CORPUS_SIZE}_${timestamp}"
-            else
-                echo "${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${CORES_CURRENT}_N${NODES_CURRENT}_${INSERT_CORPUS_SIZE}_${timestamp}"
-            fi
-            ;;
-        QUERY)
-            if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                echo "${TASK}_${MODE}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_${QUERY_BATCH_CURRENT}_${timestamp}"
-            else
-                echo "${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${CORES_CURRENT}_N${NODES_CURRENT}_${QUERY_BATCH_CURRENT}_${timestamp}"
-            fi
-            ;;
-        MIXED)
-            corpus_size_for_dir="$INSERT_CORPUS_SIZE"
-            if [[ -n "$RESTORE_DIR" ]]; then
-                corpus_size_for_dir="$EXPECTED_CORPUS_SIZE"
-            fi
-
-            if [[ "$MODE" == "DISTRIBUTED" ]]; then
-                echo "${TASK}_${MODE}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_IBS${INSERT_BATCH_CURRENT}_QBS${QUERY_BATCH_CURRENT}_CS${corpus_size_for_dir}_${timestamp}"
-            else
-                echo "${TASK}_${MODE}_${STORAGE_MEDIUM}_CORES${CORES_CURRENT}_N${NODES_CURRENT}_IBS${INSERT_BATCH_CURRENT}_QBS${QUERY_BATCH_CURRENT}_CS${corpus_size_for_dir}_${timestamp}"
-            fi
-            ;;
-        *)
-            echo "Unknown task: $TASK" >&2
-            exit 1
-            ;;
-    esac
+    echo "${TASK}_${STORAGE_MEDIUM}_${timestamp}"
 }
 
 engine_main_script_path() {
@@ -191,6 +180,7 @@ engine_copy_payload() {
             "bulk_upload_import.py" \
             "bulk_upload_import_mc.py" \
             "replace_unified.py"
+        copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "inspect.py"
         mkdir -p "$target_dir/configs"
         copy_engine_items "$ENGINE_DIR/cpuMilvus/configs" "$target_dir/configs" "unified_milvus.yaml"
 
@@ -239,6 +229,7 @@ engine_copy_payload() {
             "multi_client_summary.py" \
             "bulk_upload_import.py" \
             "bulk_upload_import_mc.py"
+        copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "inspect.py"
 
         copy_engine_items "$ENGINE_DIR/goCode/multiClientOP" "$target_dir" "multiClientOP" "main.go"
         if [[ -f "$target_dir/main.go" ]]; then

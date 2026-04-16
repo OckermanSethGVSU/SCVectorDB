@@ -2,6 +2,7 @@ import os
 import json
 import time
 import requests
+import numpy as np
 from pymilvus import MilvusClient
 
 """
@@ -188,8 +189,23 @@ t2 = time.time()
 
 
 
+def resolve_target_index_rows() -> int:
+    explicit = (os.getenv("INSERT_CORPUS_SIZE") or "").strip()
+    if explicit:
+        return int(explicit)
+
+    path = (os.getenv("INSERT_DATA_FILEPATH") or "").strip()
+    if not path:
+        raise RuntimeError("INSERT_CORPUS_SIZE or INSERT_DATA_FILEPATH is required for indexing")
+
+    arr = np.load(os.path.expanduser(path), mmap_mode="r")
+    if arr.ndim != 2:
+        raise RuntimeError(f"expected 2D npy input at {path}, got shape {arr.shape}")
+    return int(arr.shape[0])
+
+
 INDEX_PENDING_STABLE_SECONDS = float(os.getenv("INDEX_PENDING_STABLE_SECONDS", "60"))
-TARGET_INDEX_ROWS = int(os.getenv("INSERT_CORPUS_SIZE", "10000000"))
+TARGET_INDEX_ROWS = resolve_target_index_rows()
 
 timeout_duration = 180
 

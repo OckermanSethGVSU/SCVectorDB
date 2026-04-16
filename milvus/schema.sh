@@ -45,7 +45,7 @@ register_milvus_var "ETCD_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "S
 register_milvus_var "LOCAL_SHARED_STORAGE_PATH" "default" "" "" "Shared storage path used when MINIO_MODE=off"
 
 # Insert / import workload
-register_milvus_var "INSERT_CORPUS_SIZE" "default" "10000000" "" "Total vectors available to preload"
+register_milvus_var "INSERT_CORPUS_SIZE" "default" "" "" "Total vectors available to preload; empty means use all rows in the file"
 register_milvus_var "INSERT_CLIENTS_PER_PROXY" "default" "8" "" "Insert clients per proxy"
 register_milvus_var "INSERT_METHOD" "default" "traditional" "traditional bulk" "Insert method"
 register_milvus_var "BULK_UPLOAD_TRANSPORT" "default" "mc" "mc remote" "Bulk upload transport"
@@ -53,7 +53,7 @@ register_milvus_var "BULK_UPLOAD_STAGING_MEDIUM" "default" "memory" "memory DAOS
 register_milvus_var "IMPORT_PROCESSES" "default" "204" "" "Bulk import process count"
 register_milvus_var "INSERT_BALANCE_STRATEGY" "default" "WORKER" "NONE WORKER" "Insert balancing policy"
 register_milvus_var "INSERT_STREAMING" "default" "True" "True False" "Enable streaming insert behavior"
-register_milvus_var "INSERT_DATA_FILEPATH" "default" "/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/mergedData/embeddings_merged.npy" "" "Insert corpus file path"
+register_milvus_var "INSERT_DATA_FILEPATH" "default" "" "" "Insert corpus file path"
 register_milvus_var "INSERT_BATCH_SIZE" "default" "512" "" "Insert batch size; single value or sweep list"
 register_milvus_var "INSERT_START_ID" "default" "" "" "Optional insert id offset override"
 register_milvus_var "BULK_IMPORT_PREPARE_ONLY" "default" "TRUE" "TRUE FALSE" "Prepare import request only"
@@ -70,11 +70,11 @@ register_milvus_var "DML_CHANNELS" "default" "16" "" "DML channel count"
 register_milvus_var "FLUSH_BEFORE_INDEX" "default" "TRUE" "TRUE FALSE" "Flush collection before indexing"
 
 # Query workload
-register_milvus_var "QUERY_CORPUS_SIZE" "default" "100000" "" "Total queries to execute"
+register_milvus_var "QUERY_CORPUS_SIZE" "default" "" "" "Total queries to execute; empty means use all rows in the file"
 register_milvus_var "QUERY_CLIENTS_PER_PROXY" "default" "1" "" "Query clients per proxy"
 register_milvus_var "QUERY_BALANCE_STRATEGY" "default" "NONE" "NONE WORKER" "Query balancing policy"
 register_milvus_var "QUERY_STREAMING" "default" "False" "True False" "Enable query streaming behavior"
-register_milvus_var "QUERY_DATA_FILEPATH" "default" "/lus/flare/projects/AuroraGPT/sockerman/text2image1B/YandexQuery100k.npy" "" "Query vector file path"
+register_milvus_var "QUERY_DATA_FILEPATH" "default" "" "" "Query vector file path"
 register_milvus_var "QUERY_BATCH_SIZE" "default" "32" "" "Query batch size; single value or sweep list"
 
 # Mixed workload controls
@@ -85,10 +85,10 @@ register_milvus_var "QUERY_MODE" "default" "max" "max rate MAX RATE" "Mixed quer
 register_milvus_var "QUERY_OPS_PER_SEC" "default" "" "" "Query ops/sec when QUERY_MODE=rate"
 register_milvus_var "MIXED_QUERY_BATCH_SIZE" "default" "32" "" "Mixed query batch size"
 register_milvus_var "MIXED_RESULT_PATH" "default" "mixed_logs" "" "Output subdirectory for mixed workload logs"
-register_milvus_var "MIXED_CORPUS_SIZE" "default" "1000000" "" "Mixed-workload corpus size"
+register_milvus_var "MIXED_CORPUS_SIZE" "default" "" "" "Mixed-workload corpus size; empty means use all rows in the file"
 register_milvus_var "MIXED_QUERY_CLIENTS_PER_PROXY" "default" "1" "" "Mixed query clients per proxy"
 register_milvus_var "MIXED_INSERT_CLIENTS_PER_PROXY" "default" "1" "" "Mixed insert clients per proxy"
-register_milvus_var "MIXED_DATA_FILEPATH" "default" "/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/10M_part2.npy" "" "Mixed workload data file"
+register_milvus_var "MIXED_DATA_FILEPATH" "default" "" "" "Mixed workload data file"
 
 # Optional request tuning
 register_milvus_var "COLLECTION_NAME" "default" "" "" "Optional collection override"
