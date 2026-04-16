@@ -1,21 +1,3 @@
-if [[ -z "${ENV_PATH:-}" && "${ALLOW_SYSTEM_PYTHON:-False}" != "True" ]]; then
-    cat >&2 <<'EOF'
-Error: ENV_PATH must be set unless ALLOW_SYSTEM_PYTHON=True.
-
-Set one of these in run_config.env:
-  ENV_PATH=/path/to/python/env
-
-Or, if the job's loaded modules/current environment already provide every Python dependency:
-  ALLOW_SYSTEM_PYTHON=True
-EOF
-    exit 1
-fi
-
-if [[ -z "${myDIR:-}" ]]; then
-    echo "Error: myDIR must be set to the generated Qdrant run directory name." >&2
-    exit 1
-fi
-
 if [[ -z "${BASE_DIR:-}" ]]; then
     BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
@@ -49,6 +31,24 @@ elif [[ "$PLATFORM" == "AURORA" ]]; then
     cd "$RUN_DIR"
 fi
 
+# if we are running mixed, set the insert offset
+if [[ "$TASK" == "MIXED" && -z "${INSERT_START_ID:-}" ]]; then
+    if [[ -n "${RESTORE_DIR:-}" ]]; then
+        INSERT_START_ID="$EXPECTED_CORPUS_SIZE"
+    elif [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
+        INSERT_START_ID="$INSERT_CORPUS_SIZE"
+    elif [[ -n "${INSERT_FILEPATH:-}" ]]; then
+        if ! INSERT_START_ID="$(python3 inspect.py "$INSERT_FILEPATH")"; then
+            echo "Error: failed to derive INSERT_START_ID from INSERT_FILEPATH using inspect.py." >&2
+            exit 1
+        fi
+    else
+        echo "Error: TASK=MIXED requires INSERT_START_ID, INSERT_CORPUS_SIZE, RESTORE_DIR, or INSERT_FILEPATH." >&2
+        exit 1
+    fi
+    export INSERT_START_ID
+    echo "INSERT_START_ID=$INSERT_START_ID"
+fi
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
@@ -185,10 +185,7 @@ finalize_cluster_run() {
     touch ./runtime_state/flag.txt
     mkdir -p systemStats
     shopt -s nullglob
-    local system_files=(./*_system_*.csv)
-    if (( ${#system_files[@]} > 0 )); then
-        mv "${system_files[@]}" systemStats/
-    fi
+    local file
     mkdir -p clientTiming
     local timing_files=()
     [[ -f ./index_time.txt ]] && timing_files+=(./index_time.txt)
@@ -196,8 +193,12 @@ finalize_cluster_run() {
     if (( ${#timing_files[@]} > 0 )); then
         mv "${timing_files[@]}" clientTiming/
     fi
-    shopt -u nullglob
     sleep 30
+    for file in ./*_system_*.csv ./*_final.csv; do
+        [[ -e "$file" ]] || continue
+        mv "$file" systemStats/
+    done
+    shopt -u nullglob
     rm -f flag.txt
     if [[ -f ./ip_registry.txt ]]; then
         mv ./ip_registry.txt ./runtime_state/
@@ -205,6 +206,10 @@ finalize_cluster_run() {
     if [[ -d ./ip_registry.d ]]; then
         mv ./ip_registry.d ./runtime_state/
     fi
+    for file in ./all_nodefile.txt ./worker_nodefile.txt ./config.yaml; do
+        [[ -e "$file" ]] || continue
+        mv "$file" ./runtime_state/
+    done
 }
 
 wait_for_launch_stop_flag() {
