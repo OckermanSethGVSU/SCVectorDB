@@ -104,17 +104,24 @@ engine_make_run_dir_name() {
             echo "${TASK}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_C${UPLOAD_CLIENTS_CURRENT}_uploadBS${UPLOAD_BATCH_CURRENT}_${timestamp}"
             ;;
         index)
-            echo "${TASK}_pes2o_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES${CORES_CURRENT}_CS${CORPUS_SIZE}_${timestamp}"
+            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES${CORES_CURRENT}_CS${CORPUS_SIZE}_${timestamp}"
             ;;
         query_bs|query_core)
-            echo "${TASK}_pes2o_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES${CORES_CURRENT}_QBS${QUERY_BATCH_CURRENT}_Q${QUERY_WORKLOAD}_${timestamp}"
+            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES${CORES_CURRENT}_QBS${QUERY_BATCH_CURRENT}_Q${QUERY_WORKLOAD}_${timestamp}"
+            ;;
+        query_scaling)
+            local total_workers=$((NODES_CURRENT * WORKERS_PER_NODE_CURRENT))
+            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_TW${total_workers}_UCPW${UPLOAD_CLIENTS_CURRENT}_QCPW${QUERY_CLIENTS_PER_WORKER}_CORES${CORES_CURRENT}_IBS${UPLOAD_BATCH_CURRENT}_QBS${QUERY_BATCH_CURRENT}_${timestamp}"
             ;;
     esac
 }
 
 # Select the Weaviate launch script copied into submit.sh.
 engine_main_script_path() {
-    echo "main.sh"
+    case "$TASK" in
+        query_scaling) echo "main_query_scaling.sh" ;;
+        *)             echo "main.sh" ;;
+    esac
 }
 
 # Emit run_config.env contents consumed by the Weaviate launch scripts.
@@ -136,17 +143,42 @@ engine_copy_payload() {
         "launchWeaviateNode.sh" \
         "mapping.py"
 
-    if [[ -f "$ENGINE_DIR/$WEAVIATE_CLIENT_BINARY" ]]; then
-        copy_engine_items "$ENGINE_DIR" "$target_dir" "$WEAVIATE_CLIENT_BINARY"
-    elif [[ -f "$ENGINE_DIR/goCode/test/$WEAVIATE_CLIENT_BINARY" ]]; then
-        copy_engine_items "$ENGINE_DIR" "$target_dir" "goCode/test/$WEAVIATE_CLIENT_BINARY"
-        mv "$target_dir/goCode/test/$WEAVIATE_CLIENT_BINARY" "$target_dir/$WEAVIATE_CLIENT_BINARY"
-        rmdir "$target_dir/goCode/test" 2>/dev/null || true
-        rmdir "$target_dir/goCode" 2>/dev/null || true
-    else
-        echo "Required Weaviate client binary missing: $WEAVIATE_CLIENT_BINARY" >&2
-        return 1
-    fi
+    case "$TASK" in
+        query_scaling)
+            copy_engine_items "$ENGINE_DIR" "$target_dir" "main_query_scaling.sh"
+            mkdir -p "$target_dir/go_client"
+            if [[ -f "$ENGINE_DIR/clients/insert_pes2o_streaming/$INSERT_BIN" ]]; then
+                copy_engine_items "$ENGINE_DIR/clients/insert_pes2o_streaming" \
+                    "$target_dir/go_client" "$INSERT_BIN"
+            else
+                echo "Required insert client binary missing: clients/insert_pes2o_streaming/$INSERT_BIN" >&2
+                echo "Build it with: (cd $ENGINE_DIR/clients/insert_pes2o_streaming && ./build.sh)" >&2
+                return 1
+            fi
+            if [[ -f "$ENGINE_DIR/clients/query_scaling/$QUERY_SCALING_BIN" ]]; then
+                copy_engine_items "$ENGINE_DIR/clients/query_scaling" \
+                    "$target_dir/go_client" "$QUERY_SCALING_BIN"
+            else
+                echo "Required query client binary missing: clients/query_scaling/$QUERY_SCALING_BIN" >&2
+                echo "Build it with: (cd $ENGINE_DIR/clients/query_scaling && ./build.sh)" >&2
+                return 1
+            fi
+            chmod +x "$target_dir/go_client/$INSERT_BIN" "$target_dir/go_client/$QUERY_SCALING_BIN"
+            ;;
+        *)
+            if [[ -f "$ENGINE_DIR/$WEAVIATE_CLIENT_BINARY" ]]; then
+                copy_engine_items "$ENGINE_DIR" "$target_dir" "$WEAVIATE_CLIENT_BINARY"
+            elif [[ -f "$ENGINE_DIR/goCode/test/$WEAVIATE_CLIENT_BINARY" ]]; then
+                copy_engine_items "$ENGINE_DIR" "$target_dir" "goCode/test/$WEAVIATE_CLIENT_BINARY"
+                mv "$target_dir/goCode/test/$WEAVIATE_CLIENT_BINARY" "$target_dir/$WEAVIATE_CLIENT_BINARY"
+                rmdir "$target_dir/goCode/test" 2>/dev/null || true
+                rmdir "$target_dir/goCode" 2>/dev/null || true
+            else
+                echo "Required Weaviate client binary missing: $WEAVIATE_CLIENT_BINARY" >&2
+                return 1
+            fi
+            ;;
+    esac
 
     if [[ -d "$ENGINE_DIR/perf" ]]; then
         copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "perf"
