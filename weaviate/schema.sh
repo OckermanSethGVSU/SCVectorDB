@@ -14,7 +14,7 @@
 # The order in this file controls the order shown in `--help --engine weaviate`.
 
 # Core execution mode and platform
-register_weaviate_var "TASK" "required" "" "insert index query_bs query_core" "Experiment task"
+register_weaviate_var "TASK" "required" "" "insert index query_bs query_core query_scaling" "Experiment task"
 register_weaviate_var "RUN_MODE" "default" "PBS" "PBS" "Run mode"
 register_weaviate_var "PLATFORM" "required" "" "POLARIS AURORA" "Target platform"
 register_weaviate_var "ACCOUNT" "required" "" "" "PBS project/account to charge for the run"
@@ -50,3 +50,11 @@ register_weaviate_var "QUERY_WORKLOAD" "default" "100000" "" "Number of queries 
 register_weaviate_var "QUERY_BATCH_SIZE" "default" "256" "" "Query batch size"
 register_weaviate_var "QUERY_TOPK" "default" "10" "" "Query top-k"
 register_weaviate_var "QUERY_EF" "default" "64" "" "Query ef parameter"
+register_weaviate_var "QUERY_CLIENTS_PER_WORKER" "default" "1" "" "Query clients per worker rank"
+register_weaviate_var "QUERY_CLIENT_MODE" "default" "per_worker" "fixed per_worker" "How QUERY_CLIENTS_PER_WORKER is interpreted"
+
+# Dataset and per-task client binaries
+register_weaviate_var "DATASET_LABEL" "default" "pes2o" "" "Dataset tag used in run-dir names"
+register_weaviate_var "CLASS_NAME" "default" "PES2OEF64" "" "Weaviate class/collection name"
+register_weaviate_var "INSERT_BIN" "default" "insert_pes2o_streaming" "" "Client binary for the insert phase of query_scaling"
+register_weaviate_var "QUERY_SCALING_BIN" "default" "query_scaling" "" "Client binary for the query phase of query_scaling"
