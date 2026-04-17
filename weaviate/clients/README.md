@@ -1,31 +1,26 @@
 # Weaviate Go clients
 
-Each subdirectory is a self-contained Go module that produces one binary used
-by the unified submit framework (via `weaviate/engine.sh::engine_copy_payload`).
+A single Go module under `go_client/` containing every Weaviate client binary
+the unified submit framework needs. The module mirrors
+`/flare/radix-io/songoh/weaviate/multi_node/go_client/` on Aurora.
 
 ## Layout
 
-- `insert_pes2o_streaming/` — streaming insert client used by the `query_scaling`
-  task's insert phase.
-- `query_scaling/` — multi-phase query client used by the `query_scaling` task's
-  query phase.
+- `go_client/` — shared Go module (`go.mod`, `go.sum`, `vendor/`) with one
+  `*.go` file per binary. Each file declares `package main` with its own
+  `main()`, so builds are per-file:
+  `go build -o insert_pes2o_streaming insert_pes2o_streaming.go`.
 
 ## Building
 
-Build everything at once:
-
 ```
-./build_all.sh
-```
-
-Or build a single client:
-
-```
-cd insert_pes2o_streaming && ./build.sh
+./build_all.sh                              # builds the defaults in go_client/build.sh
+./go_client/build.sh                        # same, invoked directly
+./go_client/build.sh query_scaling          # build one
+./go_client/build.sh insert_pes2o_streaming query_scaling index_pes2o_ef64
 ```
 
-Each `build.sh` emits the binary in place (e.g. `./insert_pes2o_streaming`),
-which is where `engine_copy_payload` looks for it before staging into a run
-directory under `go_client/`.
-
-The compiled binaries are git-ignored (see `weaviate/.gitignore`).
+Each build emits the binary in place (e.g. `go_client/insert_pes2o_streaming`),
+which is where `weaviate/engine.sh::engine_copy_payload` picks it up before
+staging it into `go_client/` inside the run directory. Compiled binaries are
+git-ignored (see `weaviate/.gitignore`).

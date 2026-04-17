@@ -147,22 +147,15 @@ engine_copy_payload() {
         query_scaling)
             copy_engine_items "$ENGINE_DIR" "$target_dir" "main_query_scaling.sh"
             mkdir -p "$target_dir/go_client"
-            if [[ -f "$ENGINE_DIR/clients/insert_pes2o_streaming/$INSERT_BIN" ]]; then
-                copy_engine_items "$ENGINE_DIR/clients/insert_pes2o_streaming" \
-                    "$target_dir/go_client" "$INSERT_BIN"
-            else
-                echo "Required insert client binary missing: clients/insert_pes2o_streaming/$INSERT_BIN" >&2
-                echo "Build it with: (cd $ENGINE_DIR/clients/insert_pes2o_streaming && ./build.sh)" >&2
-                return 1
-            fi
-            if [[ -f "$ENGINE_DIR/clients/query_scaling/$QUERY_SCALING_BIN" ]]; then
-                copy_engine_items "$ENGINE_DIR/clients/query_scaling" \
-                    "$target_dir/go_client" "$QUERY_SCALING_BIN"
-            else
-                echo "Required query client binary missing: clients/query_scaling/$QUERY_SCALING_BIN" >&2
-                echo "Build it with: (cd $ENGINE_DIR/clients/query_scaling && ./build.sh)" >&2
-                return 1
-            fi
+            for bin in "$INSERT_BIN" "$QUERY_SCALING_BIN"; do
+                if [[ ! -f "$ENGINE_DIR/clients/go_client/$bin" ]]; then
+                    echo "Required client binary missing: clients/go_client/$bin" >&2
+                    echo "Build it with: (cd $ENGINE_DIR/clients/go_client && ./build.sh $bin)" >&2
+                    return 1
+                fi
+            done
+            copy_engine_items "$ENGINE_DIR/clients/go_client" "$target_dir/go_client" \
+                "$INSERT_BIN" "$QUERY_SCALING_BIN"
             chmod +x "$target_dir/go_client/$INSERT_BIN" "$target_dir/go_client/$QUERY_SCALING_BIN"
             ;;
         *)

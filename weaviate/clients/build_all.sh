@@ -1,16 +1,15 @@
 #!/bin/bash
-# Build every Weaviate Go client under weaviate/clients/*/.
-# Each subdirectory is expected to expose a build.sh that produces its binary
-# in place (e.g. clients/insert_pes2o_streaming/insert_pes2o_streaming).
+# Build every Weaviate Go client binary. Delegates to clients/go_client/build.sh
+# which builds one binary per *.go file.
 
 set -euo pipefail
 
 CLIENTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-shopt -s nullglob
-for build in "$CLIENTS_DIR"/*/build.sh; do
-    dir="$(dirname "$build")"
-    echo "==> building $(basename "$dir")"
-    (cd "$dir" && ./build.sh)
-done
-shopt -u nullglob
+if [[ -x "$CLIENTS_DIR/go_client/build.sh" ]]; then
+    "$CLIENTS_DIR/go_client/build.sh" "$@"
+else
+    echo "Error: $CLIENTS_DIR/go_client/build.sh is missing or not executable." >&2
+    echo "Copy the Weaviate go_client source into $CLIENTS_DIR/go_client/ first." >&2
+    exit 1
+fi

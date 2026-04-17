@@ -22,15 +22,18 @@ under `clients/`, and ready-to-edit run templates under `sampleConfigs/`.
 
 ## Building the Go clients
 
+The Go clients live in a single module at `clients/go_client/`. Every `*.go`
+file declares its own `main`, so each binary is built from one source file.
+
 ```
 cd clients
-./build_all.sh            # builds every client/*/
-# or build a single one:
-cd insert_pes2o_streaming && ./build.sh
+./build_all.sh                              # builds the defaults
+./go_client/build.sh insert_pes2o_streaming # build one
+./go_client/build.sh insert_pes2o_streaming query_scaling
 ```
 
-Each `build.sh` emits the binary in place. The compiled artifacts are
-git-ignored.
+Each build emits the binary in place (e.g. `clients/go_client/query_scaling`).
+The compiled artifacts are git-ignored.
 
 ## Running an experiment
 
@@ -58,7 +61,7 @@ other engines).
 
 - `insert`, `index`, `query_bs`, `query_core` — original Seth-scaffolded
   workflows; use `WEAVIATE_CLIENT_BINARY` to select the client.
-- `query_scaling` — multi-phase pipeline that stages both
-  `clients/insert_pes2o_streaming/$INSERT_BIN` and
-  `clients/query_scaling/$QUERY_SCALING_BIN` under `go_client/` in the run
+- `query_scaling` — multi-phase pipeline (insert → index quiescence → query)
+  that stages `clients/go_client/$INSERT_BIN` and
+  `clients/go_client/$QUERY_SCALING_BIN` under `go_client/` in the run
   directory and dispatches `main_query_scaling.sh` as the launch script.
