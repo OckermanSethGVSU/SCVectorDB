@@ -1,0 +1,29 @@
+# timestamped run outputs
+results_*/
+query_scaling_*/
+query_core_*/
+query_bs_*/
+insert_*_N*_NP*_*/
+index_*_N*_NP*_CORES*/
+fig6_*/
+fig7_*/
+table5_*/
+
+# artifacts
+*.sif
+*.npy
+*.log
+*.out
+snapshots_old/
+raw_instances_old/
+weaviateSetup_old/
+
+# compiled Go binaries (built from clients/*/build.sh)
+clients/*/insert_pes2o_streaming
+clients/*/query_scaling
+clients/*/mixed
+clients/*/*.exe
+
+# python/editor
+__pycache__/
+.codex/
