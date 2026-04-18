@@ -11,26 +11,19 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml apptainer/main
     ml load e2fsprogs
     module use /soft/modulefiles; module load conda; conda activate base
-    if [[ -n "${ENV_PATH:-}" ]]; then
-        echo "Activating Python environment: $ENV_PATH"
-        source "$ENV_PATH/bin/activate"
-    else
-        echo "ENV_PATH not set; using current Python environment: $(command -v python3)"
-    fi
-    cd "$RUN_DIR"
 
 elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
     module load frameworks
-    if [[ -n "${ENV_PATH:-}" ]]; then
-        echo "Activating Python environment: $ENV_PATH"
-        source "$ENV_PATH/bin/activate"
-    else
-        echo "ENV_PATH not set; using current Python environment: $(command -v python3)"
-    fi
-    cd "$RUN_DIR"
 fi
 
+if [[ -n "${ENV_PATH:-}" ]]; then
+    echo "Activating Python environment: $ENV_PATH"
+    source "$ENV_PATH/bin/activate"
+    echo "ENV_PATH not set; using current Python environment: $(command -v python3)"
+fi
+
+cd "$RUN_DIR"
 # if we are running mixed, set the insert offset
 if [[ "$TASK" == "MIXED" && -z "${INSERT_START_ID:-}" ]]; then
     if [[ -n "${RESTORE_DIR:-}" ]]; then
