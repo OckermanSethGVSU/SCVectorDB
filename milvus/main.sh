@@ -65,11 +65,7 @@ wait_for_signal_files() {
 run_summary() {
     local task="$1"     # INSERT or QUERY
     local prefix="$2"   # insert or query
-
     env "${PYTHON_ENV_VARS[@]}" ACTIVE_TASK="$task" python3 multi_client_summary.py
-
-    mv times.csv "${prefix}_times.txt"
-    mv summary.csv "${prefix}_summary.txt"
 }
 
 compute_local_shared_storage_path() {
@@ -124,21 +120,19 @@ PYTHON_ENV_VARS=(
 
 RUN_DIR="$(pwd)"
 BASE_DIR="$(dirname "$RUN_DIR")"
-set -a
-source "$RUN_DIR/run_config.env"
-set +a
+
 
 export myDIR="$(basename "$RUN_DIR")"
 export RESULT_PATH="$RUN_DIR"
-export RUNTIME_STATE_DIR="$BASE_DIR/$myDIR/runtime_state"
-cd "$BASE_DIR/$myDIR"
+export RUNTIME_STATE_DIR="${RUN_DIR}/runtime_state"
+cd "$RUN_DIR"
 
 mkdir -p "$RUNTIME_STATE_DIR"
 
 if [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
-    export PROXY_REGISTRY_PATH="$BASE_DIR/$myDIR/PROXY/PROXY_registry.txt"
+    export PROXY_REGISTRY_PATH="${RUN_DIR}/PROXY/PROXY_registry.txt"
 else
-    export PROXY_REGISTRY_PATH="$RUNTIME_STATE_DIR/PROXY_registry.txt"
+    export PROXY_REGISTRY_PATH="${RUN_DIR}/runtime_state/PROXY_registry.txt"
 fi
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
@@ -396,8 +390,8 @@ if [[ "$TASK" == "QUERY" ]]; then
     export ACTIVE_TASK="QUERY"
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
     should_summarize_query=1
-    mkdir -p uploadNPY
-    mv *.npy uploadNPY/
+    mkdir -p queryNPY
+    mv *.npy queryNPY/
     
 
     if [[ "$TRACING" == "True" ]]; then
@@ -474,7 +468,8 @@ fi
 
 mkdir -p client_timings
 mv *.csv *.txt client_timings/
-mv *.yaml runtime_state/
+mv ./configs/ runtime_state/
+mv *.out *.json *.jsonl runtime_state/
 
 if [[ "$TRACING" == "True" ]]; then
         python3 analyze_traces.py > analysis.txt

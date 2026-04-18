@@ -12,14 +12,14 @@ APPTAINER_ARGS=()
 ETCD_BIND_ARGS=()
 if [[ "$STORAGE_MEDIUM" == "memory" ]]; then
     TARGET_BASE="/dev/shm/"
-    (( RANK == 0 )) && echo "Using memory for persistence"
+    (( RANK == 0 )) && echo "Milvus is using memory storage"
 
 DAOS_ARGS=()
 elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
     DAOS_CONT="vectorDBTesting"
     TARGET_BASE="/tmp/${DAOS_POOL}/${DAOS_CONT}/${myDIR}/milvusDir"
-    (( RANK == 0 )) && echo "Using DAOS for persistence"
+    (( RANK == 0 )) && echo "Milvus is using DAOS storage"
     APPTAINER_ARGS+=(
         --bind "/home/treewalker/daos_lib64:/opt/daos/lib64:ro"
         --env LD_LIBRARY_PATH=/opt/daos/lib64
@@ -28,10 +28,10 @@ elif [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
 
 elif [[ "$STORAGE_MEDIUM" == "lustre" ]]; then
     TARGET_BASE="./milvusDir"
-    (( RANK == 0 )) && echo "Using lustre for persistence"
+    (( RANK == 0 )) && echo "Milvus is using lustre storage"
 elif [[ "$STORAGE_MEDIUM" == "SSD" ]]; then
     TARGET_BASE="/local/scratch/milvusDir"
-    (( RANK == 0 )) && echo "Using SSD for persistence"
+    (( RANK == 0 )) && echo "Milvus is using SSD storage"
 
 else
     (( RANK == 0 )) && echo "Error: unknown STORAGE_MEDIUM '$STORAGE_MEDIUM'" >&2
@@ -41,7 +41,7 @@ fi
 case "$ETCD_MEDIUM" in
     memory)
         ETCD_DATA_DIR="/dev/shm/var/lib/milvus/etcd"
-        (( RANK == 0 )) && echo "ETCD using memory for persistence"
+        (( RANK == 0 )) && echo "ETCD using memory for storage"
         ;;
     DAOS)
         DAOS_POOL="radix-io"
@@ -56,14 +56,14 @@ case "$ETCD_MEDIUM" in
                 --env LD_LIBRARY_PATH=/opt/daos/lib64
             )
         fi
-        (( RANK == 0 )) && echo "ETCD using DAOS for persistence"
+        (( RANK == 0 )) && echo "ETCD using DAOS for storage"
         ;;
     lustre)
         ETCD_HOST_BASE="./etcdDir"
         mkdir -p "$ETCD_HOST_BASE"
         ETCD_DATA_DIR="/etcd-data/etcd"
         ETCD_BIND_ARGS+=(-B "${ETCD_HOST_BASE}:/etcd-data")
-        (( RANK == 0 )) && echo "ETCD using lustre for persistence"
+        (( RANK == 0 )) && echo "ETCD using lustre for storage"
         ;;
     SSD)
         ETCD_HOST_BASE="/local/scratch/etcdDir"
@@ -222,7 +222,6 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env RESTORE_DIR=$RESTORE_DIR \
     -B ./execute.sh:/milvus/app_execute.sh \
     -B ${TARGET_BASE}/configs/:/milvus/configs/ \
-    -B ${base}/perfDir/:/perfDir/ \
     -B "${RUNTIME_STATE_DIR}:/runtime_state/" \
     -B ${TARGET_BASE}/milvus:/var/lib/milvus \
     "${ETCD_BIND_ARGS[@]}" \
