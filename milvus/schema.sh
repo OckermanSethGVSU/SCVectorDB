@@ -52,7 +52,7 @@ register_milvus_var "BULK_UPLOAD_TRANSPORT" "default" "mc" "mc remote" "Bulk upl
 register_milvus_var "BULK_UPLOAD_STAGING_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "Bulk upload staging medium"
 register_milvus_var "IMPORT_PROCESSES" "default" "204" "" "Bulk import process count"
 register_milvus_var "INSERT_BALANCE_STRATEGY" "default" "WORKER" "NONE WORKER" "Insert balancing policy"
-register_milvus_var "INSERT_STREAMING" "default" "True" "True False" "Enable streaming insert behavior"
+register_milvus_var "INSERT_STREAMING" "default" "False" "True False" "Enable streaming insert behavior"
 register_milvus_var "INSERT_DATA_FILEPATH" "default" "" "" "Insert corpus file path"
 register_milvus_var "INSERT_BATCH_SIZE" "default" "512" "" "Insert batch size; single value or sweep list"
 register_milvus_var "INSERT_START_ID" "default" "" "" "Optional insert id offset override"
