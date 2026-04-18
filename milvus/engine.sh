@@ -166,29 +166,60 @@ engine_emit_runtime_env() {
     schema_emit_runtime_env "$ENGINE_SCHEMA_PREFIX"
 }
 
+stage_go_source_file() {
+    local src_dir="$1"
+    local target_dir="$2"
+    local base_name
+
+    base_name="$(basename "$src_dir")"
+    copy_engine_items "$src_dir" "$target_dir/goCode" "main.go"
+    if [[ -f "$target_dir/goCode/main.go" ]]; then
+        mv "$target_dir/goCode/main.go" "$target_dir/goCode/${base_name}.go"
+    fi
+}
+
+engine_uses_bulk_import_payload() {
+    local task_upper="${TASK^^}"
+    local insert_method="${INSERT_METHOD:-traditional}"
+
+    if [[ "$task_upper" == "IMPORT" ]]; then
+        return 0
+    fi
+
+    insert_method="${insert_method,,}"
+    case "$insert_method" in
+        bulk|bulk_upload|bulk-upload|import)
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
 # Stage Milvus containers, launch scripts, clients, and task-specific helpers.
 engine_copy_payload() {
     local target_dir="$1"
 
     if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
-        copy_engine_items "$ENGINE_DIR/clients/batch_client" "$target_dir" "batch_client" "main.go"
-        if [[ -f "$target_dir/main.go" ]]; then
-            mv "$target_dir/main.go" "$target_dir/batch_client_main.go"
-        fi
+        copy_engine_items "$ENGINE_DIR/clients/batch_client" "$target_dir" \
+            "batch_client"
+        stage_go_source_file "$ENGINE_DIR/clients/batch_client" "$target_dir"
         copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" \
             "multi_client_summary.py" \
-            "bulk_upload_import.py" \
-            "bulk_upload_import_mc.py" \
             "replace_unified.py"
+        if engine_uses_bulk_import_payload; then
+            copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" \
+                "bulk_upload_import.py" \
+                "bulk_upload_import_mc.py"
+        fi
         copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "npy_inspect.py"
         mkdir -p "$target_dir/configs"
         copy_engine_items "$ENGINE_DIR/runtime/configs" "$target_dir/configs" "unified_milvus.yaml"
 
         if [[ "$TASK" == "MIXED" ]]; then
-            copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed" "main.go"
-            if [[ -f "$target_dir/main.go" ]]; then
-                mv "$target_dir/main.go" "$target_dir/mixed_main.go"
-            fi
+            copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" \
+                "mixed"
+            stage_go_source_file "$ENGINE_DIR/clients/mixed" "$target_dir"
             copy_engine_items "$ENGINE_DIR/../qdrant/scripts" "$target_dir" "mixed_timeline.py"
         fi
 
@@ -226,21 +257,22 @@ engine_copy_payload() {
             "replace_unified.py" \
             "profile.py" \
             "poll.py" \
-            "multi_client_summary.py" \
-            "bulk_upload_import.py" \
-            "bulk_upload_import_mc.py"
+            "multi_client_summary.py"
+        if engine_uses_bulk_import_payload; then
+            copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" \
+                "bulk_upload_import.py" \
+                "bulk_upload_import_mc.py"
+        fi
         copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "npy_inspect.py"
 
-        copy_engine_items "$ENGINE_DIR/clients/batch_client" "$target_dir" "batch_client" "main.go"
-        if [[ -f "$target_dir/main.go" ]]; then
-            mv "$target_dir/main.go" "$target_dir/batch_client_main.go"
-        fi
+        copy_engine_items "$ENGINE_DIR/clients/batch_client" "$target_dir" \
+            "batch_client"
+        stage_go_source_file "$ENGINE_DIR/clients/batch_client" "$target_dir"
 
         if [[ "$TASK" == "MIXED" ]]; then
-            copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed" "main.go"
-            if [[ -f "$target_dir/main.go" ]]; then
-                mv "$target_dir/main.go" "$target_dir/mixed_main.go"
-            fi
+            copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" \
+                "mixed"
+            stage_go_source_file "$ENGINE_DIR/clients/mixed" "$target_dir"
             copy_engine_items "$ENGINE_DIR/../qdrant/scripts" "$target_dir" "mixed_timeline.py"
         fi
 
