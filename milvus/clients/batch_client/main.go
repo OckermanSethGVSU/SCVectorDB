@@ -1008,20 +1008,22 @@ func clientWorker(
 			totalDurations = append(totalDurations, endUpload.Sub(startTotal).Seconds())
 		}
 		endLoop := time.Now()
-		log.Printf(
-			"worker finished local %s loop worker=%d client=%d global_client=%d sweep=%s inserted_rows=%d abs_rows=[%d,%d) loop_seconds=%.3f target_proxy=%s:%d",
-			ACTIVE_TASK,
-			workerRank,
-			clientID,
-			globalClientRank,
-			sweep.Label,
-			localRows,
-			startIdx,
-			endIdx,
-			endLoop.Sub(startLoop).Seconds(),
-			MILVUS_HOST,
-			MILVUS_PORT,
-		)
+		if ldebugfEnabled {
+			log.Printf(
+				"worker finished local %s loop worker=%d client=%d global_client=%d sweep=%s inserted_rows=%d abs_rows=[%d,%d) loop_seconds=%.3f target_proxy=%s:%d",
+				ACTIVE_TASK,
+				workerRank,
+				clientID,
+				globalClientRank,
+				sweep.Label,
+				localRows,
+				startIdx,
+				endIdx,
+				endLoop.Sub(startLoop).Seconds(),
+				MILVUS_HOST,
+				MILVUS_PORT,
+			)
+		}
 		barrier.Wait()
 
 		sentinelID := int64(totalRows)
@@ -1046,16 +1048,18 @@ func clientWorker(
 			sharedTiming.MarkSearchable()
 		}
 
-		log.Printf(
-			"worker entering post-%s wait worker=%d client=%d global_client=%d sweep=%s local_last_id=%d global_last_id=%d",
-			ACTIVE_TASK,
-			workerRank,
-			clientID,
-			globalClientRank,
-			sweep.Label,
-			localLastID,
-			lastID,
-		)
+		if ldebugfEnabled {
+			log.Printf(
+				"worker entering post-%s wait worker=%d client=%d global_client=%d sweep=%s local_last_id=%d global_last_id=%d",
+				ACTIVE_TASK,
+				workerRank,
+				clientID,
+				globalClientRank,
+				sweep.Label,
+				localLastID,
+				lastID,
+			)
+		}
 		sharedTiming.WaitSearchable()
 		searchableAtClient := time.Now()
 
