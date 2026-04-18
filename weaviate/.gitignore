@@ -18,21 +18,11 @@ snapshots_old/
 raw_instances_old/
 weaviateSetup_old/
 
-# compiled Go binaries (built from clients/go_client/build.sh)
-clients/go_client/insert_pes2o_streaming
-clients/go_client/insert_yandex_streaming
-clients/go_client/insert_nclients
-clients/go_client/insert_nclients_old
-clients/go_client/query_scaling
-clients/go_client/query_pes2o
-clients/go_client/query_yandex
-clients/go_client/index_pes2o
-clients/go_client/index_pes2o_ef64
-clients/go_client/index_yandex
-clients/go_client/index_yandex_ef64
+# compiled Go binaries
+clients/go_client/insert_streaming
+clients/go_client/index
+clients/go_client/query
 clients/go_client/mixed_insert_query
-clients/go_client/mixed_insert_query_yandex
-clients/go_client/weaviate_client
 clients/go_client/*.exe
 
 # Go workspace caches

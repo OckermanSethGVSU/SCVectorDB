@@ -413,7 +413,7 @@ func parseFlags() (config, error) {
 
 	flag.StringVar(&cfg.weaviateScheme, "weaviate-scheme", getenvDefault("WEAVIATE_SCHEME", "http"), "Weaviate scheme")
 	flag.StringVar(&cfg.weaviateHost, "weaviate-host", getenvDefault("WEAVIATE_HOST", "127.0.0.1:8080"), "Weaviate host:port")
-	flag.StringVar(&cfg.className, "class-name", getenvDefault("CLASS_NAME", "PES2OEF64"), "Weaviate class name")
+	flag.StringVar(&cfg.className, "class-name", getenvDefault("CLASS_NAME", ""), "Weaviate class name (required)")
 
 	flag.StringVar(&cfg.dataFile, "data-file", getenvDefault("DATA_FILEPATH", ""), "Path to .npy embeddings")
 	flag.StringVar(&cfg.outputDir, "output-dir", getenvDefault("RESULT_PATH", "."), "Output directory")
@@ -441,7 +441,7 @@ func parseFlags() (config, error) {
 
 	flag.BoolVar(&cfg.resetClass, "reset-class", getenvBoolDefault("RESET_CLASS", true), "Delete/recreate class")
 	flag.Int64Var(&cfg.dynamicThreshold, "dynamic-threshold", getenvInt64Default("DYNAMIC_THRESHOLD", 10000), "Dynamic index threshold")
-	flag.StringVar(&cfg.distanceMetric, "distance-metric", getenvDefault("DISTANCE_METRIC", "cosine"), "Distance metric")
+	flag.StringVar(&cfg.distanceMetric, "distance-metric", getenvDefault("DISTANCE_METRIC", "cosine"), "Distance metric (cosine|dot|l2-squared)")
 	flag.StringVar(&balance, "balance-strategy", getenvDefault("UPLOAD_BALANCE_STRATEGY", "WORKER_BALANCE"), "NONE | PER_CLIENT | WORKER_BALANCE")
 
 	// FIX: explicit shard count, default 0 = derive from worker registry

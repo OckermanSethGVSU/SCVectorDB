@@ -31,7 +31,7 @@ register_weaviate_var "QUEUE" "required" "" "preemptable debug debug-scaling pro
 
 # Engine/runtime selection
 register_weaviate_var "USEPERF" "default" "false" "true false" "Enable perf collection"
-register_weaviate_var "WEAVIATE_CLIENT_BINARY" "default" "test" "" "Client binary copied into the run directory"
+register_weaviate_var "WEAVIATE_CLIENT_BINARY" "default" "insert_streaming" "" "Client binary copied into the run directory for insert/index/query_bs/query_core tasks"
 register_weaviate_var "BASE_DIR" "default" "" "" "Optional base directory passed through to the client"
 register_weaviate_var "VECTOR_DIM" "default" "2560" "" "Vector dimension"
 register_weaviate_var "DISTANCE_METRIC" "default" "COSINE" "COSINE DOT L2" "Distance metric"
@@ -56,5 +56,5 @@ register_weaviate_var "QUERY_CLIENT_MODE" "default" "per_worker" "fixed per_work
 # Dataset and per-task client binaries
 register_weaviate_var "DATASET_LABEL" "default" "pes2o" "" "Dataset tag used in run-dir names"
 register_weaviate_var "CLASS_NAME" "default" "PES2OEF64" "" "Weaviate class/collection name"
-register_weaviate_var "INSERT_BIN" "default" "insert_pes2o_streaming" "" "Client binary for the insert phase of query_scaling"
-register_weaviate_var "QUERY_SCALING_BIN" "default" "query_scaling" "" "Client binary for the query phase of query_scaling"
+register_weaviate_var "INSERT_BIN" "default" "insert_streaming" "" "Client binary for the insert phase of query_scaling"
+register_weaviate_var "QUERY_SCALING_BIN" "default" "query" "" "Client binary for the query phase of query_scaling"

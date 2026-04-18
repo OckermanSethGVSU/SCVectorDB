@@ -1,25 +1,26 @@
 #!/bin/bash
-# Build selected Weaviate Go client binaries.
+# Build Weaviate Go client binaries.
 #
-# Every *.go in this directory declares its own `package main` with a `main()`,
-# so each binary is built from exactly one source file:
+# Every *.go in this directory declares its own `package main`, so each binary
+# is built from exactly one source file:
 #     go build -o <name> <name>.go
 #
 # Usage:
-#   ./build.sh                        # builds the defaults below
-#   ./build.sh insert_pes2o_streaming # builds one
-#   ./build.sh insert_pes2o_streaming query_scaling index_pes2o_ef64
+#   ./build.sh                            # build every binary in this directory
+#   ./build.sh insert_streaming           # build a specific binary
+#   ./build.sh insert_streaming query     # build several
 
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-DEFAULTS=(insert_pes2o_streaming query_scaling)
-
 if [[ $# -gt 0 ]]; then
     BINS=("$@")
 else
-    BINS=("${DEFAULTS[@]}")
+    BINS=()
+    for src in *.go; do
+        BINS+=("${src%.go}")
+    done
 fi
 
 for bin in "${BINS[@]}"; do

@@ -24,18 +24,19 @@ other engines).
 
 - `engine.sh`: Weaviate engine wiring for the unified submit manager
 - `schema.sh`: Weaviate variable registry and defaults
-- `main.sh`: PBS launch script copied into each run directory for the
-  `insert`, `index`, `query_bs`, and `query_core` tasks
-- `main_query_scaling.sh`: PBS launch script for `TASK=query_scaling`; drives
-  the multi-phase insert → index quiescence → query pipeline on top of the
-  running Weaviate cluster
-- `weaviateSetup/launchWeaviateNode.sh`: per-rank Weaviate launcher invoked
-  by both main scripts via `mpirun`; pulls the container directly from
+- `main.sh`: PBS launch script copied into every run directory. Boots the
+  cluster, waits for all ranks to register, creates the collection with
+  schema consensus, then dispatches on `TASK` — `query_scaling` runs the
+  multi-phase insert → index quiescence → query pipeline; `insert`,
+  `index`, `query_bs`, and `query_core` exec `go_client/$WEAVIATE_CLIENT_BINARY`
+- `weaviateSetup/launchWeaviateNode.sh`: per-rank launcher invoked by
+  `main.sh` via `mpirun`; pulls the container directly from
   `docker://semitechnologies/weaviate:1.36.2`
 - `weaviateSetup/mapping.py`: per-rank helper that discovers the `hsn0`
   interface and writes `interfaces<rank>.json` for the launcher
-- `clients/go_client/`: single Go module containing every Weaviate client
-  binary (one `*.go` file per binary, each with its own `package main`)
+- `clients/go_client/`: single Go module with four client binaries —
+  `insert_streaming`, `index`, `query`, `mixed_insert_query` (one `*.go`
+  file per binary, each `package main`)
 - `clients/go_client/build.sh`: per-file `go build` driver
 - `clients/build_all.sh`: convenience wrapper that delegates to the per-file
   builder
@@ -46,13 +47,14 @@ other engines).
 
 Generated Weaviate runs typically contain:
 
-- `submit.sh` — qsub header + dispatch to the selected main script
+- `submit.sh` — qsub header + dispatch to `main.sh`
 - `run_config.env` — canonical resolved run config (the values every other
   file reads from)
 - `launchWeaviateNode.sh`, `mapping.py` — per-rank launcher and IP mapper
-- `main.sh` **or** `main_query_scaling.sh` — whichever the TASK dispatches to
-- `go_client/` — staged Weaviate Go client binaries for `query_scaling` runs
-  (contains `$INSERT_BIN` and `$QUERY_SCALING_BIN`, both `chmod +x`-ed)
+- `main.sh` — unified launch script (every TASK dispatches through it)
+- `go_client/` — staged client binaries for this run (`query_scaling` stages
+  `$INSERT_BIN` and `$QUERY_SCALING_BIN`; every other TASK stages
+  `$WEAVIATE_CLIENT_BINARY`), all `chmod +x`-ed
 - `perf/` — per-rank readiness flags (`weaviate_running<rank>.txt`) and any
   `perf`-based profiling output when `USEPERF=true`
 - `ip_registry.txt` — comma-separated `rank,node,ip,http,gossip,data,raft,raft_internal`
@@ -126,13 +128,13 @@ Query workload:
 
 Per-task client binaries:
 
-- `WEAVIATE_CLIENT_BINARY`: client binary copied into the run directory for
-  the `insert` / `index` / `query_bs` / `query_core` tasks (older,
-  single-binary workflows)
+- `WEAVIATE_CLIENT_BINARY`: client binary staged under `go_client/` for the
+  `insert` / `index` / `query_bs` / `query_core` tasks (default:
+  `insert_streaming`)
 - `INSERT_BIN`: binary used for the insert phase of `query_scaling`
-  (default: `insert_pes2o_streaming`)
+  (default: `insert_streaming`)
 - `QUERY_SCALING_BIN`: binary used for the query phase of `query_scaling`
-  (default: `query_scaling`)
+  (default: `query`)
 
 Use:
 
@@ -144,25 +146,26 @@ to see the full variable list, defaults, choices, and requirement rules.
 
 ## Tasks
 
-- `insert`, `index`, `query_bs`, `query_core` — original Seth-scaffolded
-  workflows. `engine_copy_payload` stages the binary named by
-  `WEAVIATE_CLIENT_BINARY` and dispatches `main.sh`, which brings up the
-  cluster and execs the binary against `WEAVIATE_HOST`.
-- `query_scaling` — multi-phase pipeline used for the SC paper. Dispatches
-  `main_query_scaling.sh`, which:
-  1. Brings up the cluster via `launchWeaviateNode.sh` (same as the other
-     tasks).
-  2. Creates the collection and waits for schema consensus across all
+All tasks flow through the same `main.sh`, which brings up the cluster,
+waits for every rank's readiness flag, creates the collection with schema
+consensus, and then dispatches:
+
+- `insert`, `index`, `query_bs`, `query_core` — exec
+  `go_client/$WEAVIATE_CLIENT_BINARY` with the proxy env scrubbed; the
+  binary reads `WEAVIATE_HOST`, `CLASS_NAME`, `DATA_FILEPATH`, etc. from
+  env to decide its behavior.
+- `query_scaling` — multi-phase pipeline:
+  1. Creates the collection and waits for schema consensus across all
      workers (`create_class_with_consensus`, `wait_for_schema_consensus`).
-  3. Runs the insert phase: `go_client/$INSERT_BIN` with
+  2. Runs the insert phase: `go_client/$INSERT_BIN` with
      `NODES * WORKERS_PER_NODE * UPLOAD_CLIENTS_PER_WORKER` total clients,
      terminated when observed object count crosses
      `CORPUS_SIZE * (1 - INSERT_TOLERANCE)`.
-  4. Waits for index quiescence — `vectorQueueLength == 0` and every
+  3. Waits for index quiescence — `vectorQueueLength == 0` and every
      shard's `vectorIndexingStatus == READY` for a configurable number of
      consecutive polls (`wait_for_object_count`, `wait_for_index_quiescence`,
      `assert_all_shards_ready`).
-  5. Runs the query phase: fans out `go_client/$QUERY_SCALING_BIN` per
+  4. Runs the query phase: fans out `go_client/$QUERY_SCALING_BIN` per
      client per worker with partitioned query ranges, collects per-client
      `query_summary.json`, and aggregates into `query_scaling_summary.json`.
 
@@ -190,16 +193,12 @@ Apptainer cache; subsequent runs on the same host reuse it. There is no
 launcher. If you want to pin a different upstream tag, edit the `apptainer
 run` invocation in `weaviateSetup/launchWeaviateNode.sh`.
 
-Platform activation (modules + Python venv) happens inside the main script:
-
-- `main.sh` handles `POLARIS` and `AURORA`.
-- `main_query_scaling.sh` currently supports `PLATFORM=AURORA` only and
-  fails fast for anything else.
-
-Both scripts source the same Python venv
-(`/lus/flare/projects/radix-io/sockerman/qdrant/qEnv/bin/activate` on
-Aurora). That environment provides the Python helpers
-`main_query_scaling.sh` calls for object-count and quiescence polling.
+Platform activation (modules + Python venv) happens inside `main.sh`.
+`PLATFORM=AURORA` is currently supported; the script fails fast for any
+other platform. It sources the Python venv at
+`/lus/flare/projects/radix-io/sockerman/qdrant/qEnv/bin/activate`, which
+provides the Python helpers the script invokes for object-count and
+indexing-quiescence polling.
 
 ## Building the Go clients
 
@@ -209,13 +208,13 @@ source file.
 
 ```bash
 cd weaviate/clients
-./build_all.sh                              # builds the defaults
-./go_client/build.sh insert_pes2o_streaming # build one
-./go_client/build.sh insert_pes2o_streaming query_scaling
+./build_all.sh                       # build every binary
+./go_client/build.sh index           # build one
+./go_client/build.sh insert_streaming query
 ```
 
-Each build emits the binary in place (e.g.
-`clients/go_client/query_scaling`). The compiled artifacts are git-ignored
+Each build emits the binary in place (e.g. `clients/go_client/query`). The
+compiled artifacts are git-ignored
 (see `weaviate/.gitignore`), so you rebuild once per host; the submit
 framework then stages the selected binaries into the run directory under
 `go_client/`.
@@ -251,18 +250,16 @@ small allocation after only updating dataset paths and allocation settings.
 - `NODES` counts Weaviate worker nodes only; the submit framework adds one
   more node for the client driver and sets `TOTAL_NODES = NODES + 1` in
   `engine_load_combo()`.
-- `main.sh` waits only for `./perf/weaviate_running${MAX_RANK}.txt` before
-  execing the client binary; `main_query_scaling.sh` waits for every rank's
-  readiness flag, plus an extra 60 s Raft stabilization pause, before doing
-  anything.
-- `main_query_scaling.sh` tolerates a small insert shortfall
-  (`INSERT_TOLERANCE=1e-5` by default). If the Go client dies but the
-  observed object count is within tolerance of `CORPUS_SIZE`, the run
-  continues; otherwise it exits non-zero and emits the `insert_end_1` event.
-- All runtime knobs that are truly implementation details of the
-  `query_scaling` pipeline — `RPC_TIMEOUT`, `DRAIN_*`, `INSERT_MAX_RETRIES`,
+- `main.sh` waits for every rank's readiness flag under `./perf/`, then
+  adds a 60 s Raft stabilization pause before creating the class.
+- `query_scaling` tolerates a small insert shortfall (`INSERT_TOLERANCE=1e-5`
+  by default). If the Go client dies but the observed object count is
+  within tolerance of `CORPUS_SIZE`, the run continues; otherwise it exits
+  non-zero and emits the `insert_end_1` event.
+- Runtime knobs that are implementation details of the `query_scaling`
+  pipeline — `RPC_TIMEOUT`, `DRAIN_*`, `INSERT_MAX_RETRIES`,
   `SCHEMA_CONSENSUS_TIMEOUT`, `DAOS_POOL`, `DAOS_CONT`, etc. — live as env
-  defaults inside `main_query_scaling.sh`, not in the schema. Override them
-  with `--set NAME=value` at submit time if you need to.
+  defaults inside `main.sh`, not in the schema. Override them with
+  `--set NAME=value` at submit time if you need to.
 - Compiled Go binaries and timestamped run directories are git-ignored; see
   `weaviate/.gitignore` for the full pattern list.

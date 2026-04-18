@@ -91,7 +91,8 @@ type graphqlRequest struct {
 }
 
 type gqlResp struct {
-	Data map[string]map[string][]map[string]any `json:"data"`
+	Data   map[string]map[string][]map[string]any `json:"data"`
+	Errors []map[string]any                       `json:"errors,omitempty"`
 }
 
 var httpClient = &http.Client{
@@ -137,10 +138,14 @@ func main() {
 	baseURL := fmt.Sprintf("%s://%s", cfg.weaviateScheme, cfg.weaviateHost)
 	ctx := context.Background()
 
+	log.Printf("[QUERY] target=%s class=%s", baseURL, cfg.className)
+	log.Printf("[QUERY] file=%s start=%d workload=%d batch=%d topk=%d ef=%d",
+		cfg.queryFile, cfg.startRow, cfg.queryWorkload, cfg.queryBatchSize, cfg.topK, cfg.queryEF)
+
 	if err := waitForWeaviate(ctx, baseURL, time.Duration(cfg.waitSec)*time.Second); err != nil {
 		log.Fatalf("wait for weaviate: %v", err)
 	}
-	if err := waitForClass(ctx, baseURL, cfg.className, 60*time.Second); err != nil {
+	if err := waitForClass(ctx, baseURL, cfg.className, 120*time.Second); err != nil {
 		log.Fatalf("class check failed: %v", err)
 	}
 
@@ -220,6 +225,9 @@ func main() {
 			log.Fatalf("write query log: %v", err)
 		}
 
+		log.Printf("[QUERY] batch op=%d rows=[%d,%d) completed=%d/%d batch_sec=%.3f",
+			opIndex, rec.QueryStartRow, rec.QueryEndRow, queriesCompleted, queries.rows, batchLatency)
+
 		opIndex++
 	}
 
@@ -229,7 +237,6 @@ func main() {
 	if queriesCompleted > 0 {
 		meanLatencySec = float64(totalLatencyNS) / float64(queriesCompleted) / 1e9
 	}
-
 	throughputQPS := 0.0
 	if totalTimeSec > 0 {
 		throughputQPS = float64(queriesCompleted) / totalTimeSec
@@ -264,6 +271,8 @@ func main() {
 	if err := writeJSON(filepath.Join(cfg.outputDir, "query_summary.json"), summary); err != nil {
 		log.Fatalf("write summary: %v", err)
 	}
+	log.Printf("[QUERY] done: %d/%d queries, %.2f QPS, mean_lat=%.4fs, status=%s",
+		queriesCompleted, queries.rows, throughputQPS, meanLatencySec, summary.FinalStatus)
 
 	if joinedErr != nil {
 		log.Fatal(joinedErr)
@@ -280,7 +289,7 @@ func parseFlags() (config, error) {
 	flag.StringVar(&cfg.queryFile, "query-file", getenvDefault("QUERY_FILEPATH", ""), "Path to query .npy")
 	flag.StringVar(&cfg.outputDir, "output-dir", getenvDefault("RESULT_PATH", "."), "Output directory")
 	flag.IntVar(&cfg.startRow, "start-row", getenvIntDefault("START_ROW", 0), "Starting query row")
-	flag.IntVar(&cfg.queryWorkload, "query-workload", getenvIntDefault("QUERY_WORKLOAD", 0), "How many queries to run")
+	flag.IntVar(&cfg.queryWorkload, "query-workload", getenvIntDefault("QUERY_WORKLOAD", 0), "Queries to run")
 	flag.IntVar(&cfg.vectorDim, "vector-dim", getenvIntDefault("VECTOR_DIM", 0), "Expected vector dimension")
 	flag.IntVar(&cfg.queryBatchSize, "query-batch-size", getenvIntDefault("QUERY_BATCH_SIZE", 32), "Batch size")
 	flag.IntVar(&cfg.topK, "top-k", getenvIntDefault("QUERY_TOPK", 10), "Top-k")
@@ -317,7 +326,8 @@ func runOneQuery(parent context.Context, cfg config, baseURL string, vec []float
 		vecStrs[i] = strconv.FormatFloat(float64(x), 'f', -1, 32)
 	}
 
-	gql := fmt.Sprintf(`{Get{%s(nearVector:{vector:[%s]} limit:%d){doc_id _additional{distance}}}}`,
+	gql := fmt.Sprintf(
+		`{Get{%s(nearVector:{vector:[%s]} limit:%d){doc_id _additional{distance}}}}`,
 		cfg.className,
 		strings.Join(vecStrs, ","),
 		cfg.topK,
@@ -356,6 +366,17 @@ func runOneQuery(parent context.Context, cfg config, baseURL string, vec []float
 	var parsed gqlResp
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
 		return lat, nil, nil, fmt.Errorf("decode graphql response: %w", err)
+	}
+
+	// FIX: check for GraphQL-level errors
+	if len(parsed.Errors) > 0 {
+		msg := ""
+		for _, e := range parsed.Errors {
+			if m, ok := e["message"].(string); ok {
+				msg += m + "; "
+			}
+		}
+		return lat, nil, nil, fmt.Errorf("graphql errors: %s", msg)
 	}
 
 	getBlock, ok := parsed.Data["Get"]
@@ -411,9 +432,6 @@ func fillMissingIDs(topK int) []int64 {
 
 func fillMissingScores(topK int) []float32 {
 	out := make([]float32, topK)
-	for i := range out {
-		out[i] = 0
-	}
 	return out
 }
 
@@ -460,6 +478,10 @@ func waitForClass(ctx context.Context, baseURL, className string, timeout time.D
 		time.Sleep(1 * time.Second)
 	}
 }
+
+// =====================================================================
+// npy I/O
+// =====================================================================
 
 func loadNPYFloat32Matrix(path string) (matrixData, error) {
 	f, err := os.Open(path)
@@ -508,11 +530,11 @@ func loadNPYFloat32Matrix(path string) (matrixData, error) {
 	if !strings.Contains(h, "'descr': '<f4'") && !strings.Contains(h, "\"descr\": \"<f4\"") {
 		return matrixData{}, fmt.Errorf("only float32 little-endian npy is supported")
 	}
-	if strings.Contains(h, "True") || strings.Contains(h, "\"fortran_order\": true") {
+	if strings.Contains(h, "'fortran_order': True") || strings.Contains(h, "\"fortran_order\": true") || strings.Contains(h, "\"fortran_order\": True") {
 		return matrixData{}, fmt.Errorf("fortran-order npy not supported")
 	}
 
-	re := regexp.MustCompile(`\((\d+),\s*(\d+)\)`)
+	re := regexp.MustCompile(`[\(\[]\s*(\d+)\s*,\s*(\d+)\s*[,)\]]`)
 	m := re.FindStringSubmatch(h)
 	if len(m) != 3 {
 		return matrixData{}, fmt.Errorf("could not parse shape from npy header: %s", h)
@@ -558,6 +580,10 @@ func rowSlice(m matrixData, row int) []float32 {
 	return m.data[start:end]
 }
 
+// =====================================================================
+// I/O helpers
+// =====================================================================
+
 func writeJSON(path string, v any) error {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -572,10 +598,12 @@ func appendJSONL(path string, v any) error {
 		return err
 	}
 	defer f.Close()
-
-	enc := json.NewEncoder(f)
-	return enc.Encode(v)
+	return json.NewEncoder(f).Encode(v)
 }
+
+// =====================================================================
+// env helpers
+// =====================================================================
 
 func getenvDefault(key, fallback string) string {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {

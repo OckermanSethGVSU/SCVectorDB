@@ -240,54 +240,98 @@ func readVectors(f *os.File, info *NpyInfo, start, count int) ([]float32, int, e
 
 const idPropName = "doc_id"
 
-func mustEnvString(k string) string {
-	v := strings.TrimSpace(os.Getenv(k))
+func getenvDefault(key, def string) string {
+	v := strings.TrimSpace(os.Getenv(key))
 	if v == "" {
-		fmt.Println("[CLIENT][ERROR] missing env", k)
-		os.Exit(2)
+		return def
 	}
 	return v
 }
 
-func mustEnvInt(k string) int {
-	v := strings.TrimSpace(os.Getenv(k))
+func getenvIntDefault(key string, def int) int {
+	v := strings.TrimSpace(os.Getenv(key))
 	if v == "" {
-		fmt.Println("[CLIENT][ERROR] missing env", k)
-		os.Exit(2)
+		return def
 	}
 	var x int
-	_, err := fmt.Sscanf(v, "%d", &x)
+	if _, err := fmt.Sscanf(v, "%d", &x); err != nil {
+		return def
+	}
+	return x
+}
+
+func mustEnvStringAny(keys ...string) string {
+	for _, k := range keys {
+		v := strings.TrimSpace(os.Getenv(k))
+		if v != "" {
+			return v
+		}
+	}
+	fmt.Println("[CLIENT][ERROR] missing env; tried:", strings.Join(keys, ", "))
+	os.Exit(2)
+	return ""
+}
+
+func mustEnvIntAny(keys ...string) int {
+	s := mustEnvStringAny(keys...)
+	var x int
+	_, err := fmt.Sscanf(s, "%d", &x)
 	if err != nil {
-		fmt.Println("[CLIENT][ERROR] bad int env", k, v)
+		fmt.Println("[CLIENT][ERROR] bad int env value", s, "for keys", strings.Join(keys, ", "))
 		os.Exit(3)
 	}
 	return x
 }
 
-func makeDynamicClass(className string, dynamicThreshold int) *models.Class {
+func resolveBaseAndHosts() (base, hostPort, grpcHostPort string) {
+	if v := strings.TrimSpace(os.Getenv("WEAVIATE_HTTP_ADDR")); v != "" {
+		base = strings.TrimRight(v, "/")
+		hostPort = strings.TrimPrefix(base, "http://")
+		hostPort = strings.TrimPrefix(hostPort, "https://")
+	} else {
+		hostPort = mustEnvStringAny("WEAVIATE_HOST", "WORKER_IP")
+		if !strings.Contains(hostPort, ":") {
+			restPort := getenvDefault("REST_PORT", "8080")
+			hostPort = hostPort + ":" + restPort
+		}
+		base = "http://" + hostPort
+	}
+
+	ip := strings.Split(hostPort, ":")[0]
+	grpcPort := getenvDefault("GRPC_PORT", "50051")
+	grpcHostPort = ip + ":" + grpcPort
+
+	return base, hostPort, grpcHostPort
+}
+
+func makeDynamicClass(className, distance string, ef, dynamicThreshold int) *models.Class {
 	return &models.Class{
 		Class:           className,
 		Vectorizer:      "none",
 		VectorIndexType: "dynamic",
 		VectorIndexConfig: map[string]any{
-			"distance":  "cosine",
+			"distance":  distance,
 			"threshold": dynamicThreshold,
 			"hnsw": map[string]any{
+				"ef":             ef,
 				"efConstruction": 100,
 				"maxConnections": 16,
 			},
 		},
 		Properties: []*models.Property{
-			{Name: idPropName, DataType: []string{"text"}},
+			{
+				Name:     idPropName,
+				DataType: []string{"int"},
+			},
 		},
 	}
 }
 
-func resetClass(ctx context.Context, client *weaviate.Client, base, className string, dynamicThreshold int) error {
+func resetClass(ctx context.Context, client *weaviate.Client, base, className, distance string, ef, dynamicThreshold int) error {
 	_ = client.Schema().ClassDeleter().WithClassName(className).Do(ctx)
 	time.Sleep(1 * time.Second)
 
-	cls := makeDynamicClass(className, dynamicThreshold)
+	cls := makeDynamicClass(className, distance, ef, dynamicThreshold)
 	if err := client.Schema().ClassCreator().WithClass(cls).Do(ctx); err != nil {
 		return fmt.Errorf("class create failed: %w", err)
 	}
@@ -297,7 +341,6 @@ func resetClass(ctx context.Context, client *weaviate.Client, base, className st
 type TimelinePoint struct {
 	AbsSinceFirstRPCSec float64       `json:"abs_since_first_rpc_sec"`
 	SinceThresholdSec   float64       `json:"since_threshold_sec"`
-	SinceSendDoneSec    float64       `json:"since_send_done_sec"`
 	Snapshot            queueSnapshot `json:"snapshot"`
 }
 
@@ -327,14 +370,11 @@ type Output struct {
 	ThresholdCrossInserted int           `json:"threshold_cross_inserted"`
 	ThresholdCrossSnapshot queueSnapshot `json:"threshold_cross_snapshot"`
 
-	SendCompleteSnapshot queueSnapshot `json:"send_complete_snapshot"`
-
 	IndexComplete         bool          `json:"index_complete"`
 	IndexCompleteAbsSec   float64       `json:"index_complete_abs_sec"`
 	IndexCompleteSnapshot queueSnapshot `json:"index_complete_snapshot"`
 
-	ThresholdToCompleteSec float64 `json:"threshold_to_complete_sec"`
-	PostIngestDrainSec     float64 `json:"post_ingest_drain_sec"`
+	CPUIndexingSec float64 `json:"cpu_indexing_sec"`
 
 	Timeline []TimelinePoint `json:"timeline"`
 
@@ -348,7 +388,7 @@ func writeJSON(path string, out Output) {
 		fmt.Println("[CLIENT][ERROR] marshal json:", err)
 		return
 	}
-	if err := os.WriteFile(path, b, 0644); err != nil {
+	if err := os.WriteFile(path, b, 0o644); err != nil {
 		fmt.Println("[CLIENT][ERROR] write json:", err)
 		return
 	}
@@ -356,28 +396,30 @@ func writeJSON(path string, out Output) {
 }
 
 func main() {
-	outPath := flag.String("out", "index_time_pes2o.json", "output json path")
-	className := flag.String("class", "PES2O", "weaviate class name")
-	batchSize := flag.Int("batch_size", 32768, "batch size")
+	outPath := flag.String("out", getenvDefault("INDEX_OUT", "index_time.json"), "output json path")
+	className := flag.String("class", getenvDefault("CLASS_NAME", ""), "weaviate class name (required)")
+	distance := flag.String("distance", strings.ToLower(getenvDefault("DISTANCE_METRIC", "cosine")), "HNSW distance metric (cosine|dot|l2-squared)")
+	ef := flag.Int("ef", getenvIntDefault("QUERY_EF", 64), "HNSW ef (search) parameter")
+	batchSize := flag.Int("batch_size", getenvIntDefault("UPLOAD_BATCH_SIZE", 32768), "batch size")
 	waitSec := flag.Int("wait", 180, "seconds to wait for weaviate readiness")
 	overallSec := flag.Int("overall_sec", 25000, "overall time budget seconds")
 	rpcSec := flag.Int("rpc_sec", 1800, "per-batch RPC timeout seconds")
-	indexTimeoutSec := flag.Int("index_timeout_sec", 5000, "timeout after all sends are done")
-	indexPollMS := flag.Int("index_poll_ms", 1000, "poll interval while waiting for queue drain")
+	indexTimeoutSec := flag.Int("index_timeout_sec", 5000, "timeout after threshold crossing")
+	indexPollMS := flag.Int("index_poll_ms", 1000, "poll interval after threshold crossing")
 	indexStablePolls := flag.Int("index_stable_polls", 3, "require 0-queue and 0-indexing for N consecutive polls")
 	flag.Parse()
 
-	workerIP := mustEnvString("WORKER_IP")
-	restPort := mustEnvString("REST_PORT")
-	grpcPort := mustEnvString("GRPC_PORT")
-	dataFile := mustEnvString("DATA_FILE")
+	if *className == "" {
+		fmt.Println("[CLIENT][ERROR] CLASS_NAME / --class is required")
+		os.Exit(2)
+	}
 
-	vecDim := mustEnvInt("VEC_DIM")
-	measureVecs := mustEnvInt("MEASURE_VECS")
-	startRow := mustEnvInt("START_ROW")
-	dynamicThreshold := mustEnvInt("DYNAMIC_THRESHOLD")
-
-	base := "http://" + workerIP + ":" + restPort
+	base, hostPort, grpcHostPort := resolveBaseAndHosts()
+	dataFile := mustEnvStringAny("DATA_FILE", "DATA_FILEPATH")
+	vecDim := mustEnvIntAny("VEC_DIM", "VECTOR_DIM")
+	measureVecs := mustEnvIntAny("MEASURE_VECS", "CORPUS_SIZE")
+	startRow := mustEnvIntAny("START_ROW")
+	dynamicThreshold := mustEnvIntAny("DYNAMIC_THRESHOLD")
 
 	out := Output{
 		TimestampUTC:     time.Now().UTC().Format(time.RFC3339),
@@ -385,7 +427,7 @@ func main() {
 		DataFile:         dataFile,
 		VecDim:           vecDim,
 		Class:            *className,
-		Distance:         "cosine",
+		Distance:         *distance,
 		MeasureVecs:      measureVecs,
 		StartRow:         startRow,
 		BatchSize:        *batchSize,
@@ -400,10 +442,10 @@ func main() {
 	}
 
 	fmt.Println("[CLIENT] target:", base)
-	fmt.Println("[CLIENT] grpc:", workerIP+":"+grpcPort)
+	fmt.Println("[CLIENT] grpc:", grpcHostPort)
 	fmt.Println("[CLIENT] data:", dataFile)
-	fmt.Printf("[CLIENT] vec_dim=%d measure=%d start_row=%d batch_size=%d threshold=%d distance=cosine hnsw.efConstruction=100 hnsw.maxConnections=16\n",
-		vecDim, measureVecs, startRow, *batchSize, dynamicThreshold)
+	fmt.Printf("[CLIENT] vec_dim=%d measure=%d start_row=%d batch_size=%d threshold=%d distance=%s hnsw.ef=%d hnsw.efConstruction=100 hnsw.maxConnections=16\n",
+		vecDim, measureVecs, startRow, *batchSize, dynamicThreshold, *distance, *ef)
 
 	if _, err := waitForWeaviate(base, *waitSec); err != nil {
 		out.FinalStatus = "error"
@@ -413,10 +455,10 @@ func main() {
 	}
 
 	client, err := weaviate.NewClient(weaviate.Config{
-		Host:   workerIP + ":" + restPort,
+		Host:   hostPort,
 		Scheme: "http",
 		GrpcConfig: &wgrpc.Config{
-			Host:    workerIP + ":" + grpcPort,
+			Host:    grpcHostPort,
 			Secured: false,
 		},
 	})
@@ -445,11 +487,8 @@ func main() {
 	}
 	fmt.Printf("[CLIENT] npy: N=%d D=%d\n", info.N, info.D)
 
-	overallCtx, overallCancel := context.WithTimeout(context.Background(), time.Duration(*overallSec)*time.Second)
-	defer overallCancel()
-
 	resetCtx, cancelReset := context.WithTimeout(context.Background(), 5*time.Minute)
-	err = resetClass(resetCtx, client, base, *className, dynamicThreshold)
+	err = resetClass(resetCtx, client, base, *className, *distance, *ef, dynamicThreshold)
 	cancelReset()
 	if err != nil {
 		out.FinalStatus = "error"
@@ -457,6 +496,9 @@ func main() {
 		writeJSON(*outPath, out)
 		os.Exit(8)
 	}
+
+	overallCtx, overallCancel := context.WithTimeout(context.Background(), time.Duration(*overallSec)*time.Second)
+	defer overallCancel()
 
 	cursor := startRow
 	if cursor >= info.N {
@@ -471,7 +513,6 @@ func main() {
 		if err := overallCtx.Err(); err != nil {
 			out.FinalStatus = "partial"
 			out.FinalError = "overall timeout before inserts finished"
-			out.InsertedVecs = inserted
 			writeJSON(*outPath, out)
 			os.Exit(9)
 		}
@@ -484,7 +525,7 @@ func main() {
 		if n <= 0 {
 			break
 		}
-		if cursor+n >= info.N {
+		if cursor+n > info.N {
 			cursor = 0
 		}
 
@@ -501,11 +542,12 @@ func main() {
 			off := i * vecDim
 			v := make([]float32, vecDim)
 			copy(v, vecs[off:off+vecDim])
-			docID := fmt.Sprintf("row%d_i%d", cursor, i)
+
+			globalRow := int64(cursor + i)
 			objs = append(objs, &models.Object{
 				Class: *className,
 				Properties: map[string]any{
-					idPropName: docID,
+					idPropName: globalRow,
 				},
 				Vector: v,
 			})
@@ -553,15 +595,6 @@ func main() {
 		out.SendSec = tLastRPC - t0
 	}
 
-	sendSnap, err := getQueue(base, *className)
-	if err == nil {
-		out.SendCompleteSnapshot = sendSnap
-		fmt.Printf("[CLIENT] send complete at %.3fs objects=%d queue=%d indexing=%d\n",
-			out.SendSec, sendSnap.TotalObjects, sendSnap.TotalQueue, sendSnap.Indexing)
-	} else {
-		fmt.Println("[CLIENT][WARN] failed to get send-complete snapshot:", err)
-	}
-
 	if !out.ThresholdCrossed {
 		snap, err := getQueue(base, *className)
 		if err == nil && snap.TotalObjects >= dynamicThreshold {
@@ -579,7 +612,7 @@ func main() {
 		os.Exit(12)
 	}
 
-	fmt.Println("[CLIENT] monitoring post-ingest queue drain / indexing completion...")
+	fmt.Println("[CLIENT] monitoring indexing completion...")
 	stable := 0
 	deadline := time.Now().Add(time.Duration(*indexTimeoutSec) * time.Second)
 	poll := time.Duration(*indexPollMS) * time.Millisecond
@@ -592,12 +625,11 @@ func main() {
 			out.Timeline = append(out.Timeline, TimelinePoint{
 				AbsSinceFirstRPCSec: nowAbs,
 				SinceThresholdSec:   nowAbs - out.ThresholdCrossAbsSec,
-				SinceSendDoneSec:    nowAbs - out.SendSec,
 				Snapshot:            snap,
 			})
 
-			fmt.Printf("[CLIENT] poll abs=%.1fs since_threshold=%.1fs since_send_done=%.1fs objects=%d queue=%d indexing=%d\n",
-				nowAbs, nowAbs-out.ThresholdCrossAbsSec, nowAbs-out.SendSec, snap.TotalObjects, snap.TotalQueue, snap.Indexing)
+			fmt.Printf("[CLIENT] poll abs=%.1fs since_threshold=%.1fs objects=%d queue=%d indexing=%d\n",
+				nowAbs, nowAbs-out.ThresholdCrossAbsSec, snap.TotalObjects, snap.TotalQueue, snap.Indexing)
 
 			if snap.TotalQueue == 0 && snap.Indexing == 0 {
 				stable++
@@ -605,30 +637,24 @@ func main() {
 					out.IndexComplete = true
 					out.IndexCompleteAbsSec = nowAbs
 					out.IndexCompleteSnapshot = snap
-					out.ThresholdToCompleteSec = out.IndexCompleteAbsSec - out.ThresholdCrossAbsSec
-					out.PostIngestDrainSec = out.IndexCompleteAbsSec - out.SendSec
+					out.CPUIndexingSec = out.IndexCompleteAbsSec - out.ThresholdCrossAbsSec
 					out.FinalStatus = "ok"
 					writeJSON(*outPath, out)
-
-					fmt.Printf("[CLIENT] indexing complete: send_sec=%.3f threshold_to_complete_sec=%.3f post_ingest_drain_sec=%.3f\n",
-						out.SendSec, out.ThresholdToCompleteSec, out.PostIngestDrainSec)
+					fmt.Printf("[CLIENT] indexing complete: cpu_indexing_sec=%.3f\n", out.CPUIndexingSec)
 					return
 				}
 			} else {
 				stable = 0
 			}
-		} else {
-			fmt.Println("[CLIENT][WARN] poll error:", err)
 		}
 
 		time.Sleep(poll)
 	}
 
 	out.IndexComplete = false
-	out.ThresholdToCompleteSec = 0
-	out.PostIngestDrainSec = 0
+	out.CPUIndexingSec = 0
 	out.FinalStatus = "partial"
-	out.FinalError = fmt.Sprintf("indexing did not finish within %d seconds after send completion", *indexTimeoutSec)
+	out.FinalError = fmt.Sprintf("indexing did not finish within %d seconds after threshold crossing", *indexTimeoutSec)
 	writeJSON(*outPath, out)
 	os.Exit(13)
 }
