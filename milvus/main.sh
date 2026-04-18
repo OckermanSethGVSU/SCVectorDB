@@ -62,6 +62,16 @@ wait_for_signal_files() {
     done
 }
 
+run_summary() {
+    local task="$1"     # INSERT or QUERY
+    local prefix="$2"   # insert or query
+
+    env "${PYTHON_ENV_VARS[@]}" ACTIVE_TASK="$task" python3 multi_client_summary.py
+
+    mv times.csv "${prefix}_times.txt"
+    mv summary.csv "${prefix}_summary.txt"
+}
+
 compute_local_shared_storage_path() {
     if [[ -n "${LOCAL_SHARED_STORAGE_PATH:-}" ]]; then
         printf '%s\n' "$LOCAL_SHARED_STORAGE_PATH"
@@ -111,65 +121,24 @@ PYTHON_ENV_VARS=(
     HTTPS_PROXY=""
 )
 
-RUN_DIR="${RUN_DIR:-${BASE_DIR:+$BASE_DIR/$myDIR}}"
-if [[ -z "${RUN_DIR:-}" ]]; then
-    RUN_DIR="$(pwd)"
-fi
 
-if [[ -f "$RUN_DIR/run_config.env" ]]; then
-    set -a
-    source "$RUN_DIR/run_config.env"
-    set +a
-fi
+RUN_DIR="$(pwd)"
+BASE_DIR="$(dirname "$RUN_DIR")"
+set -a
+source "$RUN_DIR/run_config.env"
+set +a
 
-BASE_DIR="${BASE_DIR:-$(dirname "$RUN_DIR")}"
-export myDIR="${myDIR:-$(basename "$RUN_DIR")}"
-export RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-$BASE_DIR/$myDIR/runtime_state}"
-
+export myDIR="$(basename "$RUN_DIR")"
+export RESULT_PATH="$RUN_DIR"
+export RUNTIME_STATE_DIR="$BASE_DIR/$myDIR/runtime_state"
 cd "$BASE_DIR/$myDIR"
 
 mkdir -p "$RUNTIME_STATE_DIR"
 
-distributed_registry_path() {
-    local component="$1"
-
-    case "$component" in
-        etcd)
-            printf '%s\n' "$BASE_DIR/$myDIR/etcdFiles/etcd_registry.txt"
-            ;;
-        minio)
-            printf '%s\n' "$BASE_DIR/$myDIR/minioFiles/minio_registry.txt"
-            ;;
-        COORDINATOR|STREAMING|QUERY|DATA|PROXY)
-            printf '%s\n' "$BASE_DIR/$myDIR/$component/${component}_registry.txt"
-            ;;
-        *)
-            echo "Unknown distributed registry component: $component" >&2
-            return 1
-            ;;
-    esac
-}
-
-if [[ -z "${RESULT_PATH:-}" ]]; then
-    export RESULT_PATH="$BASE_DIR/$myDIR"
-elif [[ "$RESULT_PATH" != /* ]]; then
-    export RESULT_PATH="$BASE_DIR/$myDIR/$RESULT_PATH"
-else
-    export RESULT_PATH="$RESULT_PATH"
-fi
-
-if [[ -z "${MINIO_MODE:-}" ]]; then
-    if [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
-        export MINIO_MODE="stripped"
-    else
-        export MINIO_MODE="off"
-    fi
-fi
-
 if [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
-    export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$(distributed_registry_path PROXY)}"
+    export PROXY_REGISTRY_PATH="$BASE_DIR/$myDIR/PROXY/PROXY_registry.txt"
 else
-    export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$RUNTIME_STATE_DIR/PROXY_registry.txt}"
+    export PROXY_REGISTRY_PATH="$RUNTIME_STATE_DIR/PROXY_registry.txt"
 fi
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
@@ -180,7 +149,6 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml load e2fsprogs
 
     module use /soft/modulefiles; module load conda; conda activate base
-    exec > >(tee workflow.log) 2>&1
 
 elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
@@ -361,31 +329,24 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     # Launch proxy
     launch_role PROXY "$NUM_PROXIES" "$NUM_PROXIES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
 
+    SIGNAL_FILES=()
+    for spec in \
+        "cord:$COORDINATOR_NODES" \
+        "query:$QUERY_NODES" \
+        "data:$DATA_NODES" \
+        "streaming:$STREAMING_NODES" \
+        "proxy:$NUM_PROXIES"
+    do
+        IFS=":" read -r name count <<< "$spec"
+
+        for ((rank=0; rank<count; rank++)); do
+            SIGNAL_FILES+=("$RUNTIME_STATE_DIR/${name}${rank}_running.txt")
+        done
+    done
+
     # execute.sh only writes these markers after each component passes its health check.
-    SIGNAL_FILES=(
-    )
-
-    for ((rank=0; rank<COORDINATOR_NODES; rank++)); do
-        SIGNAL_FILES+=("$RUNTIME_STATE_DIR/cord${rank}_running.txt")
-    done
-
-    for ((rank=0; rank<QUERY_NODES; rank++)); do
-        SIGNAL_FILES+=("$RUNTIME_STATE_DIR/query${rank}_running.txt")
-    done
-
-    for ((rank=0; rank<DATA_NODES; rank++)); do
-        SIGNAL_FILES+=("$RUNTIME_STATE_DIR/data${rank}_running.txt")
-    done
-
-    for ((rank=0; rank<STREAMING_NODES; rank++)); do
-        SIGNAL_FILES+=("$RUNTIME_STATE_DIR/streaming${rank}_running.txt")
-    done
-
-    for ((rank=0; rank<NUM_PROXIES; rank++)); do
-        SIGNAL_FILES+=("$RUNTIME_STATE_DIR/proxy${rank}_running.txt")
-    done
-
     wait_for_signal_files "${SIGNAL_FILES[@]}"
+    
     IP_ADDR=$(jq -r '.hsn0.ipv4[0]' PROXY/PROXY0.json)
     echo "$IP_ADDR" > "$RUNTIME_STATE_DIR/worker.ip"
     sleep 30
@@ -393,211 +354,24 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     env "${PYTHON_ENV_VARS[@]}" python3 poll.py
 fi
 
-normalize_insert_method() {
-    local method="${INSERT_METHOD:-traditional}"
-    method="${method,,}"
-    case "$method" in
-        traditional|standard|direct)
-            printf 'traditional\n'
-            ;;
-        bulk|bulk_upload|bulk-upload|import)
-            printf 'bulk\n'
-            ;;
-        *)
-            echo "Unsupported INSERT_METHOD='$INSERT_METHOD'. Valid options: traditional, bulk" >&2
-            exit 1
-            ;;
-    esac
-}
 
-normalize_bulk_upload_transport() {
-    local transport="${BULK_UPLOAD_TRANSPORT:-writer}"
-    transport="${transport,,}"
-    case "$transport" in
-        writer|remote_writer|remote-writer)
-            printf 'writer\n'
-            ;;
-        mc|mc_cp|mc-cp|minio_mc|minio-mc)
-            printf 'mc\n'
-            ;;
-        *)
-            echo "Unsupported BULK_UPLOAD_TRANSPORT='$BULK_UPLOAD_TRANSPORT'. Valid options: writer, mc" >&2
-            exit 1
-            ;;
-    esac
-}
 
-run_direct_insert() {
-    export ACTIVE_TASK="INSERT"
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
-}
 
-run_bulk_insert() {
-    export ACTIVE_TASK="IMPORT"
-    : "${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
-    : "${IMPORT_PROCESSES:?IMPORT_PROCESSES is required}"
-    COLLECTION_NAME="${COLLECTION_NAME:-standalone}"
-    VECTOR_FIELD="${VECTOR_FIELD:-vector}"
-    ID_FIELD="${ID_FIELD:-id}"
-    export COLLECTION_NAME VECTOR_FIELD ID_FIELD
-    local bulk_transport
-    local bulk_script
-    local bulk_transport_args=()
-    bulk_request_args=()
-
-    if [[ -n "${BULK_IMPORT_LOAD_REQUEST:-}" ]]; then
-        bulk_request_args+=(--load-import-request "$BULK_IMPORT_LOAD_REQUEST")
-    else
-        : "${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
-        bulk_request_args+=(--input "$INSERT_DATA_FILEPATH")
-    fi
-
-    if [[ -n "${BULK_IMPORT_REQUEST_PATH:-}" ]]; then
-        bulk_request_args+=(--import-request-path "$BULK_IMPORT_REQUEST_PATH")
-    fi
-
-    if [[ "${BULK_IMPORT_PREPARE_ONLY:-}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
-        bulk_request_args+=(--prepare-only)
-    fi
-
-    if [[ "${MINIO_MODE}" == "off" ]]; then
-        echo "INSERT_METHOD=bulk requires remote MinIO storage; set MINIO_MODE to single or stripped." >&2
-        exit 1
-    fi
-
-    bulk_transport="$(normalize_bulk_upload_transport)"
-    if [[ "$bulk_transport" == "mc" ]]; then
-        bulk_script="bulk_upload_import_mc.py"
-    else
-        bulk_script="bulk_upload_import.py"
-        bulk_transport_args+=(--writer-mode remote)
-    fi
-
-    local bulk_args=(
-        --processes "$IMPORT_PROCESSES"
-        --collection "$COLLECTION_NAME"
-        --vector-field "$VECTOR_FIELD"
-        --id-field "$ID_FIELD"
-        --vector-dim "$VECTOR_DIM"
-        --batch-rows "$INSERT_BATCH_SIZE"
-        "${bulk_transport_args[@]}"
-        "${bulk_request_args[@]}"
-    )
-    if [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
-        bulk_args+=(--corpus-size "$INSERT_CORPUS_SIZE")
-    fi
-
-    env "${PYTHON_ENV_VARS[@]}" python3 "$bulk_script" "${bulk_args[@]}"
-}
-
-run_insert_for_task() {
-    local insert_method
-    insert_method="$(normalize_insert_method)"
-
-    if [[ "$insert_method" == "bulk" ]]; then
-        run_bulk_insert
-    else
-        run_direct_insert
-    fi
-}
-
-cleanup_client_timings() {
-    mkdir -p clientTimings
-    shopt -s nullglob
-    local candidate
-    local timing_files=()
-    for candidate in \
-        ./*_times.txt \
-        ./*_summary.txt \
-        ./times.csv \
-        ./summary.csv \
-        ./index_time.txt \
-        ./collection_time.txt
-    do
-        [[ -e "$candidate" ]] || continue
-        timing_files+=("$candidate")
-    done
-    if (( ${#timing_files[@]} > 0 )); then
-        mv "${timing_files[@]}" clientTimings/
-    fi
-    shopt -u nullglob
-}
-
-move_yaml_files_to_runtime_state() {
-    local run_root yaml_file rel_path target_path
-    run_root="$BASE_DIR/$myDIR"
-
-    while IFS= read -r -d '' yaml_file; do
-        rel_path="${yaml_file#$run_root/}"
-        target_path="$RUNTIME_STATE_DIR/$rel_path"
-        mkdir -p "$(dirname "$target_path")"
-        mv "$yaml_file" "$target_path"
-    done < <(
-        find "$run_root" \
-            -path "$RUNTIME_STATE_DIR" -prune -o \
-            -path "$run_root/volumes" -prune -o \
-            -type f \( -name '*.yaml' -o -name '*.yml' \) -print0
-    )
-}
-
-stage_insert_client_outputs() {
-    mkdir -p uploadNPY
-    shopt -s nullglob
-    local files=(./*.npy)
-    if (( ${#files[@]} > 0 )); then
-        mv "${files[@]}" uploadNPY/
-    fi
-    shopt -u nullglob
-}
-
-stage_query_client_outputs() {
-    mkdir -p queryNPY
-    shopt -s nullglob
-    local files=(./*.npy)
-    if (( ${#files[@]} > 0 )); then
-        mv "${files[@]}" queryNPY/
-    fi
-    shopt -u nullglob
-}
-
-summarize_insert() {
-    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
-    [[ -f times.csv ]] && mv times.csv insert_times.txt
-    [[ -f summary.csv ]] && mv summary.csv insert_summary.txt
-}
-
-summarize_query() {
-    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
-    [[ -f times.csv ]] && mv times.csv query_times.txt
-    [[ -f summary.csv ]] && mv summary.csv query_summary.txt
-}
 should_summarize_insert=0
 should_summarize_query=0
+
 # if we are not restoring, run insert and/or indexing
 if [ -z "$RESTORE_DIR" ]; then
     env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
 
-    if [[ "$TASK" == "IMPORT" ]]; then
-        run_bulk_insert
-        
-        touch "$RUNTIME_STATE_DIR/flag.txt"
-    
-    else
-        if [[ "$TASK" == "INSERT" ]]; then
-            run_direct_insert
-        elif [[ "$TASK" == "IMPORT" ]]; then
-            run_bulk_insert
-        else
-            run_insert_for_task
-        fi
+    export ACTIVE_TASK="INSERT"
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
+    should_summarize_insert=1
+    mkdir -p uploadNPY
+    mv *.npy uploadNPY/
 
-        if [[ "$TASK" == "INSERT" ]] || [[ "$TASK" == "MIXED" && "$(normalize_insert_method)" == "traditional" ]]; then
-            should_summarize_insert=1
-            stage_insert_client_outputs
-        fi
-        if [[ "$TASK" == "INSERT" || "$TASK" == "IMPORT" ]]; then
-            touch "$RUNTIME_STATE_DIR/flag.txt"
-        fi
+    if [[ "$TASK" == "INSERT" || "$TASK" == "IMPORT" ]]; then
+        touch "$RUNTIME_STATE_DIR/flag.txt"
     fi
 
     if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
@@ -614,18 +388,17 @@ if [ -z "$RESTORE_DIR" ]; then
     fi
     sleep 30
 else
-    : "${QUERY_DATA_FILEPATH:?QUERY_DATA_FILEPATH is required}"
     env "${PYTHON_ENV_VARS[@]}" python3 status.py
-
 fi
 
 if [[ "$TASK" == "QUERY" ]]; then
     
-
     export ACTIVE_TASK="QUERY"
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
     should_summarize_query=1
-    stage_query_client_outputs
+    mkdir -p uploadNPY
+    mv *.npy uploadNPY/
+    
 
     if [[ "$TRACING" == "True" ]]; then
         touch "$RUNTIME_STATE_DIR/flag.txt"
@@ -695,31 +468,25 @@ if [[ "$TASK" == "MIXED" ]]; then
     env "${PYTHON_ENV_VARS[@]}" python3 "${MIXED_TIMELINE_ARGS[@]}"
 fi
 
+
+(( should_summarize_insert )) && run_summary INSERT insert
+(( should_summarize_query ))  && run_summary QUERY query
+
+mkdir -p client_timings
+mv *.csv *.txt client_timings/
+mv *.yaml runtime_state/
+
 if [[ "$TRACING" == "True" ]]; then
         python3 analyze_traces.py > analysis.txt
 fi
 
-if (( should_summarize_insert )); then
-    summarize_insert
-fi
 
-if (( should_summarize_query )); then
-    summarize_query
-fi
-
-cleanup_client_timings
-move_yaml_files_to_runtime_state
-
-
-if [[ "${AUTO_CLEANUP:-False}" =~ ^(1|[Tt]rue|[Yy]es|[Oo]n)$ ]]; then
+if [[ "${AUTO_CLEANUP}" ]]; then
     if [[ "$STORAGE_MEDIUM" == "DAOS" || "$ETCD_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then
         DAOS_POOL="radix-io"
         DAOS_CONT="vectorDBTesting"
         rm -fr /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
     elif [[ "$STORAGE_MEDIUM" == "lustre" || "$MODE" == "DISTRIBUTED" ]]; then
-        echo "Removed the rm for now"
-        # rm -fr ./milvusDir/
+        rm -fr ./milvusDir/
     fi
 fi
-
-chmod -R g+rwX "$BASE_DIR/$myDIR"
