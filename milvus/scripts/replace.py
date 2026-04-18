@@ -90,11 +90,12 @@ rank = int(args.rank)
 wal = args.wal
 
 DEBUG = os.environ.get("DEBUG", "false").strip().lower() in ["true", "t", "1", "yes"]
+RUNTIME_STATE_DIR = Path(os.getenv("RUNTIME_STATE_DIR", "./runtime_state"))
 
 
 if mode == "standalone":
     milvus_path = Path("configs/milvus.yaml")
-    worker_ip_path = Path("worker.ip")
+    worker_ip_path = RUNTIME_STATE_DIR / "worker.ip"
 
     # Read replacement value (strip to avoid accidental newlines)
     replacement = worker_ip_path.read_text().strip()
@@ -131,7 +132,7 @@ elif mode == "distributed":
     dist_milvus_path = Path("configs/distributed_milvus.yaml")
     text = dist_milvus_path.read_text()
 
-    minio_ip = get_ip_by_rank("minio_registry.txt",0)
+    minio_ip = get_ip_by_rank(str(RUNTIME_STATE_DIR / "minio_registry.txt"),0)
     text = text.replace("<MINIO>",minio_ip)
 
     ETCD_MODE = get_etcd_mode()
@@ -139,15 +140,15 @@ elif mode == "distributed":
     text = text.replace("<WAL>",wal)
 
     if ETCD_MODE == "single":
-        etcd0 = get_ip_by_rank("etcd_registry.txt",0)
+        etcd0 = get_ip_by_rank(str(RUNTIME_STATE_DIR / "etcd_registry.txt"),0)
         text = text.replace("<ETCD0>",etcd0)
         text = text.replace(",<ETCD1>:2379","")
         text = text.replace(",<ETCD2>:2379","")
 
     else:
-        etcd0 = get_ip_by_rank("etcd_registry.txt",0)
-        etcd1 = get_ip_by_rank("etcd_registry.txt",1)
-        etcd2 = get_ip_by_rank("etcd_registry.txt",2)
+        etcd0 = get_ip_by_rank(str(RUNTIME_STATE_DIR / "etcd_registry.txt"),0)
+        etcd1 = get_ip_by_rank(str(RUNTIME_STATE_DIR / "etcd_registry.txt"),1)
+        etcd2 = get_ip_by_rank(str(RUNTIME_STATE_DIR / "etcd_registry.txt"),2)
         text = text.replace("<ETCD0>:2379",f"{etcd0}:2379")
         text = text.replace("<ETCD1>:2379",f"{etcd1}:2479")
         text = text.replace("<ETCD2>:2379",f"{etcd2}:2579")
@@ -177,7 +178,7 @@ elif mode in ["COORDINATOR", "STREAMING","QUERY","PROXY", "DATA"]:
     
     dist_milvus_path = Path("configs/distributed_milvus.yaml")
     text = dist_milvus_path.read_text()
-    ip = get_ip_by_rank(f"{mode}_registry.txt",rank)
+    ip = get_ip_by_rank(str(RUNTIME_STATE_DIR / f"{mode}_registry.txt"),rank)
     text = text.replace(f"<{mode}>",ip)
 
     # --- Main port for this mode ---

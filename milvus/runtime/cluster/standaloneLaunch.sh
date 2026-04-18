@@ -79,16 +79,17 @@ case "$ETCD_MEDIUM" in
 esac
 
 ETCD_FLAG="--env ETCD_DATA_DIR=${ETCD_DATA_DIR}"
+RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-./runtime_state}"
+mkdir -p "$RUNTIME_STATE_DIR"
 
 # get ipv4
 python3 net_mapping.py --rank $RANK
 group=$(( RANK / 4 ))
 IP_ADDR=$(jq -r '.hsn0.ipv4[0]' interfaces${group}.json)
-echo $IP_ADDR > worker.ip
+echo $IP_ADDR > "$RUNTIME_STATE_DIR/worker.ip"
 
 
 mkdir -p ${TARGET_BASE}/milvus/
-mkdir -p ./workerOut/
 
 
 POLARIS_BINDS=()
@@ -130,8 +131,8 @@ MINIO_ENV_ARGS=()
 if [[ "$MINIO_MODE" == "single" ]]; then
     MINIO_IP=""
     for _ in $(seq 1 60); do
-        if [[ -f minio_registry.txt ]]; then
-            MINIO_IP=$(awk -F, '$1 == "0" { print $2; exit }' minio_registry.txt)
+        if [[ -f "$RUNTIME_STATE_DIR/minio_registry.txt" ]]; then
+            MINIO_IP=$(awk -F, '$1 == "0" { print $2; exit }' "$RUNTIME_STATE_DIR/minio_registry.txt")
             if [[ -n "$MINIO_IP" ]]; then
                 break
             fi
@@ -140,7 +141,7 @@ if [[ "$MINIO_MODE" == "single" ]]; then
     done
 
     if [[ -z "$MINIO_IP" ]]; then
-        echo "Timed out waiting for minio_registry.txt to contain rank 0" >&2
+        echo "Timed out waiting for runtime_state/minio_registry.txt to contain rank 0" >&2
         exit 1
     fi
 
@@ -156,7 +157,7 @@ elif [[ "$MINIO_MODE" != "off" ]]; then
 fi
 
 # create proxy registry for the go insert
-echo "0,${IP_ADDR},${PROXY_PORT},${METRICS_PORT}" > PROXY_registry.txt
+echo "0,${IP_ADDR},${PROXY_PORT},${METRICS_PORT}" > "$RUNTIME_STATE_DIR/PROXY_registry.txt"
 
 GPU_ARGS=()
 if [[ "$GPU_INDEX" == "True" ]]; then
@@ -217,11 +218,12 @@ apptainer exec --no-home --fakeroot --writable-tmpfs --nv \
     --env WORKER_IP=$IP_ADDR \
     --env MILVUS_HEALTH_HOST=$IP_ADDR \
     --env MILVUS_HEALTH_PORT=$METRICS_PORT \
+    --env RUNTIME_STATE_DIR=/runtime_state \
     --env RESTORE_DIR=$RESTORE_DIR \
     -B ./execute.sh:/milvus/app_execute.sh \
     -B ${TARGET_BASE}/configs/:/milvus/configs/ \
     -B ${base}/perfDir/:/perfDir/ \
-    -B ./workerOut/:/workerOut/ \
+    -B "${RUNTIME_STATE_DIR}:/runtime_state/" \
     -B ${TARGET_BASE}/milvus:/var/lib/milvus \
     "${ETCD_BIND_ARGS[@]}" \
     "${APPTAINER_ARGS[@]}" \

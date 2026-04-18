@@ -30,6 +30,7 @@ HEALTH_PORT="${MILVUS_HEALTH_PORT:-${METRICS_PORT:-9091}}"
 APT_RETRIES="${APT_RETRIES:-5}"
 APT_RETRY_DELAY_SECONDS="${APT_RETRY_DELAY_SECONDS:-10}"
 DEFAULT_PERF_STAT_EVENTS="cycles,instructions,branches,branch-misses,cache-misses"
+RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-/runtime_state}"
 
 # if Milvus is restoring itself, give it longer to launch
 if [ -n "$RESTORE_DIR" ]; then
@@ -186,28 +187,29 @@ cd /milvus
 
 launch_milvus_with_retry || exit 1
 
-touch /workerOut/$SIGNAL_FILE
+mkdir -p "$RUNTIME_STATE_DIR"
+touch "$RUNTIME_STATE_DIR/$SIGNAL_FILE"
 
 # wait until the start file exists
-TARGET="/workerOut/workflow_start.txt"
+TARGET="$RUNTIME_STATE_DIR/workflow_start.txt"
 while [ ! -e "$TARGET" ]; do
   sleep 0.1
 done
 
 if [[ "$PERF" == "RECORD" ]]; then
     echo "Rank ${RANK} Launching perf record"
-    /perfDir/perf record -F 99 --call-graph fp -g --proc-map-timeout 5000 -o /workerOut/perf${RANK}.data  -p "$MILVUS_PID" &
+    /perfDir/perf record -F 99 --call-graph fp -g --proc-map-timeout 5000 -o "$RUNTIME_STATE_DIR/perf${RANK}.data"  -p "$MILVUS_PID" &
     PERF_PID=$!
 
 elif [[ "$PERF" == "STAT" ]]; then
     echo "Rank ${RANK} Launching perf stat"
     PERF_STAT_EVENTS="${PERF_EVENTS:-$DEFAULT_PERF_STAT_EVENTS}"
-    /perfDir/perf stat  -e "$PERF_STAT_EVENTS" -o /workerOut/perf${RANK}.data  -p "$MILVUS_PID" &
+    /perfDir/perf stat  -e "$PERF_STAT_EVENTS" -o "$RUNTIME_STATE_DIR/perf${RANK}.data"  -p "$MILVUS_PID" &
     PERF_PID=$!
 fi
 
 # wait until the stop file exists
-TARGET="/workerOut/workflow_end.txt"
+TARGET="$RUNTIME_STATE_DIR/workflow_end.txt"
 while [ ! -e "$TARGET" ]; do
   sleep 0.1
 done

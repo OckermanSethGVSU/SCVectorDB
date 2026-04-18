@@ -113,6 +113,9 @@ PYTHON_ENV_VARS=(
 
 cd $BASE_DIR/$myDIR
 
+export RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-$BASE_DIR/$myDIR/runtime_state}"
+mkdir -p "$RUNTIME_STATE_DIR"
+
 export BASE_DIR=$BASE_DIR
 export myDIR=$myDIR
 if [[ -z "${RESULT_PATH:-}" ]]; then
@@ -156,6 +159,7 @@ export PERF_EVENTS=$PERF_EVENTS
 
 export MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR
 export MILVUS_CONFIG_DIR=$MILVUS_CONFIG_DIR
+export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$RUNTIME_STATE_DIR/PROXY_registry.txt}"
 
 export DEBUG=$DEBUG
 export RESTORE_DIR=$RESTORE_DIR
@@ -249,13 +253,14 @@ if [[ "$MODE" == "STANDALONE" ]]; then
     mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node python3 profile.py worker_0 $PLATFORM &
     python3 profile.py client_node $PLATFORM & 
 
-    TARGET="./workerOut/milvus_running.txt"
+    TARGET="$RUNTIME_STATE_DIR/milvus_running.txt"
     while [ ! -e "$TARGET" ]; do
     sleep 0.1
     done
 
     env "${PYTHON_ENV_VARS[@]}" python3 poll.py
     IP_ADDR=$(jq -r '.hsn0.ipv4[0]' interfaces0.json)
+    echo "$IP_ADDR" > "$RUNTIME_STATE_DIR/worker.ip"
 
 
 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
@@ -354,28 +359,28 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     )
 
     for ((rank=0; rank<COORDINATOR_NODES; rank++)); do
-        SIGNAL_FILES+=("./workerOut/cord${rank}_running.txt")
+        SIGNAL_FILES+=("$RUNTIME_STATE_DIR/cord${rank}_running.txt")
     done
 
     for ((rank=0; rank<QUERY_NODES; rank++)); do
-        SIGNAL_FILES+=("./workerOut/query${rank}_running.txt")
+        SIGNAL_FILES+=("$RUNTIME_STATE_DIR/query${rank}_running.txt")
     done
 
     for ((rank=0; rank<DATA_NODES; rank++)); do
-        SIGNAL_FILES+=("./workerOut/data${rank}_running.txt")
+        SIGNAL_FILES+=("$RUNTIME_STATE_DIR/data${rank}_running.txt")
     done
 
     for ((rank=0; rank<STREAMING_NODES; rank++)); do
-        SIGNAL_FILES+=("./workerOut/streaming${rank}_running.txt")
+        SIGNAL_FILES+=("$RUNTIME_STATE_DIR/streaming${rank}_running.txt")
     done
 
     for ((rank=0; rank<NUM_PROXIES; rank++)); do
-        SIGNAL_FILES+=("./workerOut/proxy${rank}_running.txt")
+        SIGNAL_FILES+=("$RUNTIME_STATE_DIR/proxy${rank}_running.txt")
     done
 
     wait_for_signal_files "${SIGNAL_FILES[@]}"
     IP_ADDR=$(jq -r '.hsn0.ipv4[0]' PROXY/PROXY0.json)
-    echo $IP_ADDR > worker.ip
+    echo "$IP_ADDR" > "$RUNTIME_STATE_DIR/worker.ip"
     sleep 30
     
     env "${PYTHON_ENV_VARS[@]}" python3 poll.py
@@ -504,6 +509,28 @@ run_insert_for_task() {
     fi
 }
 
+cleanup_client_timings() {
+    mkdir -p clientTimings
+    shopt -s nullglob
+    local candidate
+    local timing_files=()
+    for candidate in \
+        ./*_times.txt \
+        ./*_summary.txt \
+        ./times.csv \
+        ./summary.csv \
+        ./index_time.txt \
+        ./collection_time.txt
+    do
+        [[ -e "$candidate" ]] || continue
+        timing_files+=("$candidate")
+    done
+    if (( ${#timing_files[@]} > 0 )); then
+        mv "${timing_files[@]}" clientTimings/
+    fi
+    shopt -u nullglob
+}
+
 # if we are not restoring, run insert and/or indexing
 if [ -z "$RESTORE_DIR" ]; then
     env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
@@ -511,7 +538,7 @@ if [ -z "$RESTORE_DIR" ]; then
     if [[ "$TASK" == "IMPORT" ]]; then
         run_bulk_insert
         
-        touch flag.txt
+        touch "$RUNTIME_STATE_DIR/flag.txt"
     
     else
         if [[ "$TASK" == "INSERT" ]]; then
@@ -523,20 +550,20 @@ if [ -z "$RESTORE_DIR" ]; then
         fi
         
         if [[ "$TASK" == "INSERT" || "$TASK" == "IMPORT" ]]; then
-            touch flag.txt
+            touch "$RUNTIME_STATE_DIR/flag.txt"
         fi
     fi
 
     if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
         export ACTIVE_TASK="INDEX"
         if [[ "$TASK" == "INDEX" ]]; then
-            touch ./workerOut/workflow_start.txt
+            touch "$RUNTIME_STATE_DIR/workflow_start.txt"
         fi
         env "${PYTHON_ENV_VARS[@]}" python3 index.py
         
         if [[ "$TASK" == "INDEX" ]]; then
-            touch ./workerOut/workflow_end.txt
-            touch flag.txt
+            touch "$RUNTIME_STATE_DIR/workflow_end.txt"
+            touch "$RUNTIME_STATE_DIR/flag.txt"
         fi
     fi
     sleep 30
@@ -574,7 +601,7 @@ if [[ "$TASK" == "QUERY" ]]; then
     mv *.npy queryNPY
 
     if [[ "$TRACING" == "True" ]]; then
-        touch flag.txt
+        touch "$RUNTIME_STATE_DIR/flag.txt"
         while [[ ! -f traces.jsonl ]]; do
             sleep 1
         done
@@ -669,6 +696,8 @@ fi
 if [[ "$TRACING" == "True" ]]; then
         python3 analyze_traces.py > analysis.txt
 fi
+
+cleanup_client_timings
 
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" || "$ETCD_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then

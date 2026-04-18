@@ -13,6 +13,12 @@ bug is not resolved. This workaround is still required for our indexing experime
 """
 
 
+RUNTIME_STATE_DIR = os.getenv("RUNTIME_STATE_DIR", "./runtime_state")
+
+
+def runtime_state_path(name: str) -> str:
+    return os.path.join(RUNTIME_STATE_DIR, name)
+
 
 def create_index_with_fallback_poll(
     client,
@@ -100,7 +106,7 @@ def read_ip_from_file(path):
 
 
 # MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
-MILVUS_HOST = read_ip_from_file("worker.ip")
+MILVUS_HOST = read_ip_from_file(runtime_state_path("worker.ip"))
 MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "20001"))
 CORPUS_SIZE = int(os.getenv("CORPUS_SIZE", "10000000"))
 

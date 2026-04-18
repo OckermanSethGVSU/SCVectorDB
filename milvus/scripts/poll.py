@@ -5,17 +5,23 @@ from typing import Iterable, List, Tuple
 
 import requests
 
+RUNTIME_STATE_DIR = Path(os.getenv("RUNTIME_STATE_DIR", "./runtime_state"))
+
+
+def runtime_state_path(name: str) -> Path:
+    return RUNTIME_STATE_DIR / name
+
 
 REGISTRY_FILES = [
-    "DATA_registry.txt",
-    "COORDINATOR_registry.txt",
-    "STREAMING_registry.txt",
-    "QUERY_registry.txt",
-    "PROXY_registry.txt",
+    runtime_state_path("DATA_registry.txt"),
+    runtime_state_path("COORDINATOR_registry.txt"),
+    runtime_state_path("STREAMING_registry.txt"),
+    runtime_state_path("QUERY_registry.txt"),
+    runtime_state_path("PROXY_registry.txt"),
 ]
 
 
-def parse_registry_file(path: str) -> List[Tuple[int, str, int, int]]:
+def parse_registry_file(path: str | Path) -> List[Tuple[int, str, int, int]]:
     """
     Returns list of (rank, ip, service_port, metrics_port).
     Ignores blank lines and malformed rows.
@@ -99,7 +105,7 @@ def read_ip_from_file(path: str) -> str:
 MODE = os.getenv("MODE", "standalone").lower()
 
 if MODE == "standalone":
-    MILVUS_HOST = read_ip_from_file("worker.ip")
+    MILVUS_HOST = read_ip_from_file(runtime_state_path("worker.ip"))
     MILVUS_HEALTH_PORT = int(os.getenv("MILVUS_HEALTH_PORT", "9091"))
     wait_for_healthz(MILVUS_HOST, MILVUS_HEALTH_PORT, label="standalone")
 

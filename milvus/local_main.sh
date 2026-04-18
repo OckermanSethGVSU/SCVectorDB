@@ -96,8 +96,10 @@ EMBED_ETCD_FILE="$RUN_DIR/embedEtcd.yaml"
 USER_CONFIG_FILE="$RUN_DIR/user.yaml"
 STANDARD_BINARY_PATH="${STANDARD_BINARY_PATH:-}"
 MIXED_BINARY_PATH="${MIXED_BINARY_PATH:-}"
+export RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-$RUN_DIR/runtime_state}"
+export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$RUNTIME_STATE_DIR/PROXY_registry.txt}"
 
-mkdir -p "$RUN_DIR" "$RUN_DIR/workerOut" "$VOLUMES_DIR" "$MINIO_VOLUMES_DIR" "$CONFIG_DIR" "$LOCAL_SHARED_STORAGE_PATH"
+mkdir -p "$RUN_DIR" "$RUNTIME_STATE_DIR" "$VOLUMES_DIR" "$MINIO_VOLUMES_DIR" "$CONFIG_DIR" "$LOCAL_SHARED_STORAGE_PATH"
 
 pick_binary() {
     local override="$1"
@@ -197,13 +199,13 @@ EOF
 }
 
 write_registry_files() {
-    printf '%s\n' "$MILVUS_HOST" > "$RUN_DIR/worker.ip"
-    printf '0,%s,%s,%s\n' "$MILVUS_HOST" "$MILVUS_GRPC_PORT" "$MILVUS_HEALTH_PORT" > "$RUN_DIR/PROXY_registry.txt"
+    printf '%s\n' "$MILVUS_HOST" > "$RUNTIME_STATE_DIR/worker.ip"
+    printf '0,%s,%s,%s\n' "$MILVUS_HOST" "$MILVUS_GRPC_PORT" "$MILVUS_HEALTH_PORT" > "$RUNTIME_STATE_DIR/PROXY_registry.txt"
 
     if [[ "$MINIO_MODE" == "single" ]]; then
-        printf '0,%s,%s\n' "$MINIO_HOST" "$MINIO_API_PORT" > "$RUN_DIR/minio_registry.txt"
+        printf '0,%s,%s\n' "$MINIO_HOST" "$MINIO_API_PORT" > "$RUNTIME_STATE_DIR/minio_registry.txt"
     else
-        rm -f "$RUN_DIR/minio_registry.txt"
+        rm -f "$RUNTIME_STATE_DIR/minio_registry.txt"
     fi
 }
 
@@ -407,28 +409,28 @@ write_distributed_registry_files() {
     etcd_instances="$(distributed_etcd_instances)"
     minio_instances="$(distributed_minio_instances)"
 
-    printf '%s\n' "$MILVUS_HOST" > "$RUN_DIR/worker.ip"
-    : > "$RUN_DIR/etcd_registry.txt"
-    : > "$RUN_DIR/minio_registry.txt"
-    : > "$RUN_DIR/COORDINATOR_registry.txt"
-    : > "$RUN_DIR/STREAMING_registry.txt"
-    : > "$RUN_DIR/QUERY_registry.txt"
-    : > "$RUN_DIR/DATA_registry.txt"
-    : > "$RUN_DIR/PROXY_registry.txt"
+    printf '%s\n' "$MILVUS_HOST" > "$RUNTIME_STATE_DIR/worker.ip"
+    : > "$RUNTIME_STATE_DIR/etcd_registry.txt"
+    : > "$RUNTIME_STATE_DIR/minio_registry.txt"
+    : > "$RUNTIME_STATE_DIR/COORDINATOR_registry.txt"
+    : > "$RUNTIME_STATE_DIR/STREAMING_registry.txt"
+    : > "$RUNTIME_STATE_DIR/QUERY_registry.txt"
+    : > "$RUNTIME_STATE_DIR/DATA_registry.txt"
+    : > "$RUNTIME_STATE_DIR/PROXY_registry.txt"
 
     for ((rank=0; rank<etcd_instances; rank++)); do
         printf '%s,%s,%s,%s\n' \
             "$rank" \
             "$MILVUS_HOST" \
             "$((2379 + (100 * rank)))" \
-            "$((2380 + (100 * rank)))" >> "$RUN_DIR/etcd_registry.txt"
+            "$((2380 + (100 * rank)))" >> "$RUNTIME_STATE_DIR/etcd_registry.txt"
     done
 
     for ((rank=0; rank<minio_instances; rank++)); do
         printf '%s,%s,%s\n' \
             "$rank" \
             "$MILVUS_HOST" \
-            "$((9000 + (100 * rank)))" >> "$RUN_DIR/minio_registry.txt"
+            "$((9000 + (100 * rank)))" >> "$RUNTIME_STATE_DIR/minio_registry.txt"
     done
 
     for role in COORDINATOR STREAMING QUERY DATA PROXY; do
@@ -444,7 +446,7 @@ write_distributed_registry_files() {
             service_port="$(role_service_port "$role" "$rank")"
             metrics_port="$(role_metrics_port "$role" "$rank")"
             printf '%s,%s,%s,%s\n' \
-                "$rank" "$MILVUS_HOST" "$service_port" "$metrics_port" >> "$RUN_DIR/${role}_registry.txt"
+                "$rank" "$MILVUS_HOST" "$service_port" "$metrics_port" >> "$RUNTIME_STATE_DIR/${role}_registry.txt"
         done
     done
 }
@@ -928,7 +930,7 @@ run_insert_for_task() {
 
 run_index() {
     export ACTIVE_TASK="INDEX"
-    touch ./workerOut/workflow_start.txt
+    touch "$RUNTIME_STATE_DIR/workflow_start.txt"
     env "${PYTHON_ENV_VARS[@]}" python3 ./index.py
 }
 
@@ -1044,6 +1046,28 @@ summarize_query() {
     shopt -u nullglob
 }
 
+cleanup_client_timings() {
+    mkdir -p "$RUN_DIR/clientTimings"
+    shopt -s nullglob
+    local candidate
+    local timing_files=()
+    for candidate in \
+        "$RUN_DIR"/*_times.txt \
+        "$RUN_DIR"/*_summary.txt \
+        "$RUN_DIR"/times.csv \
+        "$RUN_DIR"/summary.csv \
+        "$RUN_DIR"/index_time.txt \
+        "$RUN_DIR"/collection_time.txt
+    do
+        [[ -e "$candidate" ]] || continue
+        timing_files+=("$candidate")
+    done
+    if (( ${#timing_files[@]} > 0 )); then
+        mv "${timing_files[@]}" "$RUN_DIR/clientTimings"/
+    fi
+    shopt -u nullglob
+}
+
 run_restore_status() {
     export EXPECTED_CORPUS_SIZE
     env "${PYTHON_ENV_VARS[@]}" python3 ./status.py
@@ -1071,35 +1095,33 @@ main() {
 
         if [[ "$TASK" == "IMPORT" ]]; then
             run_bulk_upload
-            touch flag.txt
-            return 0
-        fi
-
-        if [[ "$TASK" == "INSERT" ]]; then
-            run_insert
+            touch "$RUNTIME_STATE_DIR/flag.txt"
         else
-            run_insert_for_task
-        fi
-
-        if [[ "$TASK" == "INSERT" ]]; then
-            touch flag.txt
-        fi
-
-        if [[ "$TASK" == "INSERT" ]] || [[ "$(normalize_insert_method)" == "traditional" ]]; then
-            summarize_insert
-        fi
-
-        if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
-            run_index
-
-            if [[ "$TASK" == "INDEX" ]]; then
-                touch ./workerOut/workflow_end.txt
-                touch flag.txt
-                return 0
+            if [[ "$TASK" == "INSERT" ]]; then
+                run_insert
+            else
+                run_insert_for_task
             fi
-        fi
 
-        sleep 5
+            if [[ "$TASK" == "INSERT" ]]; then
+                touch "$RUNTIME_STATE_DIR/flag.txt"
+            fi
+
+            if [[ "$TASK" == "INSERT" ]] || [[ "$(normalize_insert_method)" == "traditional" ]]; then
+                summarize_insert
+            fi
+
+            if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
+                run_index
+
+                if [[ "$TASK" == "INDEX" ]]; then
+                    touch "$RUNTIME_STATE_DIR/workflow_end.txt"
+                    touch "$RUNTIME_STATE_DIR/flag.txt"
+                fi
+            fi
+
+            sleep 5
+        fi
     else
         run_restore_status
     fi
@@ -1107,19 +1129,15 @@ main() {
     if [[ "$TASK" == "QUERY" ]]; then
         run_query
         summarize_query
-        return 0
-    fi
-
-    if [[ "$TASK" == "MIXED" ]]; then
+    elif [[ "$TASK" == "MIXED" ]]; then
         run_mixed
         run_mixed_timeline
-        return 0
-    fi
-
-    if [[ "$TASK" != "INSERT" && "$TASK" != "IMPORT" && "$TASK" != "INDEX" && "$TASK" != "QUERY" && "$TASK" != "MIXED" ]]; then
+    elif [[ "$TASK" != "INSERT" && "$TASK" != "IMPORT" && "$TASK" != "INDEX" && "$TASK" != "QUERY" && "$TASK" != "MIXED" ]]; then
         echo "Unsupported TASK '$TASK' for local_main.sh" >&2
         exit 1
     fi
+
+    cleanup_client_timings
 }
 
 main "$@"

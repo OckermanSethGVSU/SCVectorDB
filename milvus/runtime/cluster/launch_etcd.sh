@@ -2,6 +2,8 @@
 
 ETCD_MEDIUM=${1:?Usage: $0 <etcd_medium>}
 RANK="${PMI_RANK:-${PMIX_RANK:-${OMPI_COMM_WORLD_RANK:-}}}"
+RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-./runtime_state}"
+mkdir -p "$RUNTIME_STATE_DIR"
 
 if [[ "$ETCD_MEDIUM" == "memory" ]]; then
     TARGET_BASE="/dev/shm/"
@@ -57,7 +59,7 @@ fi
 # slight stagger
 sleep $((RANK * 2))
 
-OUTPUT_FILE="etcd_registry.txt"
+OUTPUT_FILE="$RUNTIME_STATE_DIR/etcd_registry.txt"
 
 # ----- Mode-dependent registry + expected size -----
 if [[ "$ETCD_MODE" == "single" ]]; then

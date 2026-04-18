@@ -20,6 +20,8 @@ def extract_last_digit(name: str) -> int:
 def monitorSystem(batch=-1, interval=1.0, stop_event=None):
     rank = sys.argv[1]
     platform = sys.argv[2]
+    runtime_state_dir = os.getenv("RUNTIME_STATE_DIR", "./runtime_state")
+    sentinel_file = os.path.join(runtime_state_dir, "flag.txt")
     
 
     cpuNum = len(psutil.cpu_percent(interval=1.0,percpu=True))
@@ -103,7 +105,7 @@ def monitorSystem(batch=-1, interval=1.0, stop_event=None):
             
             last_flush = time.time()
         
-        if os.path.exists("flag.txt"):
+        if os.path.exists(sentinel_file):
             # print("Exit loop", flush=True)
             break
 

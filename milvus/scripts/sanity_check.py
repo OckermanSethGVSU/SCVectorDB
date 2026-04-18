@@ -5,9 +5,10 @@ import time
 def read_ip_from_file(path):
     with open(path, 'r', encoding='utf-8') as f:
         return f.read().strip()
-MILVUS_HOST = read_ip_from_file("worker.ip")
+RUNTIME_STATE_DIR = os.getenv("RUNTIME_STATE_DIR", "./runtime_state")
+MILVUS_HOST = read_ip_from_file(os.path.join(RUNTIME_STATE_DIR, "worker.ip"))
 # Connect to Milvus / Zilliz Cloud
-MILVUS_HOST = read_ip_from_file("worker.ip")
+MILVUS_HOST = read_ip_from_file(os.path.join(RUNTIME_STATE_DIR, "worker.ip"))
 
 
 MILVUS_HEALTH_PORT = int(os.getenv("MILVUS_HEALTH_PORT", "9091"))

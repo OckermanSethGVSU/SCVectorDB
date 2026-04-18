@@ -310,8 +310,9 @@ def resolve_milvus_url(explicit_url: str | None) -> str:
     if explicit_url:
         return explicit_url
     host = os.getenv("MILVUS_HOST")
-    if not host and Path("worker.ip").exists():
-        host = read_ip_from_file("worker.ip")
+    worker_ip_path = Path(os.getenv("RUNTIME_STATE_DIR", "./runtime_state")) / "worker.ip"
+    if not host and worker_ip_path.exists():
+        host = read_ip_from_file(str(worker_ip_path))
     if not host:
         host = "127.0.0.1"
     port = env_int("MILVUS_GRPC_PORT", 19530)
@@ -322,8 +323,9 @@ def resolve_remote_endpoint(explicit_endpoint: str | None) -> str:
     endpoint = explicit_endpoint
     if not endpoint:
         endpoint = os.getenv("MINIO_ADDRESS")
-    if not endpoint and Path("minio_registry.txt").exists():
-        host, port = read_registry_host_port("minio_registry.txt")
+    minio_registry_path = Path(os.getenv("RUNTIME_STATE_DIR", "./runtime_state")) / "minio_registry.txt"
+    if not endpoint and minio_registry_path.exists():
+        host, port = read_registry_host_port(str(minio_registry_path))
         endpoint = f"{host}:{port}"
     if not endpoint:
         endpoint = "127.0.0.1:9000"

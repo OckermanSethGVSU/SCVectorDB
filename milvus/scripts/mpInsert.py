@@ -67,7 +67,8 @@ def worker(global_rank, n_workers, clients_per_worker, barrier):
     client_id = global_rank % clients_per_worker
 
     # Milvus client
-    MILVUS_HOST = read_ip_from_file("worker.ip")
+    runtime_state_dir = os.getenv("RUNTIME_STATE_DIR", "./runtime_state")
+    MILVUS_HOST = read_ip_from_file(os.path.join(runtime_state_dir, "worker.ip"))
     MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "19530"))
     MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "root:Milvus")
     client = MilvusClient(f"http://{MILVUS_HOST}:{MILVUS_GRPC_PORT}", token=MILVUS_TOKEN)

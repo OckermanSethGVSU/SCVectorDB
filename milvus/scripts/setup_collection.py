@@ -6,8 +6,15 @@ from pymilvus import MilvusClient
 from pymilvus import FieldSchema, CollectionSchema, DataType
 from pathlib import Path
 
+RUNTIME_STATE_DIR = Path(os.getenv("RUNTIME_STATE_DIR", "./runtime_state"))
+
+
+def runtime_state_path(name: str) -> Path:
+    return RUNTIME_STATE_DIR / name
+
+
 def get_streaming_count(filename="STREAMING_registry.txt"):
-    path = Path(filename)
+    path = runtime_state_path(filename)
 
     if not path.exists():
         return 1
@@ -21,7 +28,7 @@ def read_ip_from_file(path):
     with open(path, 'r', encoding='utf-8') as f:
         return f.read().strip()
 
-MILVUS_HOST = read_ip_from_file("worker.ip")
+MILVUS_HOST = read_ip_from_file(runtime_state_path("worker.ip"))
 MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "20001"))
 MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "root:Milvus")
 

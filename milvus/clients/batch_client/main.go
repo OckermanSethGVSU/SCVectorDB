@@ -83,6 +83,14 @@ type InputData struct {
 	Path      string
 }
 
+func runtimeStatePath(name string) string {
+	dir := strings.TrimSpace(os.Getenv("RUNTIME_STATE_DIR"))
+	if dir == "" {
+		dir = "./runtime_state"
+	}
+	return dir + "/" + name
+}
+
 func writeInt64Npy(path string, data []int64, shape []int) error {
 	w, err := gonpy.NewFileWriter(path)
 	if err != nil {
@@ -755,9 +763,9 @@ func clientWorker(
 	var errN error
 
 	if bs == "NONE" {
-		node, errN = getNodeByRank("PROXY_registry.txt", 0)
+		node, errN = getNodeByRank(runtimeStatePath("PROXY_registry.txt"), 0)
 	} else if bs == "WORKER" {
-		node, errN = getNodeByRank("PROXY_registry.txt", workerRank)
+		node, errN = getNodeByRank(runtimeStatePath("PROXY_registry.txt"), workerRank)
 	} else {
 		log.Fatalf("unknown balance_strategy=%q (expected NONE or WORKER)", balanceStrategy)
 	}
@@ -850,7 +858,7 @@ func clientWorker(
 		if len(sweeps) == 1 && (ACTIVE_TASK == TASK) {
 			startGate.Wait(globalClientRank)
 			if globalClientRank == 0 {
-				file, err := os.Create("./workerOut/workflow_start.txt")
+				file, err := os.Create(runtimeStatePath("workflow_start.txt"))
 				if err != nil {
 					log.Fatalf("failed to create file: %v", err)
 				}
@@ -1040,7 +1048,7 @@ func clientWorker(
 		}
 
 		if len(sweeps) == 1 && ACTIVE_TASK == TASK && globalClientRank == 0 {
-			file, err := os.Create("./workerOut/workflow_end.txt")
+			file, err := os.Create(runtimeStatePath("workflow_end.txt"))
 			if err != nil {
 				log.Fatalf("failed to create file: %v", err)
 			}

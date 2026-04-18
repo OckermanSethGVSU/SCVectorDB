@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict
 
 BLOCK = 8
+RUNTIME_STATE_DIR = Path(os.getenv("RUNTIME_STATE_DIR", "./runtime_state"))
 PORT_BASES = {
     "COORDINATOR": 20000,
     "PROXY": 20001,
@@ -45,6 +46,10 @@ COMPONENT_SPECS = {
         "ports": [("port", PORT_BASES["STREAMING"])],
     },
 }
+
+
+def runtime_state_path(name: str) -> Path:
+    return RUNTIME_STATE_DIR / name
 
 
 def replace_port_line(text: str, old_port: int, new_port: int, field: str = "port") -> str:
@@ -178,13 +183,13 @@ def finalize_text(text: str, replacements: Dict[str, str]) -> str:
 
 
 def build_standalone_config(wal: str) -> str:
-    worker_ip = Path("worker.ip").read_text().strip()
+    worker_ip = runtime_state_path("worker.ip").read_text().strip()
     validate_minio_mode("standalone")
     standalone_minio_mode = get_minio_mode()
     minio_ip = worker_ip
 
     if standalone_minio_mode == "single":
-        minio_ip = get_ip_by_rank("minio_registry.txt", 0)
+        minio_ip = get_ip_by_rank(str(runtime_state_path("minio_registry.txt")), 0)
     elif standalone_minio_mode != "off":
         raise ValueError(
             f"Unsupported MINIO_MODE='{standalone_minio_mode}' for standalone. Expected 'off' or 'single'."
@@ -222,20 +227,20 @@ def build_distributed_base_config(wal: str) -> str:
 
     minio_ip = "127.0.0.1"
     if minio_mode != "off":
-        minio_ip = get_ip_by_rank("minio_registry.txt", 0)
+        minio_ip = get_ip_by_rank(str(runtime_state_path("minio_registry.txt")), 0)
     text = text.replace("<MINIO>", minio_ip)
     text = text.replace("<WAL>", wal)
 
     etcd_mode = get_etcd_mode()
     if etcd_mode == "single":
-        etcd0 = get_ip_by_rank("etcd_registry.txt", 0)
+        etcd0 = get_ip_by_rank(str(runtime_state_path("etcd_registry.txt")), 0)
         text = text.replace("<ETCD0>", etcd0)
         text = text.replace(",<ETCD1>:2379", "")
         text = text.replace(",<ETCD2>:2379", "")
     else:
-        etcd0 = get_ip_by_rank("etcd_registry.txt", 0)
-        etcd1 = get_ip_by_rank("etcd_registry.txt", 1)
-        etcd2 = get_ip_by_rank("etcd_registry.txt", 2)
+        etcd0 = get_ip_by_rank(str(runtime_state_path("etcd_registry.txt")), 0)
+        etcd1 = get_ip_by_rank(str(runtime_state_path("etcd_registry.txt")), 1)
+        etcd2 = get_ip_by_rank(str(runtime_state_path("etcd_registry.txt")), 2)
         text = text.replace("<ETCD0>:2379", f"{etcd0}:2379")
         text = text.replace("<ETCD1>:2379", f"{etcd1}:2479")
         text = text.replace("<ETCD2>:2379", f"{etcd2}:2579")
@@ -262,7 +267,7 @@ def build_distributed_base_config(wal: str) -> str:
 def build_component_config(mode: str, rank: int) -> str:
     spec = COMPONENT_SPECS[mode]
     text = load_distributed_component_template()
-    ip = get_ip_by_rank(f"{mode}_registry.txt", rank)
+    ip = get_ip_by_rank(str(runtime_state_path(f"{mode}_registry.txt")), rank)
     for token in spec["tokens"]:
         text = text.replace(token, ip)
 

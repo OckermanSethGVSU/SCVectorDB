@@ -2,6 +2,8 @@
 
 STORAGE_MEDIUM=${1:?Usage: $0 <storage_medium>}
 TYPE=${2:?Usage: $0 <storage_medium> <type>}
+RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-./runtime_state}"
+mkdir -p "$RUNTIME_STATE_DIR"
 
 RANK="${PMI_RANK:-${PMIX_RANK:-${OMPI_COMM_WORLD_RANK:-}}}"
 
@@ -63,7 +65,7 @@ if (( METRICS_PORT > 65535 )); then
   exit 2
 fi
 
-OUTPUT_FILE="${TYPE}_registry.txt"
+OUTPUT_FILE="${RUNTIME_STATE_DIR}/${TYPE}_registry.txt"
 echo "${RANK},${MY_IP_ADDR},${PORT},${METRICS_PORT}" >> $OUTPUT_FILE
 
 
@@ -79,8 +81,6 @@ fi
 python3 replace_unified.py --mode ${TYPE} --rank $RANK
 cp -r ./configs/ $TARGET_BASE/${TYPE}${RANK}/
 cp $TARGET_BASE/${TYPE}${RANK}/configs/${TYPE}${RANK}.yaml $TARGET_BASE/${TYPE}${RANK}/configs/milvus.yaml
-
-mkdir -p ./workerOut/
 
 GPU_ARGS=()
 if [[ "$GPU_INDEX" == "True" ]]; then
@@ -133,11 +133,12 @@ apptainer exec --fakeroot \
   --env METRICS_PORT=$METRICS_PORT \
   --env MILVUS_HEALTH_HOST=$MY_IP_ADDR \
   --env MILVUS_HEALTH_PORT=$METRICS_PORT \
+  --env RUNTIME_STATE_DIR=/runtime_state \
   --env LOCAL_SHARED_STORAGE_PATH="${LOCAL_SHARED_STORAGE_PATH:-}" \
   --env PERF=$PERF \
   --env PERF_EVENTS=$PERF_EVENTS \
   -B ./execute.sh:/milvus/app_execute.sh \
-  -B ./workerOut/:/workerOut/ \
+  -B "${RUNTIME_STATE_DIR}:/runtime_state/" \
   -B $TARGET_BASE/${TYPE}${RANK}/:/var/lib/milvus \
   -B $TARGET_BASE/${TYPE}${RANK}/configs/:/milvus/configs/ \
    "${BUILD_ARGS[@]}" \
