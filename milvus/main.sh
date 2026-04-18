@@ -116,6 +116,26 @@ cd $BASE_DIR/$myDIR
 export RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-$BASE_DIR/$myDIR/runtime_state}"
 mkdir -p "$RUNTIME_STATE_DIR"
 
+distributed_registry_path() {
+    local component="$1"
+
+    case "$component" in
+        etcd)
+            printf '%s\n' "$BASE_DIR/$myDIR/etcdFiles/etcd_registry.txt"
+            ;;
+        minio)
+            printf '%s\n' "$BASE_DIR/$myDIR/minioFiles/minio_registry.txt"
+            ;;
+        COORDINATOR|STREAMING|QUERY|DATA|PROXY)
+            printf '%s\n' "$BASE_DIR/$myDIR/$component/${component}_registry.txt"
+            ;;
+        *)
+            echo "Unknown distributed registry component: $component" >&2
+            return 1
+            ;;
+    esac
+}
+
 export BASE_DIR=$BASE_DIR
 export myDIR=$myDIR
 if [[ -z "${RESULT_PATH:-}" ]]; then
@@ -159,7 +179,11 @@ export PERF_EVENTS=$PERF_EVENTS
 
 export MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR
 export MILVUS_CONFIG_DIR=$MILVUS_CONFIG_DIR
-export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$RUNTIME_STATE_DIR/PROXY_registry.txt}"
+if [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
+    export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$(distributed_registry_path PROXY)}"
+else
+    export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$RUNTIME_STATE_DIR/PROXY_registry.txt}"
+fi
 
 export DEBUG=$DEBUG
 export RESTORE_DIR=$RESTORE_DIR

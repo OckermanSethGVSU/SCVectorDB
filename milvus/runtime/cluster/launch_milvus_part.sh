@@ -65,7 +65,7 @@ if (( METRICS_PORT > 65535 )); then
   exit 2
 fi
 
-OUTPUT_FILE="${RUNTIME_STATE_DIR}/${TYPE}_registry.txt"
+OUTPUT_FILE="./${TYPE}/${TYPE}_registry.txt"
 echo "${RANK},${MY_IP_ADDR},${PORT},${METRICS_PORT}" >> $OUTPUT_FILE
 
 

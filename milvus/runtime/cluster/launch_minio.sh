@@ -73,7 +73,7 @@ if [[ "$MINIO_MODE" == "stripped" ]]; then
     sleep $((RANK * 5))
     DATA_PORT=$((9000 + 100 * RANK))
     CONSOLE_PORT=$((9001 + 100 * RANK))
-    OUTPUT_FILE="$RUNTIME_STATE_DIR/minio_registry.txt"
+    OUTPUT_FILE="./minioFiles/minio_registry.txt"
     echo "${RANK},${MY_IP_ADDR},${DATA_PORT}" >> $OUTPUT_FILE
 
 
@@ -113,7 +113,7 @@ if [[ "$MINIO_MODE" == "stripped" ]]; then
 
 elif [[ "$MINIO_MODE" == "single" ]]; then
     MY_IP_ADDR=$(jq -er '.hsn0.ipv4[0]' "minio${RANK}.json")
-    OUTPUT_FILE="$RUNTIME_STATE_DIR/minio_registry.txt"
+    OUTPUT_FILE="./minioFiles/minio_registry.txt"
     echo "${RANK},${MY_IP_ADDR},9000" >> $OUTPUT_FILE
 
     if [[ -z "$RESTORE_DIR" && "$PRESERVE_MINIO_STATE" -ne 1 ]]; then

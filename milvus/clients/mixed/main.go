@@ -994,7 +994,14 @@ func (d *dryRunBackend) Close(context.Context) error {
 
 func pickProxyTarget(cfg config, r role, clientID int) (*proxyTarget, error) {
 	strategy := getBalanceStrategy(r)
-	registryPath := getenvDefault("PROXY_REGISTRY_PATH", "./runtime_state/PROXY_registry.txt")
+	registryPath := getenvDefault("PROXY_REGISTRY_PATH", "")
+	if registryPath == "" {
+		if strings.ToLower(strings.TrimSpace(os.Getenv("MODE"))) == "distributed" {
+			registryPath = "./PROXY/PROXY_registry.txt"
+		} else {
+			registryPath = "./runtime_state/PROXY_registry.txt"
+		}
+	}
 	switch strategy {
 	case balanceNone:
 		return getProxyByRank(registryPath, 0)

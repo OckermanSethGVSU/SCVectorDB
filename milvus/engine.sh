@@ -196,6 +196,10 @@ engine_uses_bulk_import_payload() {
     return 1
 }
 
+engine_needs_npy_inspect() {
+    [[ "${TASK^^}" == "MIXED" ]]
+}
+
 # Stage Milvus containers, launch scripts, clients, and task-specific helpers.
 engine_copy_payload() {
     local target_dir="$1"
@@ -212,7 +216,9 @@ engine_copy_payload() {
                 "bulk_upload_import.py" \
                 "bulk_upload_import_mc.py"
         fi
-        copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "npy_inspect.py"
+        if engine_needs_npy_inspect; then
+            copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "npy_inspect.py"
+        fi
         mkdir -p "$target_dir/configs"
         copy_engine_items "$ENGINE_DIR/runtime/configs" "$target_dir/configs" "unified_milvus.yaml"
 
@@ -263,7 +269,9 @@ engine_copy_payload() {
                 "bulk_upload_import.py" \
                 "bulk_upload_import_mc.py"
         fi
-        copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "npy_inspect.py"
+        if engine_needs_npy_inspect; then
+            copy_engine_items "$ENGINE_DIR/utils" "$target_dir" "npy_inspect.py"
+        fi
 
         copy_engine_items "$ENGINE_DIR/clients/batch_client" "$target_dir" \
             "batch_client"

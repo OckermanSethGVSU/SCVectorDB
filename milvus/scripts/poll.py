@@ -12,12 +12,24 @@ def runtime_state_path(name: str) -> Path:
     return RUNTIME_STATE_DIR / name
 
 
+def registry_path(component: str) -> Path:
+    mode = os.getenv("MODE", "standalone").strip().lower()
+    if mode != "distributed":
+        return runtime_state_path(f"{component}_registry.txt")
+
+    if component == "etcd":
+        return Path("etcdFiles/etcd_registry.txt")
+    if component == "minio":
+        return Path("minioFiles/minio_registry.txt")
+    return Path(component) / f"{component}_registry.txt"
+
+
 REGISTRY_FILES = [
-    runtime_state_path("DATA_registry.txt"),
-    runtime_state_path("COORDINATOR_registry.txt"),
-    runtime_state_path("STREAMING_registry.txt"),
-    runtime_state_path("QUERY_registry.txt"),
-    runtime_state_path("PROXY_registry.txt"),
+    registry_path("DATA"),
+    registry_path("COORDINATOR"),
+    registry_path("STREAMING"),
+    registry_path("QUERY"),
+    registry_path("PROXY"),
 ]
 
 

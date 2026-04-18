@@ -443,7 +443,12 @@ def resolve_remote_endpoint(explicit_endpoint: str | None) -> str:
     endpoint = explicit_endpoint
     if not endpoint:
         endpoint = os.getenv("MINIO_ADDRESS")
-    minio_registry_path = Path(os.getenv("RUNTIME_STATE_DIR", "./runtime_state")) / "minio_registry.txt"
+    runtime_state_dir = Path(os.getenv("RUNTIME_STATE_DIR", "./runtime_state"))
+    mode = os.getenv("MODE", "standalone").strip().lower()
+    if mode == "distributed":
+        minio_registry_path = Path("minioFiles/minio_registry.txt")
+    else:
+        minio_registry_path = runtime_state_dir / "minio_registry.txt"
     if not endpoint and minio_registry_path.exists():
         host, port = read_registry_host_port(str(minio_registry_path))
         endpoint = f"{host}:{port}"

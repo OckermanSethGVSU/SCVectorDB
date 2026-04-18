@@ -13,8 +13,21 @@ def runtime_state_path(name: str) -> Path:
     return RUNTIME_STATE_DIR / name
 
 
+def registry_path(component: str) -> Path:
+    mode = os.getenv("MODE", "standalone").strip().lower()
+    if mode != "distributed":
+        return runtime_state_path(f"{component}_registry.txt")
+
+    if component == "etcd":
+        return Path("etcdFiles/etcd_registry.txt")
+    if component == "minio":
+        return Path("minioFiles/minio_registry.txt")
+    return Path(component) / f"{component}_registry.txt"
+
+
 def get_streaming_count(filename="STREAMING_registry.txt"):
-    path = runtime_state_path(filename)
+    component = filename.removesuffix("_registry.txt")
+    path = registry_path(component)
 
     if not path.exists():
         return 1

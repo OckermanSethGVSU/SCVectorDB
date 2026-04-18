@@ -59,7 +59,7 @@ fi
 # slight stagger
 sleep $((RANK * 2))
 
-OUTPUT_FILE="$RUNTIME_STATE_DIR/etcd_registry.txt"
+OUTPUT_FILE="./etcdFiles/etcd_registry.txt"
 
 # ----- Mode-dependent registry + expected size -----
 if [[ "$ETCD_MODE" == "single" ]]; then

@@ -91,6 +91,22 @@ func runtimeStatePath(name string) string {
 	return dir + "/" + name
 }
 
+func registryPath(component string) string {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("MODE")))
+	if mode != "distributed" {
+		return runtimeStatePath(component + "_registry.txt")
+	}
+
+	switch component {
+	case "etcd":
+		return "./etcdFiles/etcd_registry.txt"
+	case "minio":
+		return "./minioFiles/minio_registry.txt"
+	default:
+		return "./" + component + "/" + component + "_registry.txt"
+	}
+}
+
 func writeInt64Npy(path string, data []int64, shape []int) error {
 	w, err := gonpy.NewFileWriter(path)
 	if err != nil {
@@ -763,9 +779,9 @@ func clientWorker(
 	var errN error
 
 	if bs == "NONE" {
-		node, errN = getNodeByRank(runtimeStatePath("PROXY_registry.txt"), 0)
+		node, errN = getNodeByRank(registryPath("PROXY"), 0)
 	} else if bs == "WORKER" {
-		node, errN = getNodeByRank(runtimeStatePath("PROXY_registry.txt"), workerRank)
+		node, errN = getNodeByRank(registryPath("PROXY"), workerRank)
 	} else {
 		log.Fatalf("unknown balance_strategy=%q (expected NONE or WORKER)", balanceStrategy)
 	}

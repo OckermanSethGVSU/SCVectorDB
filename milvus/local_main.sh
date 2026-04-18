@@ -97,9 +97,34 @@ USER_CONFIG_FILE="$RUN_DIR/user.yaml"
 STANDARD_BINARY_PATH="${STANDARD_BINARY_PATH:-}"
 MIXED_BINARY_PATH="${MIXED_BINARY_PATH:-}"
 export RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-$RUN_DIR/runtime_state}"
-export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$RUNTIME_STATE_DIR/PROXY_registry.txt}"
 
 mkdir -p "$RUN_DIR" "$RUNTIME_STATE_DIR" "$VOLUMES_DIR" "$MINIO_VOLUMES_DIR" "$CONFIG_DIR" "$LOCAL_SHARED_STORAGE_PATH"
+
+distributed_registry_path() {
+    local component="$1"
+
+    case "$component" in
+        etcd)
+            printf '%s\n' "$RUN_DIR/etcdFiles/etcd_registry.txt"
+            ;;
+        minio)
+            printf '%s\n' "$RUN_DIR/minioFiles/minio_registry.txt"
+            ;;
+        COORDINATOR|STREAMING|QUERY|DATA|PROXY)
+            printf '%s\n' "$RUN_DIR/$component/${component}_registry.txt"
+            ;;
+        *)
+            echo "Unknown distributed registry component: $component" >&2
+            return 1
+            ;;
+    esac
+}
+
+if [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
+    export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$(distributed_registry_path PROXY)}"
+else
+    export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$RUNTIME_STATE_DIR/PROXY_registry.txt}"
+fi
 
 pick_binary() {
     local override="$1"
@@ -405,35 +430,41 @@ write_distributed_registry_files() {
     local etcd_instances
     local minio_instances
     local role role_count rank service_port metrics_port
+    local etcd_registry minio_registry role_registry
 
     etcd_instances="$(distributed_etcd_instances)"
     minio_instances="$(distributed_minio_instances)"
+    etcd_registry="$(distributed_registry_path etcd)"
+    minio_registry="$(distributed_registry_path minio)"
 
     printf '%s\n' "$MILVUS_HOST" > "$RUNTIME_STATE_DIR/worker.ip"
-    : > "$RUNTIME_STATE_DIR/etcd_registry.txt"
-    : > "$RUNTIME_STATE_DIR/minio_registry.txt"
-    : > "$RUNTIME_STATE_DIR/COORDINATOR_registry.txt"
-    : > "$RUNTIME_STATE_DIR/STREAMING_registry.txt"
-    : > "$RUNTIME_STATE_DIR/QUERY_registry.txt"
-    : > "$RUNTIME_STATE_DIR/DATA_registry.txt"
-    : > "$RUNTIME_STATE_DIR/PROXY_registry.txt"
+    mkdir -p "$RUN_DIR/etcdFiles" "$RUN_DIR/minioFiles" \
+        "$RUN_DIR/COORDINATOR" "$RUN_DIR/STREAMING" "$RUN_DIR/QUERY" "$RUN_DIR/DATA" "$RUN_DIR/PROXY"
+    : > "$etcd_registry"
+    : > "$minio_registry"
+    : > "$(distributed_registry_path COORDINATOR)"
+    : > "$(distributed_registry_path STREAMING)"
+    : > "$(distributed_registry_path QUERY)"
+    : > "$(distributed_registry_path DATA)"
+    : > "$(distributed_registry_path PROXY)"
 
     for ((rank=0; rank<etcd_instances; rank++)); do
         printf '%s,%s,%s,%s\n' \
             "$rank" \
             "$MILVUS_HOST" \
             "$((2379 + (100 * rank)))" \
-            "$((2380 + (100 * rank)))" >> "$RUNTIME_STATE_DIR/etcd_registry.txt"
+            "$((2380 + (100 * rank)))" >> "$etcd_registry"
     done
 
     for ((rank=0; rank<minio_instances; rank++)); do
         printf '%s,%s,%s\n' \
             "$rank" \
             "$MILVUS_HOST" \
-            "$((9000 + (100 * rank)))" >> "$RUNTIME_STATE_DIR/minio_registry.txt"
+            "$((9000 + (100 * rank)))" >> "$minio_registry"
     done
 
     for role in COORDINATOR STREAMING QUERY DATA PROXY; do
+        role_registry="$(distributed_registry_path "$role")"
         case "$role" in
             COORDINATOR) role_count="$COORDINATOR_NODES" ;;
             STREAMING) role_count="$STREAMING_NODES" ;;
@@ -446,7 +477,7 @@ write_distributed_registry_files() {
             service_port="$(role_service_port "$role" "$rank")"
             metrics_port="$(role_metrics_port "$role" "$rank")"
             printf '%s,%s,%s,%s\n' \
-                "$rank" "$MILVUS_HOST" "$service_port" "$metrics_port" >> "$RUNTIME_STATE_DIR/${role}_registry.txt"
+                "$rank" "$MILVUS_HOST" "$service_port" "$metrics_port" >> "$role_registry"
         done
     done
 }
