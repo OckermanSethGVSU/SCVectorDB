@@ -61,6 +61,21 @@ def env_optional_int(name):
     return int(value.strip())
 
 
+def resolve_client_npy_path(run_dir, filename, active_task):
+    task_upper = active_task.upper()
+    if task_upper == "QUERY":
+        path = run_dir / "queryNPY" / filename
+    elif task_upper == "INSERT":
+        path = run_dir / "uploadNPY" / filename
+    else:
+        raise ValueError(f"unsupported ACTIVE_TASK for client timing summary: {active_task}")
+
+    if path.exists():
+        return path
+
+    raise FileNotFoundError(f"missing client timing npy file: {path}")
+
+
 def summarize_npy(path, run_label, rank, name, batch_size):
     arr = np.load(path) * 1000
     total_ms = np.sum(arr)
@@ -140,7 +155,7 @@ def resolve_corpus_size(active_task):
     return int(arr.shape[0])
 
 
-def summarize_run(run_dir, batch_size, run_label, clients, clients_per_proxy, corpus_size):
+def summarize_run(run_dir, batch_size, run_label, clients, clients_per_proxy, corpus_size, active_task):
     summary_rows = []
     all_prep = []
     all_upload = []
@@ -149,21 +164,33 @@ def summarize_run(run_dir, batch_size, run_label, clients, clients_per_proxy, co
     for worker in range(clients):
         for client in range(clients_per_proxy):
             prep, prep_arr = summarize_npy(
-                run_dir / f"batch_construction_times_w{worker}_c{client}.npy",
+                resolve_client_npy_path(
+                    run_dir,
+                    f"batch_construction_times_w{worker}_c{client}.npy",
+                    active_task,
+                ),
                 run_label,
                 worker,
                 "prep",
                 batch_size,
             )
             upload, upload_arr = summarize_npy(
-                run_dir / f"upload_times_w{worker}_c{client}.npy",
+                resolve_client_npy_path(
+                    run_dir,
+                    f"upload_times_w{worker}_c{client}.npy",
+                    active_task,
+                ),
                 run_label,
                 worker,
                 "upload",
                 batch_size,
             )
             op, op_arr = summarize_npy(
-                run_dir / f"op_times_w{worker}_c{client}.npy",
+                resolve_client_npy_path(
+                    run_dir,
+                    f"op_times_w{worker}_c{client}.npy",
+                    active_task,
+                ),
                 run_label,
                 worker,
                 "op",
@@ -211,7 +238,7 @@ def main():
     combined_rows = []
     for run_dir, batch_size, run_label in runs:
         combined_rows.extend(
-            summarize_run(run_dir, batch_size, run_label, clients, clients_per_proxy, corpus_size)
+            summarize_run(run_dir, batch_size, run_label, clients, clients_per_proxy, corpus_size, active_task)
         )
 
     with (base_dir / "summary.csv").open("w", newline="") as f:
