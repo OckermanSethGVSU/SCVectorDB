@@ -176,6 +176,7 @@ export FLUSH_BEFORE_INDEX=$FLUSH_BEFORE_INDEX
 export TRACING=$TRACING
 export PERF=$PERF
 export PERF_EVENTS=$PERF_EVENTS
+export AUTO_CLEANUP="${AUTO_CLEANUP:-False}"
 
 export MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR
 export MILVUS_CONFIG_DIR=$MILVUS_CONFIG_DIR
@@ -548,6 +549,23 @@ cleanup_client_timings() {
     shopt -u nullglob
 }
 
+move_yaml_files_to_runtime_state() {
+    local run_root yaml_file rel_path target_path
+    run_root="$BASE_DIR/$myDIR"
+
+    while IFS= read -r -d '' yaml_file; do
+        rel_path="${yaml_file#$run_root/}"
+        target_path="$RUNTIME_STATE_DIR/$rel_path"
+        mkdir -p "$(dirname "$target_path")"
+        mv "$yaml_file" "$target_path"
+    done < <(
+        find "$run_root" \
+            -path "$RUNTIME_STATE_DIR" -prune -o \
+            -path "$run_root/volumes" -prune -o \
+            -type f \( -name '*.yaml' -o -name '*.yml' \) -print0
+    )
+}
+
 stage_insert_client_outputs() {
     mkdir -p uploadNPY
     shopt -s nullglob
@@ -754,15 +772,18 @@ if (( should_summarize_query )); then
 fi
 
 cleanup_client_timings
+move_yaml_files_to_runtime_state
 
 
-if [[ "$STORAGE_MEDIUM" == "DAOS" || "$ETCD_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then
-    DAOS_POOL="radix-io"
-    DAOS_CONT="vectorDBTesting"
-    rm -fr /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
-elif [[ "$STORAGE_MEDIUM" == "lustre" || "$MODE" == "DISTRIBUTED" ]]; then
-    echo "Removed the rm for now"
-    # rm -fr ./milvusDir/
+if [[ "${AUTO_CLEANUP:-False}" =~ ^(1|[Tt]rue|[Yy]es|[Oo]n)$ ]]; then
+    if [[ "$STORAGE_MEDIUM" == "DAOS" || "$ETCD_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then
+        DAOS_POOL="radix-io"
+        DAOS_CONT="vectorDBTesting"
+        rm -fr /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
+    elif [[ "$STORAGE_MEDIUM" == "lustre" || "$MODE" == "DISTRIBUTED" ]]; then
+        echo "Removed the rm for now"
+        # rm -fr ./milvusDir/
+    fi
 fi
 
 chmod -R g+rwX "$BASE_DIR/$myDIR"

@@ -56,6 +56,7 @@ export TRACING="${TRACING:-False}"
 export PERF="${PERF:-NONE}"
 export PERF_EVENTS="${PERF_EVENTS:-}"
 export DEBUG="${DEBUG:-False}"
+export AUTO_CLEANUP="${AUTO_CLEANUP:-False}"
 export RESTORE_DIR="${RESTORE_DIR:-}"
 export EXPECTED_CORPUS_SIZE="${EXPECTED_CORPUS_SIZE:-0}"
 
@@ -1105,6 +1106,22 @@ cleanup_client_timings() {
     shopt -u nullglob
 }
 
+move_yaml_files_to_runtime_state() {
+    local yaml_file rel_path target_path
+
+    while IFS= read -r -d '' yaml_file; do
+        rel_path="${yaml_file#$RUN_DIR/}"
+        target_path="$RUNTIME_STATE_DIR/$rel_path"
+        mkdir -p "$(dirname "$target_path")"
+        mv "$yaml_file" "$target_path"
+    done < <(
+        find "$RUN_DIR" \
+            -path "$RUNTIME_STATE_DIR" -prune -o \
+            -path "$RUN_DIR/volumes" -prune -o \
+            -type f \( -name '*.yaml' -o -name '*.yml' \) -print0
+    )
+}
+
 run_restore_status() {
     export EXPECTED_CORPUS_SIZE
     env "${PYTHON_ENV_VARS[@]}" python3 ./status.py
@@ -1187,6 +1204,7 @@ main() {
     fi
 
     cleanup_client_timings
+    move_yaml_files_to_runtime_state
 }
 
 main "$@"
