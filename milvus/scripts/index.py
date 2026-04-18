@@ -324,5 +324,9 @@ while True:
 res = client.describe_collection(collection_name="standalone")
 index_status = client.describe_index(collection_name, 'vector')
 
+print("**************Collection State After Indexing***************",flush=True)
 print(res,flush=True)
+print("************************************************************",flush=True)
+print("**************Index State After Indexing********************",flush=True)
 print(index_status, flush=True)
+print("************************************************************",flush=True)

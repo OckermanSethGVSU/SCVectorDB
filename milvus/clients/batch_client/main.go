@@ -840,8 +840,8 @@ func clientWorker(
 		resultWriter := resultWriters[sweepIdx]
 
 		fmt.Printf(
-			"Proxy=%d client=%d global_client=%d assigned [%d,%d) rows=%d batch=%d sweep=%s\n",
-			workerRank, clientID, globalClientRank, startIdx, endIdx, localRows, sweep.BatchSize, sweep.Label,
+			"Proxy=%d client=%d global_client=%d assigned [%d,%d) rows=%d batch=%d\n",
+			workerRank, clientID, globalClientRank, startIdx, endIdx, localRows, sweep.BatchSize,
 		)
 
 		var (
@@ -1010,12 +1010,11 @@ func clientWorker(
 		endLoop := time.Now()
 		if ldebugfEnabled {
 			log.Printf(
-				"worker finished local %s loop worker=%d client=%d global_client=%d sweep=%s inserted_rows=%d abs_rows=[%d,%d) loop_seconds=%.3f target_proxy=%s:%d",
+				"worker finished local %s loop worker=%d client=%d global_client=%d inserted_rows=%d abs_rows=[%d,%d) loop_seconds=%.3f target_proxy=%s:%d",
 				ACTIVE_TASK,
 				workerRank,
 				clientID,
 				globalClientRank,
-				sweep.Label,
 				localRows,
 				startIdx,
 				endIdx,
@@ -1050,12 +1049,11 @@ func clientWorker(
 
 		if ldebugfEnabled {
 			log.Printf(
-				"worker entering post-%s wait worker=%d client=%d global_client=%d sweep=%s local_last_id=%d global_last_id=%d",
+				"worker entering post-%s wait worker=%d client=%d global_client=%d local_last_id=%d global_last_id=%d",
 				ACTIVE_TASK,
 				workerRank,
 				clientID,
 				globalClientRank,
-				sweep.Label,
 				localLastID,
 				lastID,
 			)
@@ -1328,5 +1326,12 @@ func main() {
 	}
 
 	wg.Wait()
-	fmt.Println("All workers finished")
+	switch strings.ToUpper(strings.TrimSpace(activeTask)) {
+	case "INSERT":
+		fmt.Println("Insert complete")
+	case "QUERY":
+		fmt.Println("Query complete")
+	default:
+		fmt.Printf("%s complete\n", activeTask)
+	}
 }
