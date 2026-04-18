@@ -181,14 +181,7 @@ engine_copy_payload() {
         copy_engine_items "$ENGINE_DIR/clients/batch_client" "$target_dir" "batch_client"
         copy_engine_items "$ENGINE_DIR/clients/batch_client/src" "$target_dir/rustSrc" "main.rs"
         if [[ "$TASK" == "MIXED" ]]; then
-            if [[ -f "$ENGINE_DIR/clients/mixed/target/release/mixed" ]]; then
-                copy_engine_items "$ENGINE_DIR/clients/mixed/target/release" "$target_dir" "mixed"
-            elif [[ -f "$ENGINE_DIR/clients/mixed/mixed" ]]; then
-                copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed"
-            else
-                echo "Required mixed client binary missing for TASK=MIXED" >&2
-                return 1
-            fi
+            copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed"
             cp "$ENGINE_DIR/clients/mixed/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
         fi
     else
@@ -210,14 +203,7 @@ engine_copy_payload() {
         copy_engine_items "$ENGINE_DIR/clients/batch_client" "$target_dir" "batch_client"
         copy_engine_items "$ENGINE_DIR/clients/batch_client/src" "$target_dir/rustSrc" "main.rs"
         if [[ "$TASK" == "MIXED" ]]; then
-            if [[ -f "$ENGINE_DIR/clients/mixed/target/release/mixed" ]]; then
-                copy_engine_items "$ENGINE_DIR/clients/mixed/target/release" "$target_dir" "mixed"
-            elif [[ -f "$ENGINE_DIR/clients/mixed/mixed" ]]; then
-                copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed"
-            else
-                echo "Required mixed client binary missing for TASK=MIXED" >&2
-                return 1
-            fi
+            copy_engine_items "$ENGINE_DIR/clients/mixed" "$target_dir" "mixed"
             cp "$ENGINE_DIR/clients/mixed/src/main.rs" "$target_dir/rustSrc/mixed_main.rs"
         fi
     fi
