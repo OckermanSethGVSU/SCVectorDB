@@ -1055,6 +1055,9 @@ summarize_insert() {
     env "${PYTHON_ENV_VARS[@]}" python3 ./multi_client_summary.py
     [[ -f times.csv ]] && mv times.csv insert_times.txt
     [[ -f summary.csv ]] && mv summary.csv insert_summary.txt
+}
+
+stage_insert_client_outputs() {
     mkdir -p uploadNPY
     shopt -s nullglob
     local files=(./*.npy)
@@ -1068,6 +1071,9 @@ summarize_query() {
     env "${PYTHON_ENV_VARS[@]}" python3 ./multi_client_summary.py
     [[ -f times.csv ]] && mv times.csv query_times.txt
     [[ -f summary.csv ]] && mv summary.csv query_summary.txt
+}
+
+stage_query_client_outputs() {
     mkdir -p queryNPY
     shopt -s nullglob
     local files=(./*.npy)
@@ -1106,6 +1112,8 @@ run_restore_status() {
 
 main() {
     cd "$RUN_DIR"
+    local should_summarize_insert=0
+    local should_summarize_query=0
     ensure_runtime_tools
     case "${MODE^^}" in
         STANDALONE)
@@ -1138,8 +1146,9 @@ main() {
                 touch "$RUNTIME_STATE_DIR/flag.txt"
             fi
 
-            if [[ "$TASK" == "INSERT" ]] || [[ "$(normalize_insert_method)" == "traditional" ]]; then
-                summarize_insert
+            if [[ "$TASK" == "INSERT" ]] || [[ "$TASK" == "MIXED" && "$(normalize_insert_method)" == "traditional" ]]; then
+                should_summarize_insert=1
+                stage_insert_client_outputs
             fi
 
             if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
@@ -1159,13 +1168,22 @@ main() {
 
     if [[ "$TASK" == "QUERY" ]]; then
         run_query
-        summarize_query
+        should_summarize_query=1
+        stage_query_client_outputs
     elif [[ "$TASK" == "MIXED" ]]; then
         run_mixed
         run_mixed_timeline
     elif [[ "$TASK" != "INSERT" && "$TASK" != "IMPORT" && "$TASK" != "INDEX" && "$TASK" != "QUERY" && "$TASK" != "MIXED" ]]; then
         echo "Unsupported TASK '$TASK' for local_main.sh" >&2
         exit 1
+    fi
+
+    if (( should_summarize_insert )); then
+        summarize_insert
+    fi
+
+    if (( should_summarize_query )); then
+        summarize_query
     fi
 
     cleanup_client_timings

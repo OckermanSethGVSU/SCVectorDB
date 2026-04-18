@@ -454,13 +454,6 @@ run_direct_insert() {
     export INSERT_STREAMING=$INSERT_STREAMING
 
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
-
-    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
-
-    mv times.csv insert_times.txt
-    mv summary.csv insert_summary.txt
-    mkdir -p uploadNPY
-    mv *.npy uploadNPY
 }
 
 run_bulk_insert() {
@@ -555,6 +548,39 @@ cleanup_client_timings() {
     shopt -u nullglob
 }
 
+stage_insert_client_outputs() {
+    mkdir -p uploadNPY
+    shopt -s nullglob
+    local files=(./*.npy)
+    if (( ${#files[@]} > 0 )); then
+        mv "${files[@]}" uploadNPY/
+    fi
+    shopt -u nullglob
+}
+
+stage_query_client_outputs() {
+    mkdir -p queryNPY
+    shopt -s nullglob
+    local files=(./*.npy)
+    if (( ${#files[@]} > 0 )); then
+        mv "${files[@]}" queryNPY/
+    fi
+    shopt -u nullglob
+}
+
+summarize_insert() {
+    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
+    [[ -f times.csv ]] && mv times.csv insert_times.txt
+    [[ -f summary.csv ]] && mv summary.csv insert_summary.txt
+}
+
+summarize_query() {
+    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
+    [[ -f times.csv ]] && mv times.csv query_times.txt
+    [[ -f summary.csv ]] && mv summary.csv query_summary.txt
+}
+should_summarize_insert=0
+should_summarize_query=0
 # if we are not restoring, run insert and/or indexing
 if [ -z "$RESTORE_DIR" ]; then
     env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
@@ -572,7 +598,11 @@ if [ -z "$RESTORE_DIR" ]; then
         else
             run_insert_for_task
         fi
-        
+
+        if [[ "$TASK" == "INSERT" ]] || [[ "$TASK" == "MIXED" && "$(normalize_insert_method)" == "traditional" ]]; then
+            should_summarize_insert=1
+            stage_insert_client_outputs
+        fi
         if [[ "$TASK" == "INSERT" || "$TASK" == "IMPORT" ]]; then
             touch "$RUNTIME_STATE_DIR/flag.txt"
         fi
@@ -614,15 +644,9 @@ if [[ "$TASK" == "QUERY" ]]; then
     export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
     export QUERY_STREAMING=$QUERY_STREAMING
 
-
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
-
-    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
-
-    mv times.csv query_times.txt
-    mv summary.csv query_summary.txt
-    mkdir -p queryNPY
-    mv *.npy queryNPY
+    should_summarize_query=1
+    stage_query_client_outputs
 
     if [[ "$TRACING" == "True" ]]; then
         touch "$RUNTIME_STATE_DIR/flag.txt"
@@ -719,6 +743,14 @@ fi
 
 if [[ "$TRACING" == "True" ]]; then
         python3 analyze_traces.py > analysis.txt
+fi
+
+if (( should_summarize_insert )); then
+    summarize_insert
+fi
+
+if (( should_summarize_query )); then
+    summarize_query
 fi
 
 cleanup_client_timings
