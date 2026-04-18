@@ -345,7 +345,10 @@ func (w *LockedCSVWriter) Append(
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	file, err := os.OpenFile(resultPath+"/times.csv", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	activeTask := strings.ToLower(strings.TrimSpace(os.Getenv("ACTIVE_TASK")))
+	filename := fmt.Sprintf("%s/%s_times.csv", resultPath, activeTask)
+
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return err
 	}
