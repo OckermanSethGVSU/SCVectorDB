@@ -204,7 +204,7 @@ def summarize_run(run_dir, batch_size, run_label, clients, clients_per_proxy, co
     stacked_prep = np.concatenate(all_prep)
     stacked_upload = np.concatenate(all_upload)
     stacked_op = np.concatenate(all_op)
-    aggregate_time = extract_time(run_dir / "times.csv", 0)
+    aggregate_time = extract_time(run_dir / f"{active_task.lower()}_times.csv", 0)
 
     summary_rows.extend(
         [
@@ -214,7 +214,7 @@ def summarize_run(run_dir, batch_size, run_label, clients, clients_per_proxy, co
         ]
     )
 
-    with (run_dir / "summary.csv").open("w", newline="") as f:
+    with (run_dir / f"{active_task.lower()}_summary.csv").open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(SUMMARY_HEADER)
         writer.writerows(summary_rows)
@@ -241,7 +241,7 @@ def main():
             summarize_run(run_dir, batch_size, run_label, clients, clients_per_proxy, corpus_size, active_task)
         )
 
-    with (base_dir / "summary.csv").open("w", newline="") as f:
+    with (base_dir / f"{active_task.lower()}_summary.csv").open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(SUMMARY_HEADER)
         writer.writerows(combined_rows)
