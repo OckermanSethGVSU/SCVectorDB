@@ -163,7 +163,7 @@ apply_array_override() {
 
 common_set_defaults() {
     NODES=(1)
-    CORES=(112)
+    CORES=()
     WALLTIME=""
     QUEUE=""
     queue=""

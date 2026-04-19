@@ -14,10 +14,7 @@
 # The order in this file controls the order shown in `--help --engine weaviate`.
 
 # Allocation and storage layout
-register_weaviate_var "NODES" "default" "1" "" "Compute-node count to allocate for Weaviate workers"
 register_weaviate_var "WORKERS_PER_NODE" "default" "4" "" "Worker processes launched per compute node"
-register_weaviate_var "CORES" "default" "112" "" "CPU cores assigned per worker rank"
-register_weaviate_var "STORAGE_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "Storage medium for Weaviate data"
 
 # Engine/runtime selection
 register_weaviate_var "USEPERF" "default" "false" "true false" "Enable perf collection"

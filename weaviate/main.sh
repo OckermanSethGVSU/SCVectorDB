@@ -921,7 +921,7 @@ fi
 # ---------------------------------------------------------------
 # Launch Weaviate cluster via MPI
 # ---------------------------------------------------------------
-if [[ "${CORES}" -eq 208 ]]; then
+if [[ -z "${CORES:-}" ]]; then
     mpirun -n "${TOTAL}" \
         --ppn "${WORKERS_PER_NODE}" \
         --no-vni \

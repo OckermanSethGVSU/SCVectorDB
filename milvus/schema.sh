@@ -12,11 +12,6 @@
 # REQUIRED_IF currently supports one condition in the form OTHER_VAR=value1|value2.
 # Every registered variable may be set to one value or a sweep list separated by spaces.
 
-# Allocation and storage layout
-register_milvus_var "NODES" "default" "1" "" "Compute-node count to allocate for Milvus workers"
-register_milvus_var "CORES" "default" "" "" "CPU cores assigned per worker rank; empty disables CPU binding"
-register_milvus_var "STORAGE_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "Storage medium for Milvus data"
-
 # Engine/runtime selection
 register_milvus_var "MODE" "default" "STANDALONE" "DISTRIBUTED STANDALONE" "Milvus deployment mode"
 register_milvus_var "MILVUS_BUILD_DIR" "default" "" "" "Milvus build directory"

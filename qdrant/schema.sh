@@ -14,10 +14,7 @@
 # The order in this file controls the order shown in `--help --engine qdrant`.
 
 # Allocation and storage layout
-register_qdrant_var "NODES" "default" "1" "" "Compute-node count to allocate for Qdrant workers"
 register_qdrant_var "WORKERS_PER_NODE" "default" "1" "" "Worker processes launched per compute node"
-register_qdrant_var "CORES" "default" "" "" "CPU cores assigned per worker rank; empty means no core binding"
-register_qdrant_var "STORAGE_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "Storage medium for Qdrant data"
 
 # Engine/runtime selection
 register_qdrant_var "QDRANT_SIF" "conditional" "" "" "Qdrant SIF filename under qdrant/sifs, for example qdrant_latest.sif" "RUN_MODE=PBS"

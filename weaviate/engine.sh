@@ -6,6 +6,16 @@ ENGINE_NAME="weaviate"
 ENGINE_SCHEMA_PREFIX="WEAVIATE"
 schema_engine_init "weaviate" "$ENGINE_SCHEMA_PREFIX" "Weaviate"
 
+weaviate_cores_label() {
+    local cores_value="${CORES_CURRENT:-${CORES:-}}"
+
+    if [[ -z "$cores_value" ]]; then
+        printf '%s\n' "none"
+    else
+        printf '%s\n' "$cores_value"
+    fi
+}
+
 # Print Weaviate-specific help plus the schema variable table.
 weaviate_print_help() {
     cat <<'EOF'
@@ -86,7 +96,7 @@ engine_load_combo() {
     UPLOAD_BATCH_CURRENT="$UPLOAD_BATCH_SIZE"
     CORES_CURRENT="$CORES"
     TOTAL_NODES=$((NODES_CURRENT + 1))
-    JOB_NAME="${TASK}_${NODES_CURRENT}n_${WORKERS_PER_NODE_CURRENT}w_${CORES_CURRENT}c_q${QUERY_BATCH_CURRENT}"
+    JOB_NAME="${TASK}_${NODES_CURRENT}n_${WORKERS_PER_NODE_CURRENT}w_$(weaviate_cores_label)c_q${QUERY_BATCH_CURRENT}"
     REQUIRES_DAOS="false"
 }
 
@@ -105,14 +115,14 @@ engine_make_run_dir_name() {
             echo "${TASK}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_C${UPLOAD_CLIENTS_CURRENT}_uploadBS${UPLOAD_BATCH_CURRENT}_${timestamp}"
             ;;
         index)
-            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES${CORES_CURRENT}_CS${CORPUS_SIZE}_${timestamp}"
+            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_CS${CORPUS_SIZE}_${timestamp}"
             ;;
         query_bs|query_core)
-            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES${CORES_CURRENT}_QBS${QUERY_BATCH_CURRENT}_Q${QUERY_WORKLOAD}_${timestamp}"
+            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_QBS${QUERY_BATCH_CURRENT}_Q${QUERY_WORKLOAD}_${timestamp}"
             ;;
         query_scaling)
             local total_workers=$((NODES_CURRENT * WORKERS_PER_NODE_CURRENT))
-            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_TW${total_workers}_UCPW${UPLOAD_CLIENTS_CURRENT}_QCPW${QUERY_CLIENTS_PER_WORKER}_CORES${CORES_CURRENT}_IBS${UPLOAD_BATCH_CURRENT}_QBS${QUERY_BATCH_CURRENT}_${timestamp}"
+            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_TW${total_workers}_UCPW${UPLOAD_CLIENTS_CURRENT}_QCPW${QUERY_CLIENTS_PER_WORKER}_CORES$(weaviate_cores_label)_IBS${UPLOAD_BATCH_CURRENT}_QBS${QUERY_BATCH_CURRENT}_${timestamp}"
             ;;
     esac
 }
