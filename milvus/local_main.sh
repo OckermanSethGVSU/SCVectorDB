@@ -10,6 +10,14 @@ if [[ -f "$RUN_DIR/run_config.env" ]]; then
     set +a
 fi
 
+export_default_var() {
+    local name="$1"
+    local default_value="$2"
+
+    printf -v "$name" '%s' "${!name:-$default_value}"
+    export "$name"
+}
+
 PYTHON_ENV_VARS=(
     NO_PROXY=""
     no_proxy=""
@@ -20,10 +28,10 @@ PYTHON_ENV_VARS=(
 )
 
 BASE_DIR="${BASE_DIR:-$(dirname "$RUN_DIR")}"
-export myDIR="${myDIR:-$(basename "$RUN_DIR")}"
-export RESULT_PATH="${RESULT_PATH:-$RUN_DIR}"
-export RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-$RUN_DIR/runtime_state}"
-export MILVUS_HOST="${MILVUS_HOST:-127.0.0.1}"
+export_default_var myDIR "$(basename "$RUN_DIR")"
+export_default_var RESULT_PATH "$RUN_DIR"
+export_default_var RUNTIME_STATE_DIR "$RUN_DIR/runtime_state"
+export_default_var MILVUS_HOST "127.0.0.1"
 
 if [[ -z "${MINIO_MODE:-}" ]]; then
     if [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
@@ -44,29 +52,29 @@ fi
 export MILVUS_GRPC_PORT="${MILVUS_GRPC_PORT:-$DEFAULT_MILVUS_GRPC_PORT}"
 export MILVUS_HEALTH_PORT="${MILVUS_HEALTH_PORT:-$DEFAULT_MILVUS_HEALTH_PORT}"
 
-CONTAINER_NAME="${MILVUS_LOCAL_NAME:-milvus-standalone}"
-IMAGE="${MILVUS_LOCAL_IMAGE:-milvusdb/milvus:v2.6.12}"
-ETCD_IMAGE="${MILVUS_ETCD_IMAGE:-quay.io/coreos/etcd:v3.5.18}"
-ETCD_PORT="${MILVUS_ETCD_PORT:-2379}"
-VOLUMES_DIR="${MILVUS_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/milvus}"
-MINIO_CONTAINER_NAME="${MINIO_LOCAL_NAME:-milvus-minio}"
-MINIO_IMAGE="${MINIO_LOCAL_IMAGE:-minio/minio:RELEASE.2025-02-28T09-55-16Z}"
-MINIO_API_PORT="${MINIO_API_PORT:-9000}"
-MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9001}"
-MINIO_HOST="${MINIO_HOST:-127.0.0.1}"
-MINIO_INTERNAL_HOST="${MINIO_INTERNAL_HOST:-$MINIO_CONTAINER_NAME}"
-MINIO_BUCKET_NAME="${MINIO_BUCKET_NAME:-a-bucket}"
-MINIO_ACCESS_KEY_ID="${MINIO_ACCESS_KEY_ID:-minioadmin}"
-MINIO_SECRET_ACCESS_KEY="${MINIO_SECRET_ACCESS_KEY:-minioadmin}"
-MINIO_NETWORK_NAME="${MINIO_NETWORK_NAME:-milvus-local-net}"
-MINIO_VOLUMES_DIR="${MINIO_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/minio}"
-LOCAL_CLUSTER_PREFIX="${MILVUS_LOCAL_CLUSTER_PREFIX:-milvus-local}"
-CONFIG_DIR="${RUN_DIR}/configs"
-LOCAL_SHARED_STORAGE_PATH="${LOCAL_SHARED_STORAGE_PATH:-$RUN_DIR/volumes/localfs/shared}"
-EMBED_ETCD_FILE="$RUN_DIR/embedEtcd.yaml"
-USER_CONFIG_FILE="$RUN_DIR/user.yaml"
-STANDARD_BINARY_PATH="${STANDARD_BINARY_PATH:-}"
-MIXED_BINARY_PATH="${MIXED_BINARY_PATH:-}"
+export_default_var CONTAINER_NAME "${MILVUS_LOCAL_NAME:-milvus-standalone}"
+export_default_var IMAGE "${MILVUS_LOCAL_IMAGE:-milvusdb/milvus:v2.6.12}"
+export_default_var ETCD_IMAGE "${MILVUS_ETCD_IMAGE:-quay.io/coreos/etcd:v3.5.18}"
+export_default_var ETCD_PORT "${MILVUS_ETCD_PORT:-2379}"
+export_default_var VOLUMES_DIR "${MILVUS_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/milvus}"
+export_default_var MINIO_CONTAINER_NAME "${MINIO_LOCAL_NAME:-milvus-minio}"
+export_default_var MINIO_IMAGE "${MINIO_LOCAL_IMAGE:-minio/minio:RELEASE.2025-02-28T09-55-16Z}"
+export_default_var MINIO_API_PORT "${MINIO_API_PORT:-9000}"
+export_default_var MINIO_CONSOLE_PORT "${MINIO_CONSOLE_PORT:-9001}"
+export_default_var MINIO_HOST "${MINIO_HOST:-127.0.0.1}"
+export_default_var MINIO_INTERNAL_HOST "${MINIO_INTERNAL_HOST:-$MINIO_CONTAINER_NAME}"
+export_default_var MINIO_BUCKET_NAME "${MINIO_BUCKET_NAME:-a-bucket}"
+export_default_var MINIO_ACCESS_KEY_ID "${MINIO_ACCESS_KEY_ID:-minioadmin}"
+export_default_var MINIO_SECRET_ACCESS_KEY "${MINIO_SECRET_ACCESS_KEY:-minioadmin}"
+export_default_var MINIO_NETWORK_NAME "${MINIO_NETWORK_NAME:-milvus-local-net}"
+export_default_var MINIO_VOLUMES_DIR "${MINIO_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/minio}"
+export_default_var LOCAL_CLUSTER_PREFIX "${MILVUS_LOCAL_CLUSTER_PREFIX:-milvus-local}"
+export_default_var CONFIG_DIR "$RUN_DIR/configs"
+export_default_var LOCAL_SHARED_STORAGE_PATH "${LOCAL_SHARED_STORAGE_PATH:-$RUN_DIR/volumes/localfs/shared}"
+export_default_var EMBED_ETCD_FILE "$RUN_DIR/embedEtcd.yaml"
+export_default_var USER_CONFIG_FILE "$RUN_DIR/user.yaml"
+export_default_var STANDARD_BINARY_PATH "${STANDARD_BINARY_PATH:-}"
+export_default_var MIXED_BINARY_PATH "${MIXED_BINARY_PATH:-}"
 
 mkdir -p "$RUN_DIR" "$RUNTIME_STATE_DIR" "$VOLUMES_DIR" "$MINIO_VOLUMES_DIR" "$CONFIG_DIR" "$LOCAL_SHARED_STORAGE_PATH"
 
