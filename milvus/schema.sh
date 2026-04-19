@@ -12,24 +12,13 @@
 # REQUIRED_IF currently supports one condition in the form OTHER_VAR=value1|value2.
 # Every registered variable may be set to one value or a sweep list separated by spaces.
 
-# Core execution mode and platform
-register_milvus_var "TASK" "required" "" "INSERT IMPORT INDEX QUERY MIXED" "Experiment task"
-register_milvus_var "RUN_MODE" "default" "PBS" "PBS LOCAL local" "Run under PBS or create a local harness"
-register_milvus_var "PLATFORM" "required" "" "POLARIS AURORA" "Target platform"
-register_milvus_var "ACCOUNT" "required" "" "" "PBS project/account to charge for the run"
-
 # Allocation and storage layout
 register_milvus_var "NODES" "default" "1" "" "Compute-node count to allocate for Milvus workers"
 register_milvus_var "CORES" "default" "112" "" "CPU cores assigned per worker rank"
 register_milvus_var "STORAGE_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "Storage medium for Milvus data"
 
-# PBS scheduler settings
-register_milvus_var "WALLTIME" "required" "" "" "PBS walltime"
-register_milvus_var "QUEUE" "required" "" "preemptable debug debug-scaling prod capacity" "PBS queue name"
-
 # Engine/runtime selection
 register_milvus_var "MODE" "default" "STANDALONE" "DISTRIBUTED STANDALONE" "Milvus deployment mode"
-register_milvus_var "ENV_PATH" "default" "" "" "Python environment path"
 register_milvus_var "MILVUS_BUILD_DIR" "default" "" "" "Milvus build directory"
 register_milvus_var "MILVUS_CONFIG_DIR" "default" "runtime" "" "Milvus config directory"
 register_milvus_var "PERF" "default" "NONE" "NONE STAT TRACE" "Performance collection mode"
@@ -39,7 +28,6 @@ register_milvus_var "GPU_INDEX" "default" "False" "True False" "Whether to use G
 register_milvus_var "TRACING" "default" "False" "True False" "Enable tracing collection"
 register_milvus_var "DEBUG" "default" "False" "True False" "Enable debug behavior"
 register_milvus_var "AUTO_CLEANUP" "default" "False" "True False true false TRUE FALSE" "Enable end-of-run storage cleanup"
-register_milvus_var "BASE_DIR" "default" "" "" "Optional base directory for run outputs"
 register_milvus_var "MINIO_MODE" "default" "off" "off single stripped" "MinIO topology"
 register_milvus_var "MINIO_MEDIUM" "default" "lustre" "memory DAOS lustre SSD" "Storage medium for MinIO data"
 register_milvus_var "ETCD_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "Storage medium for etcd data"

@@ -13,26 +13,13 @@
 # Every registered variable may be set to one value or a space-separated sweep list.
 # The order in this file controls the order shown in `--help --engine qdrant`.
 
-# Core execution mode and platform
-register_qdrant_var "TASK" "required" "" "INSERT INDEX QUERY MIXED LAUNCH" "Experiment task"
-register_qdrant_var "RUN_MODE" "default" "PBS" "PBS local" "Run under PBS or create a local harness"
-register_qdrant_var "PLATFORM" "required" "" "POLARIS AURORA" "Target platform"
-register_qdrant_var "ACCOUNT" "required" "" "" "PBS project/account to charge for the run"
-
 # Allocation and storage layout
 register_qdrant_var "NODES" "default" "1" "" "Compute-node count to allocate for Qdrant workers"
 register_qdrant_var "WORKERS_PER_NODE" "default" "1" "" "Worker processes launched per compute node"
 register_qdrant_var "CORES" "default" "" "" "CPU cores assigned per worker rank; empty means no core binding"
 register_qdrant_var "STORAGE_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "Storage medium for Qdrant data"
 
-# PBS scheduler settings
-register_qdrant_var "WALLTIME" "required" "" "" "PBS walltime"
-register_qdrant_var "QUEUE" "required" "" "preemptable debug debug-scaling prod capacity" "PBS queue name"
-
 # Engine/runtime selection
-register_qdrant_var "BASE_DIR" "default" "" "" "Base Qdrant directory containing generated run directories; auto-filled by the submit manager when empty"
-register_qdrant_var "ENV_PATH" "default" "" "" "Python virtual environment path to activate for PBS runs"
-register_qdrant_var "ALLOW_SYSTEM_PYTHON" "default" "False" "True False" "Allow PBS runs to use the already-loaded Python environment when ENV_PATH is empty"
 register_qdrant_var "QDRANT_SIF" "conditional" "" "" "Qdrant SIF filename under qdrant/sifs, for example qdrant_latest.sif" "RUN_MODE=PBS"
 register_qdrant_var "QDRANT_EXECUTABLE" "default" "" "qdrant qdrantInsertTracing qdrantQueryTrace" "Optional local Qdrant executable override copied from qdrantBuilds; empty uses the executable inside the SIF"
 register_qdrant_var "LOG_LEVEL" "default" "ERROR" "" "Qdrant log level passed to generated node configs"

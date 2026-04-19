@@ -8,6 +8,15 @@
 # This defines the engine-specific register function expected by schema.sh,
 # e.g. register_qdrant_var, while the actual registry behavior lives here.
 
+register_common_var() {
+    if [[ -z "${SCHEMA_ACTIVE_PREFIX:-}" ]]; then
+        echo "register_common_var called without an active schema prefix" >&2
+        return 1
+    fi
+
+    schema_register_var "$SCHEMA_ACTIVE_PREFIX" "$@"
+}
+
 # Initialize one schema registry and create the engine-specific registration
 # function that schema.sh will call, e.g. register_qdrant_var.
 schema_engine_init() {
@@ -82,7 +91,15 @@ schema_load() {
     local schema_file="$2"
 
     schema_reset "$schema_prefix"
-    source "$schema_file"
+    SCHEMA_ACTIVE_PREFIX="$schema_prefix" source "$schema_file"
+}
+
+# Append another schema file into an existing registry without clearing it.
+schema_append_file() {
+    local schema_prefix="$1"
+    local schema_file="$2"
+
+    SCHEMA_ACTIVE_PREFIX="$schema_prefix" source "$schema_file"
 }
 
 # Split a raw schema value into sweep entries. Empty values are preserved as a

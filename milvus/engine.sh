@@ -27,7 +27,8 @@ EOF
 }
 
 engine_set_defaults() {
-    schema_load "$ENGINE_SCHEMA_PREFIX" "$ENGINE_DIR/schema.sh"
+    schema_load "$ENGINE_SCHEMA_PREFIX" "$ROOT_DIR/common/schema.sh"
+    schema_append_file "$ENGINE_SCHEMA_PREFIX" "$ENGINE_DIR/schema.sh"
     schema_apply_defaults "$ENGINE_SCHEMA_PREFIX"
     schema_assign_globals_from_values "$ENGINE_SCHEMA_PREFIX"
     REQUIRES_DAOS="false"

@@ -20,6 +20,12 @@
 set -euo pipefail
 export ZSH_EVAL_CONTEXT="${ZSH_EVAL_CONTEXT:-}"
 
+if [[ -f ./run_config.env ]]; then
+    set -a
+    source ./run_config.env
+    set +a
+fi
+
 # ---------------------------------------------------------------
 # Env vars surfaced by the unified schema (set via run_config.env).
 # Repeating them here makes defaults explicit and the script runnable

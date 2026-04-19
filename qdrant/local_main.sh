@@ -3,6 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_DIR="${RUN_DIR:-$(pwd)}"
+
+if [[ -f "$RUN_DIR/run_config.env" ]]; then
+    set -a
+    source "$RUN_DIR/run_config.env"
+    set +a
+fi
+
 cd "$RUN_DIR"
 
 export myDIR="${myDIR:-$(basename "$RUN_DIR")}"

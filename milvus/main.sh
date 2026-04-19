@@ -1,4 +1,9 @@
 
+if [[ -f ./run_config.env ]]; then
+    set -a
+    source ./run_config.env
+    set +a
+fi
 
 launch_role() {
     local role="$1"                  # e.g., STREAMING, QUERY, DATA

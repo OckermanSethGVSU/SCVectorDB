@@ -13,26 +13,15 @@
 # Every registered variable may be set to one value or a space-separated sweep list.
 # The order in this file controls the order shown in `--help --engine weaviate`.
 
-# Core execution mode and platform
-register_weaviate_var "TASK" "required" "" "insert index query_bs query_core query_scaling" "Experiment task"
-register_weaviate_var "RUN_MODE" "default" "PBS" "PBS" "Run mode"
-register_weaviate_var "PLATFORM" "required" "" "POLARIS AURORA" "Target platform"
-register_weaviate_var "ACCOUNT" "required" "" "" "PBS project/account to charge for the run"
-
 # Allocation and storage layout
 register_weaviate_var "NODES" "default" "1" "" "Compute-node count to allocate for Weaviate workers"
 register_weaviate_var "WORKERS_PER_NODE" "default" "4" "" "Worker processes launched per compute node"
 register_weaviate_var "CORES" "default" "112" "" "CPU cores assigned per worker rank"
 register_weaviate_var "STORAGE_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "Storage medium for Weaviate data"
 
-# PBS scheduler settings
-register_weaviate_var "WALLTIME" "required" "" "" "PBS walltime"
-register_weaviate_var "QUEUE" "required" "" "preemptable debug debug-scaling prod capacity" "PBS queue name"
-
 # Engine/runtime selection
 register_weaviate_var "USEPERF" "default" "false" "true false" "Enable perf collection"
 register_weaviate_var "WEAVIATE_CLIENT_BINARY" "default" "insert_streaming" "" "Client binary copied into the run directory for insert/index/query_bs/query_core tasks"
-register_weaviate_var "BASE_DIR" "default" "" "" "Optional base directory passed through to the client"
 register_weaviate_var "VECTOR_DIM" "default" "2560" "" "Vector dimension"
 register_weaviate_var "DISTANCE_METRIC" "default" "COSINE" "COSINE DOT L2" "Distance metric"
 register_weaviate_var "GPU_INDEX" "default" "false" "true false" "Whether to use GPU indexing"
