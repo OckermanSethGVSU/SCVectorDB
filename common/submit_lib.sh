@@ -194,11 +194,14 @@ apply_common_overrides() {
 
 validate_common_required_vars() {
     local missing=()
+    local run_mode_upper="${RUN_MODE^^}"
 
-    [[ -n "${PLATFORM:-}" ]] || missing+=("PLATFORM")
-    [[ -n "${WALLTIME:-}" ]] || missing+=("WALLTIME")
-    [[ -n "${QUEUE:-}" ]] || missing+=("QUEUE")
-    [[ -n "${ACCOUNT:-}" ]] || missing+=("ACCOUNT")
+    if [[ "$run_mode_upper" == "PBS" ]]; then
+        [[ -n "${PLATFORM:-}" ]] || missing+=("PLATFORM")
+        [[ -n "${WALLTIME:-}" ]] || missing+=("WALLTIME")
+        [[ -n "${QUEUE:-}" ]] || missing+=("QUEUE")
+        [[ -n "${ACCOUNT:-}" ]] || missing+=("ACCOUNT")
+    fi
 
     if (( ${#missing[@]} > 0 )); then
         echo "Missing required common settings: ${missing[*]}" >&2
