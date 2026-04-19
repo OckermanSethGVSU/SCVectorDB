@@ -170,7 +170,7 @@ else
 fi
 
 CPU_ARGS=()
-if [[ "$CORES" -eq 112 ]]; then                 
+if [[ -z "${CORES:-}" ]]; then
     CPU_ARGS+=()
 else
     CPU_ARGS+=(

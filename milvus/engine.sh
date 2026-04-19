@@ -7,6 +7,14 @@ ENGINE_NAME="milvus"
 ENGINE_SCHEMA_PREFIX="MILVUS"
 schema_engine_init "milvus" "$ENGINE_SCHEMA_PREFIX" "Milvus"
 
+milvus_cores_label() {
+    if [[ -n "${CORES_CURRENT:-}" ]]; then
+        printf '%s\n' "$CORES_CURRENT"
+    else
+        printf '%s\n' "none"
+    fi
+}
+
 milvus_print_help() {
     cat <<'EOF'
 Milvus Help
@@ -59,6 +67,24 @@ engine_apply_overrides() {
 
 engine_validate_config() {
     schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
+
+    if [[ "${RUN_MODE^^}" == "PBS" && -z "${ENV_PATH:-}" && "${ALLOW_SYSTEM_PYTHON:-False}" != "True" ]]; then
+        cat >&2 <<'EOF'
+Milvus PBS runs require ENV_PATH by default so the Python environment is explicit.
+
+Set one of these on the command line:
+  --set ENV_PATH=/path/to/python/env
+
+Or, if the job's loaded modules/current environment already provide every Python dependency:
+  --set ALLOW_SYSTEM_PYTHON=True
+
+You can also put the same setting in your config file:
+  ENV_PATH=/path/to/python/env
+  # or
+  ALLOW_SYSTEM_PYTHON=True
+EOF
+        return 1
+    fi
 
     case "$TASK" in
         INSERT|IMPORT)
@@ -134,7 +160,7 @@ engine_load_combo() {
     INSERT_BATCH_CURRENT="$INSERT_BATCH_SIZE"
     CORES_CURRENT="$CORES"
     TOTAL_NODES=$((NODES_CURRENT + 1))
-    JOB_NAME="${TASK,,}_${MODE,,}_${NODES_CURRENT}n_${CORES_CURRENT}c_q${QUERY_BATCH_CURRENT}"
+    JOB_NAME="${TASK,,}_${MODE,,}_${NODES_CURRENT}n_$(milvus_cores_label)c_q${QUERY_BATCH_CURRENT}"
 
     if [[ "$STORAGE_MEDIUM" == "DAOS" || "$ETCD_MEDIUM" == "DAOS" || ( "$MODE" == "DISTRIBUTED" && "$MINIO_MEDIUM" == "DAOS" ) ]]; then
         REQUIRES_DAOS="true"

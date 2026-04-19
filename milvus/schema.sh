@@ -14,7 +14,7 @@
 
 # Allocation and storage layout
 register_milvus_var "NODES" "default" "1" "" "Compute-node count to allocate for Milvus workers"
-register_milvus_var "CORES" "default" "112" "" "CPU cores assigned per worker rank"
+register_milvus_var "CORES" "default" "" "" "CPU cores assigned per worker rank; empty disables CPU binding"
 register_milvus_var "STORAGE_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "Storage medium for Milvus data"
 
 # Engine/runtime selection

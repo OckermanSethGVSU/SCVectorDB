@@ -214,7 +214,7 @@ if [[ "$MODE" == "STANDALONE" ]]; then
         exit 1
     fi
 
-    if [[ "$CORES" -eq 112 ]]; then
+    if [[ -z "${CORES:-}" ]]; then
         echo "Launching standalone: unrestricted cores"
 
         mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $PLATFORM STANDALONE $WAL &
