@@ -24,11 +24,7 @@ register_weaviate_var "DISTANCE_METRIC" "default" "COSINE" "COSINE DOT L2" "Dist
 register_weaviate_var "GPU_INDEX" "default" "false" "true false" "Whether to use GPU indexing"
 
 # Insert / index workload
-register_weaviate_var "INSERT_DATA_FILEPATH" "default" "/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/embeddings.npy" "" "Insert corpus file path"
-register_weaviate_var "INSERT_CORPUS_SIZE" "default" "10000000" "" "Insert/index corpus size"
-register_weaviate_var "INSERT_BATCH_SIZE" "default" "2048" "" "Insert batch size"
 register_weaviate_var "INSERT_CLIENTS_PER_WORKER" "default" "16" "" "Insert clients per worker"
-register_weaviate_var "INSERT_BALANCE_STRATEGY" "default" "WORKER_BALANCE" "NO_BALANCE WORKER_BALANCE" "Insert balancing policy"
 
 # Query workload
 register_weaviate_var "QUERY_FILEPATH" "default" "/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy" "" "Query vector file path"

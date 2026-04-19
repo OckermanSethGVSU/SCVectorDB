@@ -38,9 +38,9 @@ const (
 type balanceStrategy string
 
 const (
-	balanceNone      balanceStrategy = "NONE"
+	balanceNone      balanceStrategy = "NO_BALANCE"
 	balancePerClient balanceStrategy = "PER_CLIENT"
-	balanceWorker    balanceStrategy = "WORKER"
+	balanceWorker    balanceStrategy = "WORKER_BALANCE"
 )
 
 type config struct {

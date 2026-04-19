@@ -26,8 +26,8 @@ Use `--set NAME=value` to override any variable.
 Any variable may be a single value or a sweep list separated by spaces.
 
 Command examples:
-  ./pbs_submit_manager.sh --engine weaviate --set TASK=insert --set PLATFORM=AURORA --set WALLTIME=01:00:00 --set QUEUE=debug-scaling --set ACCOUNT=myproj
-  ./pbs_submit_manager.sh --generate-only --engine weaviate --set TASK=query_bs --set PLATFORM=AURORA --set WALLTIME=01:00:00 --set QUEUE=debug-scaling --set ACCOUNT=myproj
+  ./pbs_submit_manager.sh --engine weaviate --set TASK=INSERT --set PLATFORM=AURORA --set WALLTIME=01:00:00 --set QUEUE=debug-scaling --set ACCOUNT=myproj
+  ./pbs_submit_manager.sh --generate-only --engine weaviate --set TASK=QUERY_BS --set PLATFORM=AURORA --set WALLTIME=01:00:00 --set QUEUE=debug-scaling --set ACCOUNT=myproj
 
 Variables
 ---------
@@ -89,6 +89,8 @@ engine_load_combo() {
         printf -v "$key" '%s' "$value"
     done
 
+    TASK="${TASK^^}"
+
     NODES_CURRENT="$NODES"
     WORKERS_PER_NODE_CURRENT="$WORKERS_PER_NODE"
     INSERT_CLIENTS_CURRENT="$INSERT_CLIENTS_PER_WORKER"
@@ -111,16 +113,16 @@ engine_make_run_dir_name() {
     timestamp="$(date +"%Y-%m-%d_%H_%M_%S")"
 
     case "$TASK" in
-        insert)
+        INSERT)
             echo "${TASK}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_C${INSERT_CLIENTS_CURRENT}_uploadBS${INSERT_BATCH_CURRENT}_${timestamp}"
             ;;
-        index)
+        INDEX)
             echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_CS${INSERT_CORPUS_SIZE}_${timestamp}"
             ;;
-        query_bs|query_core)
+        QUERY_BS|QUERY_CORE)
             echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_QBS${QUERY_BATCH_CURRENT}_Q${QUERY_WORKLOAD}_${timestamp}"
             ;;
-        query_scaling)
+        QUERY_SCALING)
             local total_workers=$((NODES_CURRENT * WORKERS_PER_NODE_CURRENT))
             echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_TW${total_workers}_UCPW${INSERT_CLIENTS_CURRENT}_QCPW${QUERY_CLIENTS_PER_WORKER}_CORES$(weaviate_cores_label)_IBS${INSERT_BATCH_CURRENT}_QBS${QUERY_BATCH_CURRENT}_${timestamp}"
             ;;
@@ -153,7 +155,7 @@ engine_copy_payload() {
 
     local -a bins
     case "$TASK" in
-        query_scaling) bins=("$INSERT_BIN" "$QUERY_SCALING_BIN") ;;
+        QUERY_SCALING) bins=("$INSERT_BIN" "$QUERY_SCALING_BIN") ;;
         *)             bins=("$WEAVIATE_CLIENT_BINARY") ;;
     esac
 

@@ -16,8 +16,8 @@ Main HPC entrypoint:
 - Perf modes: `NONE`, `STAT`, `RECORD` (`PERF`)
 - Optional tracing via `TRACING=True`
 - Insert/query balancing used by the Go clients:
-  - `INSERT_BALANCE_STRATEGY`: `NONE`, `WORKER`
-  - `QUERY_BALANCE_STRATEGY`: `NONE`, `WORKER`
+  - `INSERT_BALANCE_STRATEGY`: `NO_BALANCE`, `WORKER_BALANCE`
+  - `QUERY_BALANCE_STRATEGY`: `NO_BALANCE`, `WORKER_BALANCE`
 - Insert path selection for `TASK=INSERT` and the preload phase of `TASK=QUERY`:
   - `INSERT_METHOD`: `traditional`, `bulk`
 - Bulk transport selection when `INSERT_METHOD=bulk` or `TASK=IMPORT`:

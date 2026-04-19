@@ -10,12 +10,12 @@ export NUM_PROXIES=1
 export INSERT_DATA_FILEPATH=~/Documents/research/SCVectorDB/milvus/utils/random.npy
 export INSERT_CORPUS_SIZE=1000
 export INSERT_BATCH_SIZE=1
-export INSERT_BALANCE_STRATEGY=NONE
+export INSERT_BALANCE_STRATEGY=NO_BALANCE
 
 export QUERY_DATA_FILEPATH=~/Documents/research/SCVectorDB/milvus/utils/random.npy
 export QUERY_CORPUS_SIZE=1000
 export QUERY_BATCH_SIZE=1
-export QUERY_BALANCE_STRATEGY=NONE
+export QUERY_BALANCE_STRATEGY=NO_BALANCE
 
 export RESULT_PATH=./mixed_logs
 

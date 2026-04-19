@@ -26,7 +26,7 @@ other engines).
 - `schema.sh`: Weaviate variable registry and defaults
 - `main.sh`: PBS launch script copied into every run directory. Boots the
   cluster, waits for all ranks to register, creates the collection with
-  schema consensus, then dispatches on `TASK` — `query_scaling` runs the
+  schema consensus, then dispatches on `TASK` — `QUERY_SCALING` runs the
   multi-phase insert → index quiescence → query pipeline; `insert`,
   `index`, `query_bs`, and `query_core` exec `go_client/$WEAVIATE_CLIENT_BINARY`
 - `weaviateSetup/launchWeaviateNode.sh`: per-rank launcher invoked by

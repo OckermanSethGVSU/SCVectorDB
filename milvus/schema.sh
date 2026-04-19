@@ -29,16 +29,11 @@ register_milvus_var "ETCD_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "S
 register_milvus_var "LOCAL_SHARED_STORAGE_PATH" "default" "" "" "Shared storage path used when MINIO_MODE=off"
 
 # Insert / import workload
-register_milvus_var "INSERT_CORPUS_SIZE" "default" "" "" "Total vectors available to preload; empty means use all rows in the file"
 register_milvus_var "INSERT_CLIENTS_PER_PROXY" "default" "8" "" "Insert clients per proxy"
 register_milvus_var "INSERT_METHOD" "default" "traditional" "traditional bulk" "Insert method"
 register_milvus_var "BULK_UPLOAD_TRANSPORT" "default" "mc" "mc remote" "Bulk upload transport"
 register_milvus_var "BULK_UPLOAD_STAGING_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "Bulk upload staging medium"
 register_milvus_var "IMPORT_PROCESSES" "default" "204" "" "Bulk import process count"
-register_milvus_var "INSERT_BALANCE_STRATEGY" "default" "WORKER" "NONE WORKER" "Insert balancing policy"
-register_milvus_var "INSERT_STREAMING" "default" "False" "True False" "Enable streaming insert behavior"
-register_milvus_var "INSERT_DATA_FILEPATH" "default" "" "" "Insert corpus file path"
-register_milvus_var "INSERT_BATCH_SIZE" "default" "512" "" "Insert batch size; single value or sweep list"
 register_milvus_var "INSERT_START_ID" "default" "" "" "Optional insert id offset override"
 register_milvus_var "BULK_IMPORT_PREPARE_ONLY" "default" "TRUE" "TRUE FALSE" "Prepare import request only"
 register_milvus_var "BULK_IMPORT_REQUEST_PATH" "default" "" "" "Path to bulk import request file"
@@ -56,7 +51,7 @@ register_milvus_var "FLUSH_BEFORE_INDEX" "default" "TRUE" "TRUE FALSE" "Flush co
 # Query workload
 register_milvus_var "QUERY_CORPUS_SIZE" "default" "" "" "Total queries to execute; empty means use all rows in the file"
 register_milvus_var "QUERY_CLIENTS_PER_PROXY" "default" "1" "" "Query clients per proxy"
-register_milvus_var "QUERY_BALANCE_STRATEGY" "default" "NONE" "NONE WORKER" "Query balancing policy"
+register_milvus_var "QUERY_BALANCE_STRATEGY" "default" "NO_BALANCE" "NO_BALANCE WORKER_BALANCE" "Query balancing policy"
 register_milvus_var "QUERY_STREAMING" "default" "False" "True False" "Enable query streaming behavior"
 register_milvus_var "QUERY_DATA_FILEPATH" "default" "" "" "Query vector file path"
 register_milvus_var "QUERY_BATCH_SIZE" "default" "32" "" "Query batch size; single value or sweep list"

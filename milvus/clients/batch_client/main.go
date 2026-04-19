@@ -781,12 +781,12 @@ func clientWorker(
 	var node *NodeInfo
 	var errN error
 
-	if bs == "NONE" {
+	if bs == "NONE" || bs == "NO_BALANCE" {
 		node, errN = getNodeByRank(registryPath("PROXY"), 0)
-	} else if bs == "WORKER" {
+	} else if bs == "WORKER" || bs == "WORKER_BALANCE" {
 		node, errN = getNodeByRank(registryPath("PROXY"), workerRank)
 	} else {
-		log.Fatalf("unknown balance_strategy=%q (expected NONE or WORKER)", balanceStrategy)
+		log.Fatalf("unknown balance_strategy=%q (expected NO_BALANCE or WORKER_BALANCE)", balanceStrategy)
 	}
 
 	if errN != nil {

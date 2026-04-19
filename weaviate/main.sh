@@ -31,7 +31,8 @@ fi
 # Repeating them here makes defaults explicit and the script runnable
 # from a checked-out run directory without the submit manager.
 # ---------------------------------------------------------------
-export TASK="${TASK:-query_scaling}"
+export TASK="${TASK:-QUERY_SCALING}"
+export TASK="${TASK^^}"
 export PLATFORM="${PLATFORM:-}"
 export myDIR="${myDIR:-}"
 
@@ -987,7 +988,7 @@ run_simple_task() {
 }
 
 case "${TASK}" in
-    query_scaling)
+    QUERY_SCALING)
         INGEST_START_EPOCH=$(epoch_now)
         INGEST_START_SECONDS=${SECONDS}
 
@@ -1009,7 +1010,7 @@ PY
         run_query_phase
         write_run_summary
         ;;
-    insert|index|query_bs|query_core)
+    INSERT|INDEX|QUERY_BS|QUERY_CORE)
         run_simple_task
         ;;
     *)

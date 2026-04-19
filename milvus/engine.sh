@@ -87,33 +87,19 @@ EOF
     fi
 
     case "$TASK" in
-        INSERT|IMPORT)
+        IMPORT)
             if [[ -z "${INSERT_DATA_FILEPATH:-}" ]]; then
                 echo "Milvus variable 'INSERT_DATA_FILEPATH' is required for TASK=$TASK." >&2
                 return 1
             fi
             ;;
-        INDEX)
-            if [[ -z "${RESTORE_DIR:-}" && -z "${INSERT_DATA_FILEPATH:-}" ]]; then
-                echo "Milvus variable 'INSERT_DATA_FILEPATH' is required for TASK=INDEX when RESTORE_DIR is not set." >&2
-                return 1
-            fi
-            ;;
         QUERY)
-            if [[ -z "${RESTORE_DIR:-}" && -z "${INSERT_DATA_FILEPATH:-}" ]]; then
-                echo "Milvus variable 'INSERT_DATA_FILEPATH' is required for TASK=QUERY when RESTORE_DIR is not set." >&2
-                return 1
-            fi
             if [[ -z "${QUERY_DATA_FILEPATH:-}" ]]; then
                 echo "Milvus variable 'QUERY_DATA_FILEPATH' is required for TASK=QUERY." >&2
                 return 1
             fi
             ;;
         MIXED)
-            if [[ -z "${RESTORE_DIR:-}" && -z "${INSERT_DATA_FILEPATH:-}" ]]; then
-                echo "Milvus variable 'INSERT_DATA_FILEPATH' is required for TASK=MIXED when RESTORE_DIR is not set." >&2
-                return 1
-            fi
             if [[ -z "${QUERY_DATA_FILEPATH:-}" ]]; then
                 echo "Milvus variable 'QUERY_DATA_FILEPATH' is required for TASK=MIXED." >&2
                 return 1
