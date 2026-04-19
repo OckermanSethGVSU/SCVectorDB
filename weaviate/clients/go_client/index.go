@@ -400,7 +400,7 @@ func main() {
 	className := flag.String("class", getenvDefault("CLASS_NAME", ""), "weaviate class name (required)")
 	distance := flag.String("distance", strings.ToLower(getenvDefault("DISTANCE_METRIC", "cosine")), "HNSW distance metric (cosine|dot|l2-squared)")
 	ef := flag.Int("ef", getenvIntDefault("QUERY_EF", 64), "HNSW ef (search) parameter")
-	batchSize := flag.Int("batch_size", getenvIntDefault("UPLOAD_BATCH_SIZE", 32768), "batch size")
+	batchSize := flag.Int("batch_size", getenvIntDefault("INSERT_BATCH_SIZE", 32768), "batch size")
 	waitSec := flag.Int("wait", 180, "seconds to wait for weaviate readiness")
 	overallSec := flag.Int("overall_sec", 25000, "overall time budget seconds")
 	rpcSec := flag.Int("rpc_sec", 1800, "per-batch RPC timeout seconds")
@@ -415,9 +415,9 @@ func main() {
 	}
 
 	base, hostPort, grpcHostPort := resolveBaseAndHosts()
-	dataFile := mustEnvStringAny("DATA_FILE", "DATA_FILEPATH")
+	dataFile := mustEnvStringAny("DATA_FILE", "INSERT_DATA_FILEPATH")
 	vecDim := mustEnvIntAny("VEC_DIM", "VECTOR_DIM")
-	measureVecs := mustEnvIntAny("MEASURE_VECS", "CORPUS_SIZE")
+	measureVecs := mustEnvIntAny("MEASURE_VECS", "INSERT_CORPUS_SIZE")
 	startRow := mustEnvIntAny("START_ROW")
 	dynamicThreshold := mustEnvIntAny("DYNAMIC_THRESHOLD")
 

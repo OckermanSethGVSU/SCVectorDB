@@ -91,9 +91,9 @@ engine_load_combo() {
 
     NODES_CURRENT="$NODES"
     WORKERS_PER_NODE_CURRENT="$WORKERS_PER_NODE"
-    UPLOAD_CLIENTS_CURRENT="$UPLOAD_CLIENTS_PER_WORKER"
+    INSERT_CLIENTS_CURRENT="$INSERT_CLIENTS_PER_WORKER"
     QUERY_BATCH_CURRENT="$QUERY_BATCH_SIZE"
-    UPLOAD_BATCH_CURRENT="$UPLOAD_BATCH_SIZE"
+    INSERT_BATCH_CURRENT="$INSERT_BATCH_SIZE"
     CORES_CURRENT="$CORES"
     TOTAL_NODES=$((NODES_CURRENT + 1))
     JOB_NAME="${TASK}_${NODES_CURRENT}n_${WORKERS_PER_NODE_CURRENT}w_$(weaviate_cores_label)c_q${QUERY_BATCH_CURRENT}"
@@ -112,17 +112,17 @@ engine_make_run_dir_name() {
 
     case "$TASK" in
         insert)
-            echo "${TASK}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_C${UPLOAD_CLIENTS_CURRENT}_uploadBS${UPLOAD_BATCH_CURRENT}_${timestamp}"
+            echo "${TASK}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_C${INSERT_CLIENTS_CURRENT}_uploadBS${INSERT_BATCH_CURRENT}_${timestamp}"
             ;;
         index)
-            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_CS${CORPUS_SIZE}_${timestamp}"
+            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_CS${INSERT_CORPUS_SIZE}_${timestamp}"
             ;;
         query_bs|query_core)
             echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_QBS${QUERY_BATCH_CURRENT}_Q${QUERY_WORKLOAD}_${timestamp}"
             ;;
         query_scaling)
             local total_workers=$((NODES_CURRENT * WORKERS_PER_NODE_CURRENT))
-            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_TW${total_workers}_UCPW${UPLOAD_CLIENTS_CURRENT}_QCPW${QUERY_CLIENTS_PER_WORKER}_CORES$(weaviate_cores_label)_IBS${UPLOAD_BATCH_CURRENT}_QBS${QUERY_BATCH_CURRENT}_${timestamp}"
+            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_TW${total_workers}_UCPW${INSERT_CLIENTS_CURRENT}_QCPW${QUERY_CLIENTS_PER_WORKER}_CORES$(weaviate_cores_label)_IBS${INSERT_BATCH_CURRENT}_QBS${QUERY_BATCH_CURRENT}_${timestamp}"
             ;;
     esac
 }
@@ -140,8 +140,8 @@ engine_emit_runtime_env() {
     printf 'WORKERS_PER_NODE=%s\n' "$WORKERS_PER_NODE_CURRENT"
     printf 'CORES=%s\n' "$CORES_CURRENT"
     printf 'QUERY_BATCH_SIZE=%s\n' "$QUERY_BATCH_CURRENT"
-    printf 'UPLOAD_BATCH_SIZE=%s\n' "$UPLOAD_BATCH_CURRENT"
-    printf 'UPLOAD_CLIENTS_PER_WORKER=%s\n' "$UPLOAD_CLIENTS_CURRENT"
+    printf 'INSERT_BATCH_SIZE=%s\n' "$INSERT_BATCH_CURRENT"
+    printf 'INSERT_CLIENTS_PER_WORKER=%s\n' "$INSERT_CLIENTS_CURRENT"
 }
 
 # Stage the Weaviate launch files, client binaries, and optional perf assets.

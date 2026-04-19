@@ -7,7 +7,7 @@
 #
 #   query_scaling                     — three-phase pipeline:
 #       1. insert  — drive go_client/$INSERT_BIN with
-#                    TOTAL*UPLOAD_CLIENTS_PER_WORKER clients
+#                    TOTAL*INSERT_CLIENTS_PER_WORKER clients
 #       2. index   — wait for object count, then index quiescence
 #                    (queue==0 && all shards READY for N stable polls)
 #       3. query   — fan out go_client/$QUERY_SCALING_BIN per client per worker
@@ -43,9 +43,9 @@ export CORES="${CORES}"
 export STORAGE_MEDIUM="${STORAGE_MEDIUM}"
 export USEPERF="${USEPERF}"
 export CLASS_NAME="${CLASS_NAME:-}"
-export DATA_FILEPATH="${DATA_FILEPATH:-}"
+export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:-}"
 export QUERY_FILEPATH="${QUERY_FILEPATH:-}"
-export CORPUS_SIZE="${CORPUS_SIZE:-0}"
+export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:-0}"
 
 export QUERY_WORKLOAD="${QUERY_WORKLOAD:-0}"
 export QUERY_TOPK="${QUERY_TOPK:-10}"
@@ -54,9 +54,9 @@ export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:-32}"
 export QUERY_CLIENTS_PER_WORKER="${QUERY_CLIENTS_PER_WORKER:-1}"
 export QUERY_CLIENT_MODE="${QUERY_CLIENT_MODE:-per_worker}"
 
-export UPLOAD_BATCH_SIZE="${UPLOAD_BATCH_SIZE:-128}"
-export UPLOAD_CLIENTS_PER_WORKER="${UPLOAD_CLIENTS_PER_WORKER:-4}"
-export UPLOAD_BALANCE_STRATEGY="${UPLOAD_BALANCE_STRATEGY:-WORKER_BALANCE}"
+export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:-128}"
+export INSERT_CLIENTS_PER_WORKER="${INSERT_CLIENTS_PER_WORKER:-4}"
+export INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:-WORKER_BALANCE}"
 
 # Operational defaults (not user-facing experiment dials — live here, not in schema.sh).
 export INSERT_MODE="${INSERT_MODE:-max}"
@@ -437,20 +437,20 @@ PY
 # ---------------------------------------------------------------
 
 run_insert_phase() {
-    local total_insert_clients=$((TOTAL * UPLOAD_CLIENTS_PER_WORKER))
-    echo "[INFO] Insert phase: TOTAL_INSERT_CLIENTS=${total_insert_clients} BATCH_SIZE=${UPLOAD_BATCH_SIZE}"
+    local total_insert_clients=$((TOTAL * INSERT_CLIENTS_PER_WORKER))
+    echo "[INFO] Insert phase: TOTAL_INSERT_CLIENTS=${total_insert_clients} BATCH_SIZE=${INSERT_BATCH_SIZE}"
     require_exe "./go_client/${INSERT_BIN}"
 
     local min_acceptable
-    min_acceptable=$(python3 -c "import math; print(math.ceil(${CORPUS_SIZE} * (1.0 - ${INSERT_TOLERANCE})))")
-    echo "[INFO] CORPUS_SIZE=${CORPUS_SIZE} min_acceptable=${min_acceptable} (tolerance=${INSERT_TOLERANCE})"
+    min_acceptable=$(python3 -c "import math; print(math.ceil(${INSERT_CORPUS_SIZE} * (1.0 - ${INSERT_TOLERANCE})))")
+    echo "[INFO] INSERT_CORPUS_SIZE=${INSERT_CORPUS_SIZE} min_acceptable=${min_acceptable} (tolerance=${INSERT_TOLERANCE})"
 
     emit_event "insert_start_0"
 
     env NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" \
-        UPLOAD_CLIENTS_PER_WORKER="${total_insert_clients}" \
-        UPLOAD_BATCH_SIZE="${UPLOAD_BATCH_SIZE}" \
-        UPLOAD_BALANCE_STRATEGY="${UPLOAD_BALANCE_STRATEGY}" \
+        INSERT_CLIENTS_PER_WORKER="${total_insert_clients}" \
+        INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE}" \
+        INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY}" \
         INSERT_MODE="${INSERT_MODE}" \
         INSERT_OPS_PER_SEC="${INSERT_OPS_PER_SEC}" \
         RPC_TIMEOUT="${RPC_TIMEOUT}" \
@@ -480,13 +480,13 @@ run_insert_phase() {
                 echo "[WARN] Go insert client exited with rc=${rc}"
                 local actual
                 actual=$(get_actual_object_count)
-                local missing=$(( CORPUS_SIZE - actual ))
-                echo "[INFO] actual=${actual} expected=${CORPUS_SIZE} missing=${missing}"
+                local missing=$(( INSERT_CORPUS_SIZE - actual ))
+                echo "[INFO] actual=${actual} expected=${INSERT_CORPUS_SIZE} missing=${missing}"
                 if [[ "${actual}" -ge "${min_acceptable}" ]]; then
-                    echo "[WARN] Insert had errors but ${actual}/${CORPUS_SIZE} objects landed (within tolerance). Continuing."
+                    echo "[WARN] Insert had errors but ${actual}/${INSERT_CORPUS_SIZE} objects landed (within tolerance). Continuing."
                     insert_done=true
                 else
-                    echo "Error: insert phase failed, only ${actual}/${CORPUS_SIZE} objects (exceeds tolerance)" >&2
+                    echo "Error: insert phase failed, only ${actual}/${INSERT_CORPUS_SIZE} objects (exceeds tolerance)" >&2
                     emit_event "insert_end_1"
                     exit "${rc}"
                 fi
@@ -497,8 +497,8 @@ run_insert_phase() {
         local actual
         actual=$(get_actual_object_count)
         if [[ "${actual}" -ge "${min_acceptable}" ]]; then
-            local missing=$(( CORPUS_SIZE - actual ))
-            echo "[INFO] Object count ${actual}/${CORPUS_SIZE} reached acceptable threshold (missing ${missing}). Killing Go client."
+            local missing=$(( INSERT_CORPUS_SIZE - actual ))
+            echo "[INFO] Object count ${actual}/${INSERT_CORPUS_SIZE} reached acceptable threshold (missing ${missing}). Killing Go client."
             kill "${GO_PID}" 2>/dev/null || true
             wait "${GO_PID}" 2>/dev/null || true
             insert_done=true
@@ -527,7 +527,7 @@ run_indexing_phase() {
     emit_event "index_start_2"
 
     echo "[INFO] Indexing phase: waiting for object count and index quiescence..."
-    wait_for_object_count "${CORPUS_SIZE}"
+    wait_for_object_count "${INSERT_CORPUS_SIZE}"
     wait_for_index_quiescence 5 10 43200
 
     local index_end_epoch
@@ -579,7 +579,7 @@ if os.path.exists("nodes_verbose.json"):
                 "vectorIndexingStatus": shard.get("vectorIndexingStatus", ""),
             })
 
-corpus_size = int(os.environ.get("CORPUS_SIZE", "0"))
+corpus_size = int(os.environ.get("INSERT_CORPUS_SIZE", "0"))
 index_time = {
     "class_name": os.environ.get("CLASS_NAME", ""),
     "corpus_size": corpus_size,
@@ -710,10 +710,10 @@ result_path = os.environ["RESULT_PATH"]
 summary = {
     "task": os.environ.get("TASK"),
     "class_name": os.environ.get("CLASS_NAME"),
-    "corpus_size": int(os.environ.get("CORPUS_SIZE", "0")),
+    "corpus_size": int(os.environ.get("INSERT_CORPUS_SIZE", "0")),
     "query_workload": int(os.environ.get("QUERY_WORKLOAD", "0")),
     "workers_total": int(os.environ.get("NODES", "0")) * int(os.environ.get("WORKERS_PER_NODE", "0")),
-    "upload_clients_per_worker": int(os.environ.get("UPLOAD_CLIENTS_PER_WORKER", "0")),
+    "upload_clients_per_worker": int(os.environ.get("INSERT_CLIENTS_PER_WORKER", "0")),
     "query_clients_per_worker": int(os.environ.get("QUERY_CLIENTS_PER_WORKER", "0")),
     "query_client_mode": os.environ.get("QUERY_CLIENT_MODE", "per_worker"),
     "query_batch_size": int(os.environ.get("QUERY_BATCH_SIZE", "0")),
@@ -824,11 +824,11 @@ echo "[INFO] TOTAL worker ranks=${TOTAL}"
 echo "[INFO] WORKERS_PER_NODE=${WORKERS_PER_NODE}"
 echo "[INFO] CORES=${CORES}"
 echo "[INFO] STORAGE_MEDIUM=${STORAGE_MEDIUM}"
-echo "[INFO] UPLOAD_CLIENTS_PER_WORKER=${UPLOAD_CLIENTS_PER_WORKER}"
-echo "[INFO] UPLOAD_BATCH_SIZE=${UPLOAD_BATCH_SIZE}"
+echo "[INFO] INSERT_CLIENTS_PER_WORKER=${INSERT_CLIENTS_PER_WORKER}"
+echo "[INFO] INSERT_BATCH_SIZE=${INSERT_BATCH_SIZE}"
 echo "[INFO] QUERY_CLIENTS_PER_WORKER=${QUERY_CLIENTS_PER_WORKER}"
 echo "[INFO] QUERY_CLIENT_MODE=${QUERY_CLIENT_MODE}"
-echo "[INFO] UPLOAD_BALANCE_STRATEGY=${UPLOAD_BALANCE_STRATEGY}"
+echo "[INFO] INSERT_BALANCE_STRATEGY=${INSERT_BALANCE_STRATEGY}"
 echo "[INFO] INSERT_MODE=${INSERT_MODE}"
 echo "[INFO] INSERT_MAX_RETRIES=${INSERT_MAX_RETRIES}"
 echo "[INFO] INSERT_RETRY_BACKOFF_MS=${INSERT_RETRY_BACKOFF_MS}"
@@ -969,9 +969,9 @@ export WEAVIATE_HTTP_ADDR="${WEAVIATE_SCHEME}://${WEAVIATE_HOST}"
 export WORKER_IP="${WEAVIATE_IP}"
 export REST_PORT="${WEAVIATE_HTTP_PORT}"
 export GRPC_PORT="${WEAVIATE_GRPC_PORT}"
-export DATA_FILE="${DATA_FILEPATH}"
+export DATA_FILE="${INSERT_DATA_FILEPATH}"
 export VEC_DIM="${VECTOR_DIM}"
-export MEASURE_VECS="${CORPUS_SIZE}"
+export MEASURE_VECS="${INSERT_CORPUS_SIZE}"
 
 echo "[INFO] WEAVIATE_HTTP_ADDR=${WEAVIATE_HTTP_ADDR}"
 

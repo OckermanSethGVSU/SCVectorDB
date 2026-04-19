@@ -415,14 +415,14 @@ func parseFlags() (config, error) {
 	flag.StringVar(&cfg.weaviateHost, "weaviate-host", getenvDefault("WEAVIATE_HOST", "127.0.0.1:8080"), "Weaviate host:port")
 	flag.StringVar(&cfg.className, "class-name", getenvDefault("CLASS_NAME", ""), "Weaviate class name (required)")
 
-	flag.StringVar(&cfg.dataFile, "data-file", getenvDefault("DATA_FILEPATH", ""), "Path to .npy embeddings")
+	flag.StringVar(&cfg.dataFile, "data-file", getenvDefault("INSERT_DATA_FILEPATH", ""), "Path to .npy embeddings")
 	flag.StringVar(&cfg.outputDir, "output-dir", getenvDefault("RESULT_PATH", "."), "Output directory")
 	flag.StringVar(&cfg.registryPath, "registry-path", getenvDefault("WORKER_REGISTRY_PATH", "ip_registry.txt"), "Worker registry path")
-	flag.IntVar(&cfg.corpusSize, "corpus-size", getenvIntDefault("CORPUS_SIZE", 0), "How many rows to insert, 0=all from start-row")
+	flag.IntVar(&cfg.corpusSize, "corpus-size", getenvIntDefault("INSERT_CORPUS_SIZE", 0), "How many rows to insert, 0=all from start-row")
 	flag.IntVar(&cfg.startRow, "start-row", getenvIntDefault("START_ROW", 0), "Starting row offset in .npy")
 	flag.IntVar(&cfg.vectorDim, "vector-dim", getenvIntDefault("VECTOR_DIM", 0), "Expected vector dimension")
-	flag.IntVar(&cfg.batchSize, "batch-size", getenvIntDefault("UPLOAD_BATCH_SIZE", 512), "Insert batch size")
-	flag.IntVar(&cfg.insertClients, "insert-clients", getenvIntDefault("UPLOAD_CLIENTS_PER_WORKER", 1), "Number of insert clients (total)")
+	flag.IntVar(&cfg.batchSize, "batch-size", getenvIntDefault("INSERT_BATCH_SIZE", 512), "Insert batch size")
+	flag.IntVar(&cfg.insertClients, "insert-clients", getenvIntDefault("INSERT_CLIENTS_PER_WORKER", 1), "Number of insert clients (total)")
 
 	flag.StringVar(&mode, "mode", getenvDefault("INSERT_MODE", "max"), "Insert mode: max or rate")
 	flag.Float64Var(&cfg.insertOpsPerSec, "insert-ops-per-sec", getenvFloatDefault("INSERT_OPS_PER_SEC", 0), "Global insert ops/sec")
@@ -442,7 +442,7 @@ func parseFlags() (config, error) {
 	flag.BoolVar(&cfg.resetClass, "reset-class", getenvBoolDefault("RESET_CLASS", true), "Delete/recreate class")
 	flag.Int64Var(&cfg.dynamicThreshold, "dynamic-threshold", getenvInt64Default("DYNAMIC_THRESHOLD", 10000), "Dynamic index threshold")
 	flag.StringVar(&cfg.distanceMetric, "distance-metric", getenvDefault("DISTANCE_METRIC", "cosine"), "Distance metric (cosine|dot|l2-squared)")
-	flag.StringVar(&balance, "balance-strategy", getenvDefault("UPLOAD_BALANCE_STRATEGY", "WORKER_BALANCE"), "NONE | PER_CLIENT | WORKER_BALANCE")
+	flag.StringVar(&balance, "balance-strategy", getenvDefault("INSERT_BALANCE_STRATEGY", "WORKER_BALANCE"), "NONE | PER_CLIENT | WORKER_BALANCE")
 
 	// FIX: explicit shard count, default 0 = derive from worker registry
 	flag.IntVar(&cfg.shardCount, "shard-count", getenvIntDefault("SHARD_COUNT", 0), "Desired shard count (0=auto from registry)")
@@ -453,7 +453,7 @@ func parseFlags() (config, error) {
 	cfg.balance = normalizeBalance(balance)
 
 	if cfg.dataFile == "" {
-		return config{}, errors.New("DATA_FILEPATH / --data-file is required")
+		return config{}, errors.New("INSERT_DATA_FILEPATH / --data-file is required")
 	}
 	if cfg.className == "" {
 		return config{}, errors.New("CLASS_NAME / --class-name is required")

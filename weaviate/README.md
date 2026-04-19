@@ -107,11 +107,11 @@ Engine/dataset knobs:
 
 Insert / index workload:
 
-- `DATA_FILEPATH`
-- `CORPUS_SIZE`
-- `UPLOAD_BATCH_SIZE`
-- `UPLOAD_CLIENTS_PER_WORKER`
-- `UPLOAD_BALANCE_STRATEGY`: `NO_BALANCE` or `WORKER_BALANCE`
+- `INSERT_DATA_FILEPATH`
+- `INSERT_CORPUS_SIZE`
+- `INSERT_BATCH_SIZE`
+- `INSERT_CLIENTS_PER_WORKER`
+- `INSERT_BALANCE_STRATEGY`: `NO_BALANCE` or `WORKER_BALANCE`
 
 Query workload:
 
@@ -152,15 +152,15 @@ consensus, and then dispatches:
 
 - `insert`, `index`, `query_bs`, `query_core` — exec
   `go_client/$WEAVIATE_CLIENT_BINARY` with the proxy env scrubbed; the
-  binary reads `WEAVIATE_HOST`, `CLASS_NAME`, `DATA_FILEPATH`, etc. from
+  binary reads `WEAVIATE_HOST`, `CLASS_NAME`, `INSERT_DATA_FILEPATH`, etc. from
   env to decide its behavior.
 - `query_scaling` — multi-phase pipeline:
   1. Creates the collection and waits for schema consensus across all
      workers (`create_class_with_consensus`, `wait_for_schema_consensus`).
   2. Runs the insert phase: `go_client/$INSERT_BIN` with
-     `NODES * WORKERS_PER_NODE * UPLOAD_CLIENTS_PER_WORKER` total clients,
+     `NODES * WORKERS_PER_NODE * INSERT_CLIENTS_PER_WORKER` total clients,
      terminated when observed object count crosses
-     `CORPUS_SIZE * (1 - INSERT_TOLERANCE)`.
+     `INSERT_CORPUS_SIZE * (1 - INSERT_TOLERANCE)`.
   3. Waits for index quiescence — `vectorQueueLength == 0` and every
      shard's `vectorIndexingStatus == READY` for a configurable number of
      consecutive polls (`wait_for_object_count`, `wait_for_index_quiescence`,
@@ -254,7 +254,7 @@ small allocation after only updating dataset paths and allocation settings.
   adds a 60 s Raft stabilization pause before creating the class.
 - `query_scaling` tolerates a small insert shortfall (`INSERT_TOLERANCE=1e-5`
   by default). If the Go client dies but the observed object count is
-  within tolerance of `CORPUS_SIZE`, the run continues; otherwise it exits
+  within tolerance of `INSERT_CORPUS_SIZE`, the run continues; otherwise it exits
   non-zero and emits the `insert_end_1` event.
 - Runtime knobs that are implementation details of the `query_scaling`
   pipeline — `RPC_TIMEOUT`, `DRAIN_*`, `INSERT_MAX_RETRIES`,
