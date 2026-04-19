@@ -263,6 +263,34 @@ copy_optional_engine_items() {
     copy_engine_items_internal "$src_root" "$dest_root" "true" "$@"
 }
 
+prompt_remove_path() {
+    local target_path="$1"
+    local reply=""
+    local prompt_tty="/dev/tty"
+
+    while true; do
+        if [[ ! -r "$prompt_tty" || ! -w "$prompt_tty" ]]; then
+            echo "No interactive terminal available; leaving '$target_path' in place." >&2
+            return 1
+        fi
+
+        read -r -p "Remove '$target_path'? [y/n] " reply < "$prompt_tty" > "$prompt_tty"
+        case "${reply,,}" in
+            y|yes)
+                rm -rf -- "$target_path"
+                return 0
+                ;;
+            n|no)
+                echo "Leaving '$target_path' unchanged." >&2
+                return 1
+                ;;
+            *)
+                echo "Please answer y or n." >&2
+                ;;
+        esac
+    done
+}
+
 emit_platform_filesystems() {
     if [[ "$PLATFORM" == "POLARIS" ]]; then
         echo "#PBS -l filesystems=home:eagle"

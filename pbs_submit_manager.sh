@@ -110,19 +110,31 @@ while IFS= read -r combo; do
     RUN_DIR_PATH="$ENGINE_DIR/$RUN_DIR_NAME"
     mkdir -p "$RUN_DIR_PATH"
 
-    engine_copy_payload "$RUN_DIR_PATH"
+    if ! engine_copy_payload "$RUN_DIR_PATH"; then
+        echo "Run directory setup failed for: $RUN_DIR_PATH" >&2
+        prompt_remove_path "$RUN_DIR_PATH" || true
+        exit 1
+    fi
 
     MAIN_SCRIPT_RELATIVE_PATH="$(engine_main_script_path)"
-    write_submit_script \
+    if ! write_submit_script \
         "$RUN_DIR_PATH/submit.sh" \
         "$RUN_DIR_NAME" \
         "$ENGINE_DIR" \
-        "$MAIN_SCRIPT_RELATIVE_PATH"
+        "$MAIN_SCRIPT_RELATIVE_PATH"; then
+        echo "Submit script generation failed for: $RUN_DIR_PATH" >&2
+        prompt_remove_path "$RUN_DIR_PATH" || true
+        exit 1
+    fi
 
-    write_run_config_snapshot \
+    if ! write_run_config_snapshot \
         "$RUN_DIR_PATH/run_config.env" \
         "$ENGINE_BASENAME" \
-        "$RUN_DIR_NAME"
+        "$RUN_DIR_NAME"; then
+        echo "Run config generation failed for: $RUN_DIR_PATH" >&2
+        prompt_remove_path "$RUN_DIR_PATH" || true
+        exit 1
+    fi
 
     maybe_submit_job "$RUN_DIR_PATH" "submit.sh" "${RUN_MODE:-PBS}"
 done < <(engine_iterate_matrix)
