@@ -17,6 +17,11 @@ elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load frameworks
 fi
 
+set -a
+source ./run_config.env
+set +a
+
+
 if [[ -n "${ENV_PATH:-}" ]]; then
     echo "Activating Python environment: $ENV_PATH"
     source "$ENV_PATH/bin/activate"

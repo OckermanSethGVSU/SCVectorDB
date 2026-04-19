@@ -305,10 +305,6 @@ write_submit_script() {
     {
         write_pbs_header
         cat <<'EOF'
-set -a
-source ./run_config.env
-set +a
-
 EOF
         echo
         cat "$engine_dir/$main_script"
