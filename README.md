@@ -62,7 +62,7 @@ The common variables below are defined in `common/schema.sh` and apply across al
 
 | Variable | Default | Required When | Allowed Values | Purpose |
 |---|---|---|---|---|
-| `TASK` | none | always | any | Experiment task |
+| `TASK` | none | always | LAUNCH, INSERT, INDEX, QUERY, MIXED | Experiment task |
 | `RUN_MODE` | `PBS` | optional | `PBS`, `LOCAL`, `local` | Run under PBS or use a local harness |
 
 ### Platform and Allocation
