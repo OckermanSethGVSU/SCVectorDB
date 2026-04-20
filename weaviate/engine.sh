@@ -104,7 +104,15 @@ engine_load_combo() {
 
 # Validate a loaded combo after sweep expansion.
 engine_validate_combo() {
-    schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
+    schema_validate_current_values "$ENGINE_SCHEMA_PREFIX" || return 1
+
+    # The shared INSERT_DATA_FILEPATH rule only fires for TASK=INSERT|INDEX|QUERY|MIXED,
+    # so QUERY_SCALING (which runs its own insert phase) falls through the shared
+    # check. Require the insert corpus path explicitly here.
+    if [[ "${TASK^^}" == "QUERY_SCALING" && -z "${INSERT_DATA_FILEPATH:-}" ]]; then
+        echo "Weaviate variable 'INSERT_DATA_FILEPATH' is required when TASK=QUERY_SCALING." >&2
+        return 1
+    fi
 }
 
 # Build the Weaviate run directory name for the loaded combo.

@@ -35,3 +35,13 @@ register_weaviate_var "DATASET_LABEL" "default" "pes2o" "" "Dataset tag used in 
 register_weaviate_var "CLASS_NAME" "default" "PES2OEF64" "" "Weaviate class/collection name"
 register_weaviate_var "INSERT_BIN" "default" "insert_streaming" "" "Client binary for the insert phase of query_scaling"
 register_weaviate_var "QUERY_SCALING_BIN" "default" "query" "" "Client binary for the query phase of query_scaling"
+
+# Weaviate-specific overrides for variables declared in common/schema.sh.
+# TASK: restrict to the task set Weaviate actually implements. Uppercase matches
+# the shared INSERT_* conditional rules and the engine_load_combo normalization.
+WEAVIATE_CHOICES[TASK]="INSERT INDEX QUERY_BS QUERY_CORE QUERY_SCALING"
+
+# Reinstate Weaviate-specific insert defaults that used to live in this file
+# before insert variables were promoted to common/schema.sh.
+WEAVIATE_DEFAULT[INSERT_CORPUS_SIZE]="10000000"
+WEAVIATE_DEFAULT[INSERT_BATCH_SIZE]="2048"
