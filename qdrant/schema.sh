@@ -20,9 +20,7 @@ register_qdrant_var "REBALANCE_TOPOLOGY" "default" "False" "True False" "Whether
 # Engine/runtime selection
 register_qdrant_var "QDRANT_SIF" "conditional" "" "" "Qdrant SIF filename under qdrant/sifs, for example qdrant_latest.sif" "RUN_MODE=PBS"
 register_qdrant_var "QDRANT_EXECUTABLE" "default" "" "" "Optional local Qdrant executable override copied from qdrantBuilds; empty uses the executable inside the SIF"
-register_qdrant_var "LOG_LEVEL" "default" "ERROR" "" "Qdrant log level passed to generated node configs"
-
-register_qdrant_var "COLLECTION_NAME" "default" "defaultCollection" "" "Collection name"
+register_qdrant_var "LOG_LEVEL" "default" "ERROR" "ERROR DEBUG INFO" "Qdrant log level passed to generated node configs"
 
 # Index
 register_qdrant_var "HNSW_M" "default" "16" "" "HNSW M parameter"

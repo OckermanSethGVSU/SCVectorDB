@@ -805,7 +805,7 @@ func clientWorker(
 		log.Fatalf("failed to create Milvus client: %v", errN)
 	}
 
-	collectionName := "standalone" // TODO
+	collectionName := os.Getenv("COLLECTION_NAME")
 	vectorField := "vector"        // TODO
 	idField := "id"
 	localLastID := int64(endIdx - 1)

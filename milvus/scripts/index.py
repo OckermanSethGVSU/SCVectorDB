@@ -105,19 +105,32 @@ def read_ip_from_file(path):
         return f.read().strip()
 
 
-# MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
+def resolve_target_index_rows() -> int:
+    explicit = (os.getenv("INSERT_CORPUS_SIZE") or "").strip()
+    if explicit:
+        return int(explicit)
+
+    path = (os.getenv("INSERT_DATA_FILEPATH") or "").strip()
+    if not path:
+        raise RuntimeError("INSERT_CORPUS_SIZE or INSERT_DATA_FILEPATH is required for indexing")
+
+    arr = np.load(os.path.expanduser(path), mmap_mode="r")
+    if arr.ndim != 2:
+        raise RuntimeError(f"expected 2D npy input at {path}, got shape {arr.shape}")
+    return int(arr.shape[0])
+
+
 MILVUS_HOST = read_ip_from_file(runtime_state_path("worker.ip"))
 MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "20001"))
-CORPUS_SIZE = int(os.getenv("CORPUS_SIZE", "10000000"))
-
 MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "root:Milvus")
+collection_name = os.getenv("COLLECTION_NAME").strip()
+FLUSH_BEFORE_INDEX = os.getenv("FLUSH_BEFORE_INDEX", "TRUE").strip().lower() == "true"
+INIT_FLAT_INDEX = os.getenv("INIT_FLAT_INDEX", "TRUE").strip().lower() == "true"
+distance_metric = os.environ["DISTANCE_METRIC"].strip().lower()
+GPU_INDEX = os.environ["GPU_INDEX"].strip().lower() == "true"
 
 
 client = MilvusClient(f"http://{MILVUS_HOST}:{MILVUS_GRPC_PORT}", token=MILVUS_TOKEN)
-collection_name = "standalone"
-
-INIT_FLAT_INDEX = os.getenv("INIT_FLAT_INDEX", "TRUE").strip().lower() == "true"
-FLUSH_BEFORE_INDEX = os.getenv("FLUSH_BEFORE_INDEX", "TRUE").strip().lower() == "true"
 
 if INIT_FLAT_INDEX:
     print(
@@ -148,7 +161,6 @@ else:
 
 
 index_params = client.prepare_index_params()
-distance_metric = os.environ["DISTANCE_METRIC"].strip().lower()
 match distance_metric:
     case "dot" | "ip" | "innerproduct":
         metric = "IP"
@@ -159,7 +171,6 @@ match distance_metric:
     case _:
         raise ValueError(f"Unknown distance metric: {distance_metric}")
 
-GPU_INDEX = os.environ["GPU_INDEX"].strip().lower() == "true"
 if GPU_INDEX:
     index_params.add_index(
     field_name="vector",      
@@ -192,23 +203,6 @@ else:
 t1 = time.time()
 resp = create_index_with_fallback_poll(client, collection_name, index_params)
 t2 = time.time()
-
-
-
-def resolve_target_index_rows() -> int:
-    explicit = (os.getenv("INSERT_CORPUS_SIZE") or "").strip()
-    if explicit:
-        return int(explicit)
-
-    path = (os.getenv("INSERT_DATA_FILEPATH") or "").strip()
-    if not path:
-        raise RuntimeError("INSERT_CORPUS_SIZE or INSERT_DATA_FILEPATH is required for indexing")
-
-    arr = np.load(os.path.expanduser(path), mmap_mode="r")
-    if arr.ndim != 2:
-        raise RuntimeError(f"expected 2D npy input at {path}, got shape {arr.shape}")
-    return int(arr.shape[0])
-
 
 INDEX_PENDING_STABLE_SECONDS = float(os.getenv("INDEX_PENDING_STABLE_SECONDS", "60"))
 TARGET_INDEX_ROWS = resolve_target_index_rows()
@@ -300,10 +294,10 @@ with open("index_time.txt", "w", encoding="utf-8") as f:
 
 
 load_start = time.time()
-client.load_collection("standalone")
+client.load_collection(collection_name)
 
 while True:
-    state = client.get_load_state("standalone")
+    state = client.get_load_state(collection_name)
     if str(state['state']) == "Loaded":
         break
     time.sleep(0.5)
@@ -321,7 +315,7 @@ while True:
     time.sleep(5)
 
 
-res = client.describe_collection(collection_name="standalone")
+res = client.describe_collection(collection_name=collection_name)
 index_status = client.describe_index(collection_name, 'vector')
 
 print("**************Collection State After Indexing***************",flush=True)

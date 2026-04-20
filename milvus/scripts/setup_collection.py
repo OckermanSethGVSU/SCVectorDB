@@ -46,7 +46,8 @@ MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "20001"))
 MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "root:Milvus")
 
 client = MilvusClient(f"http://{MILVUS_HOST}:{MILVUS_GRPC_PORT}", token=MILVUS_TOKEN)
-collection_name = "standalone"
+
+collection_name = os.getenv("COLLECTION_NAME").strip()
 
 if client.has_collection(collection_name):
     client.drop_collection(collection_name)
@@ -85,16 +86,14 @@ match distance_metric:
         raise ValueError(f"Unknown distance metric: {distance_metric}")
 
 
-init_flat_index = os.getenv("INIT_FLAT_INDEX", "TRUE").strip().lower() == "true"
+init_flat_index = os.getenv("INIT_FLAT_INDEX").strip().lower() == "true"
 
 
-shards_env = os.getenv("SHARDS", "").strip()
-if shards_env:
-    shard_count = int(shards_env)
-    if shard_count <= 0:
-        raise ValueError(f"SHARDS must be a positive integer, got {shards_env!r}")
-else:
-    shard_count = get_streaming_count()
+shards_env = os.getenv("SHARDS").strip()
+shard_count = int(shards_env)
+if shard_count <= 0:
+    raise ValueError(f"SHARDS must be a positive integer, got {shards_env!r}")
+
 
 create_collection_kwargs = {
     "collection_name": collection_name,

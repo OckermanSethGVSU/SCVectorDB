@@ -20,7 +20,7 @@ register_milvus_var "PERF" "default" "NONE" "NONE STAT TRACE" "Performance colle
 register_milvus_var "PERF_EVENTS" "default" "topdown-be-bound,topdown-mem-bound,topdown-retiring,topdown-fe-bound,topdown-bad-spec" "" "Comma-separated perf stat events"
 register_milvus_var "WAL" "default" "woodpecker" "" "Milvus WAL mode"
 register_milvus_var "GPU_INDEX" "default" "False" "True False" "Whether to use GPU indexing"
-register_milvus_var "TRACING" "default" "False" "True False" "Enable tracing collection"
+register_milvus_var "TRACING" "default" "False" "True False" "Enable tracing"
 register_milvus_var "DEBUG" "default" "False" "True False" "Enable debug behavior"
 register_milvus_var "AUTO_CLEANUP" "default" "False" "True False true false TRUE FALSE" "Enable end-of-run storage cleanup"
 register_milvus_var "MINIO_MODE" "default" "off" "off single stripped" "MinIO topology"
@@ -63,7 +63,6 @@ register_milvus_var "MIXED_INSERT_CLIENTS_PER_PROXY" "default" "1" "" "Mixed ins
 register_milvus_var "MIXED_DATA_FILEPATH" "default" "" "" "Mixed workload data file"
 
 # Optional request tuning
-register_milvus_var "COLLECTION_NAME" "default" "" "" "Optional collection override"
 register_milvus_var "VECTOR_FIELD" "default" "" "" "Optional vector field override"
 register_milvus_var "ID_FIELD" "default" "" "" "Optional id field override"
 register_milvus_var "TOP_K" "default" "" "" "Optional top-k override"

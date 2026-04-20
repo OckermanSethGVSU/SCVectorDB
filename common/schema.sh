@@ -22,6 +22,7 @@ register_common_var "ENV_PATH" "default" "" "" "Python environment path"
 register_common_var "ALLOW_SYSTEM_PYTHON" "default" "False" "True False" "Allow PBS runs to use the already-loaded Python environment when ENV_PATH is empty"
 
 # Collection Variables
+register_common_var "COLLECTION_NAME" "default" "default_collection" "" "Optional collection override"
 register_common_var "VECTOR_DIM" "required" "" "" "Vector dimension"
 register_common_var "DISTANCE_METRIC" "default" "COSINE" "IP COSINE L2" "Distance metric"
 
