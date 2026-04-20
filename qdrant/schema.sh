@@ -13,32 +13,29 @@
 # Every registered variable may be set to one value or a space-separated sweep list.
 # The order in this file controls the order shown in `--help --engine qdrant`.
 
-# Allocation and storage layout
+# Worker/shard layout
 register_qdrant_var "WORKERS_PER_NODE" "default" "1" "" "Worker processes launched per compute node"
+register_qdrant_var "REBALANCE_TOPOLOGY" "default" "False" "True False" "Whether configure_collection should actively move shards to the target topology"
 
 # Engine/runtime selection
 register_qdrant_var "QDRANT_SIF" "conditional" "" "" "Qdrant SIF filename under qdrant/sifs, for example qdrant_latest.sif" "RUN_MODE=PBS"
-register_qdrant_var "QDRANT_EXECUTABLE" "default" "" "qdrant qdrantInsertTracing qdrantQueryTrace" "Optional local Qdrant executable override copied from qdrantBuilds; empty uses the executable inside the SIF"
+register_qdrant_var "QDRANT_EXECUTABLE" "default" "" "" "Optional local Qdrant executable override copied from qdrantBuilds; empty uses the executable inside the SIF"
 register_qdrant_var "LOG_LEVEL" "default" "ERROR" "" "Qdrant log level passed to generated node configs"
-register_qdrant_var "VECTOR_DIM" "default" "200" "" "Vector dimension"
-register_qdrant_var "DISTANCE_METRIC" "default" "IP" "IP COSINE L2" "Distance metric"
-register_qdrant_var "GPU_INDEX" "default" "False" "True False" "Whether to use GPU indexing"
+
+register_qdrant_var "COLLECTION_NAME" "default" "defaultCollection" "" "Collection name"
+
+# Index
 register_qdrant_var "HNSW_M" "default" "16" "" "HNSW M parameter"
 register_qdrant_var "HNSW_EF_CONSTRUCTION" "default" "100" "" "HNSW efConstruction parameter"
-register_qdrant_var "REBALANCE_TOPOLOGY" "default" "False" "True False" "Whether configure_collection should actively move shards to the target topology"
+register_qdrant_var "GPU_INDEX" "default" "False" "True False" "Whether to use GPU indexing"
 
 
 # Insert / preload workload
 register_qdrant_var "INSERT_CLIENTS_PER_WORKER" "default" "1" "" "Insert clients per worker"
 
 # Query workload
-register_qdrant_var "QUERY_DATA_FILEPATH" "conditional" "" "" "Query vector file path" "TASK=QUERY|MIXED"
-register_qdrant_var "QUERY_CORPUS_SIZE" "default" "" "" "Total queries to execute; empty means use all rows in the file"
-register_qdrant_var "QUERY_BATCH_SIZE" "default" "32" "" "Query batch size; single value or sweep list"
-register_qdrant_var "QUERY_CLIENTS_PER_WORKER" "conditional" "1" "" "Query clients per worker" "TASK=QUERY|MIXED"
 register_qdrant_var "TOTAL_QUERY_CLIENTS" "conditional" "1" "" "Total query clients across the run" "TASK=QUERY|MIXED"
-register_qdrant_var "QUERY_BALANCE_STRATEGY" "conditional" "NO_BALANCE" "NO_BALANCE WORKER_BALANCE" "Query balancing policy" "TASK=QUERY|MIXED"
-register_qdrant_var "QUERY_STREAMING" "default" "" "True False" "Enable query streaming behavior"
+register_qdrant_var "QUERY_CLIENTS_PER_WORKER" "conditional" "1" "" "Query clients per worker" "TASK=QUERY|MIXED"
 register_qdrant_var "HNSW_EF_SEARCH" "default" "64" "" "Query efSearch override"
 
 # Mixed workload controls
@@ -57,7 +54,6 @@ register_qdrant_var "INSERT_BATCH_MAX" "default" "" "" "Optional randomized inse
 register_qdrant_var "QUERY_BATCH_MIN" "default" "" "" "Optional randomized query batch lower bound"
 register_qdrant_var "QUERY_BATCH_MAX" "default" "" "" "Optional randomized query batch upper bound"
 
-register_qdrant_var "COLLECTION_NAME" "default" "" "" "Optional collection override"
 register_qdrant_var "TOP_K" "default" "" "" "Optional top-k override"
 register_qdrant_var "RPC_TIMEOUT" "default" "" "" "Optional RPC timeout override"
 

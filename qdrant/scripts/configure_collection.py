@@ -107,9 +107,9 @@ def load_topology(file_path, use_localhost=True):
     return nodes
 
 nodes = load_topology("ip_registry.txt", use_localhost=False)
-collection_name = "singleShard"
 run_mode = os.getenv("RUN_MODE", "PBS").strip().lower()
 rebalance_topology = is_truthy(os.getenv("REBALANCE_TOPOLOGY"))
+collection_name = os.environ["COLLECTION_NAME"].strip()
 
 
 
@@ -118,10 +118,6 @@ total_shards = len(nodes)
 # put one shard per node
 for i in range(len(nodes)):
     topology[f"{nodes[i][0]}:{nodes[i][1]}"] = [(i % total_shards)]
-
-
-
-# time.sleep(60)
 
 vector_dim = int(os.environ["VECTOR_DIM"])
 hnsw_m = env_int("HNSW_M", 16)

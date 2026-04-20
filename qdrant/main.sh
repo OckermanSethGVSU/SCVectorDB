@@ -29,6 +29,7 @@ if [[ -n "${ENV_PATH:-}" ]]; then
 fi
 
 cd "$RUN_DIR"
+
 # if we are running mixed, set the insert offset
 if [[ "$TASK" == "MIXED" && -z "${INSERT_START_ID:-}" ]]; then
     if [[ -n "${RESTORE_DIR:-}" ]]; then

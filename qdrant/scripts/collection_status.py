@@ -35,7 +35,7 @@ def load_ip_from_file(filepath: str) -> tuple[str, int]:
 
 def main() -> int:
     registry_path = os.getenv("QDRANT_REGISTRY_PATH", "ip_registry.txt")
-    collection_name = os.getenv("COLLECTION_NAME", "singleShard")
+    collection_name = os.environ["COLLECTION_NAME"].strip()
     expected_corpus_size = int(os.getenv("EXPECTED_CORPUS_SIZE", "10000000"))
     health_timeout_sec = int(os.getenv("HEALTH_TIMEOUT_SEC", "60"))
     poll_timeout_sec = int(os.getenv("STATUS_TIMEOUT_SEC", str(60 * 10)))

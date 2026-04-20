@@ -73,7 +73,7 @@ Query mode:
 ### Environment variables consumed
 
 - `RESULT_PATH`
-- `COLLECTION_NAME` (optional, defaults to `singleShard`)
+- `COLLECTION_NAME` (provided by schema; defaults to `singleShard`)
 - `QDRANT_URL` (optional)
 - `QDRANT_REGISTRY_PATH` (optional, defaults to `ip_registry.txt`)
 - `N_WORKERS` (required only for `WORKER_BALANCE` or when deriving client totals from `*_CLIENTS_PER_WORKER`)

@@ -564,7 +564,7 @@ fn parse_config() -> Result<Config> {
 
     Ok(Config {
         collection_name: value_with_args(&args, "collection", &["COLLECTION_NAME"])
-            .unwrap_or_else(|| "singleShard".to_string()),
+            .context("missing COLLECTION_NAME")?,
         insert_start_id: optional_u64(value_with_args(
             &args,
             "insert-start-id",

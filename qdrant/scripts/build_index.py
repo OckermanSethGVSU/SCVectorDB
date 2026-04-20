@@ -5,7 +5,7 @@ import numpy as np
 from qdrant_client import QdrantClient, AsyncQdrantClient, models
 from qdrant_client.models import SearchRequest, QueryRequest
 
-collection_name = "singleShard"
+collection_name = os.environ["COLLECTION_NAME"].strip()
 
 # ---------- Helpers ----------
 def file_line_count(path):
@@ -62,7 +62,7 @@ def main():
     rest_port = file_port - 2      # e.g., if file has 6335 -> rest=6333
     grpc_port = rest_port + 1      # -> grpc=6334
 
-    collection_name = "singleShard"
+    collection_name = os.environ["COLLECTION_NAME"].strip()
     hnsw_m = env_int("HNSW_M", 16)
     ef_construction = env_int("HNSW_EF_CONSTRUCTION", 100)
 

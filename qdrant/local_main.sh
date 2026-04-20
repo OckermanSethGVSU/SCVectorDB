@@ -20,7 +20,7 @@ export INSERT_OPS_PER_SEC="${INSERT_OPS_PER_SEC:-}"
 export QUERY_MODE="${QUERY_MODE:-}"
 export QUERY_OPS_PER_SEC="${QUERY_OPS_PER_SEC:-}"
 export INSERT_START_ID="${INSERT_START_ID:-0}"
-export COLLECTION_NAME="${COLLECTION_NAME:-singleShard}"
+export COLLECTION_NAME
 export TOP_K="${TOP_K:-}"
 export QUERY_EF_SEARCH="${QUERY_EF_SEARCH:-}"
 export TOTAL_QUERY_CLIENTS="${TOTAL_QUERY_CLIENTS:-}"
@@ -180,7 +180,7 @@ setup_local_collection() {
 }
 
 standard_collection_name() {
-    printf '%s\n' "singleShard"
+    printf '%s\n' "${COLLECTION_NAME:?COLLECTION_NAME is required}"
 }
 
 prepare_cluster_state() {
@@ -200,7 +200,7 @@ prepare_cluster_state() {
 run_insert() {
     echo "Running local insert workflow..."
     export ACTIVE_TASK="INSERT"
-    COLLECTION_NAME="$(standard_collection_name)"
+    export COLLECTION_NAME="$(standard_collection_name)"
     INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:-}"
     INSERT_CLIENTS_PER_WORKER="${INSERT_CLIENTS_PER_WORKER:-1}"
     INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:-1}"
@@ -212,7 +212,7 @@ run_insert() {
 run_query() {
     echo "Running local query workflow..."
     export ACTIVE_TASK="QUERY"
-    COLLECTION_NAME="$(standard_collection_name)"
+    export COLLECTION_NAME="$(standard_collection_name)"
     QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:-}"
     QUERY_CLIENTS_PER_WORKER="${QUERY_CLIENTS_PER_WORKER:-1}"
     TOTAL_QUERY_CLIENTS="${TOTAL_QUERY_CLIENTS:-}"
@@ -243,7 +243,7 @@ run_mixed() {
     INSERT_START_ID="${INSERT_START_ID:-0}"
     QUERY_MODE="${QUERY_MODE:-}"
     QUERY_OPS_PER_SEC="${QUERY_OPS_PER_SEC:-}"
-    COLLECTION_NAME="${COLLECTION_NAME:-singleShard}"
+    export COLLECTION_NAME
     TOP_K="${TOP_K:-}"
     QUERY_EF_SEARCH="${QUERY_EF_SEARCH:-}"
     RPC_TIMEOUT="${RPC_TIMEOUT:-}"

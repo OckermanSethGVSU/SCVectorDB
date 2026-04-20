@@ -47,6 +47,7 @@ impl ActiveTask {
 #[derive(Clone, Debug)]
 struct RunConfig {
     active_task: ActiveTask,
+    collection_name: String,
     n_workers: usize,
     total_clients: usize,
     explicit_total_clients: bool,
@@ -249,6 +250,8 @@ fn load_config() -> anyhow::Result<RunConfig> {
     // Build the run configuration entirely from environment variables so the binary can be
     // launched from the existing shell scripts without changing its CLI.
     let active_task = infer_active_task()?;
+    let collection_name =
+        first_env(&["COLLECTION_NAME"]).context("missing COLLECTION_NAME")?;
     let n_workers = parse_required_usize(&["N_WORKERS"], "N_WORKERS")?;
 
     let clients_key = format!("{}_CLIENTS_PER_WORKER", active_task.as_env_prefix());
@@ -324,6 +327,7 @@ fn load_config() -> anyhow::Result<RunConfig> {
 
     Ok(RunConfig {
         active_task,
+        collection_name,
         n_workers,
         total_clients,
         explicit_total_clients,
@@ -689,8 +693,7 @@ async fn worker(
     let client = Qdrant::from_url(&qdrant_url)
         .timeout(Duration::from_secs(9999))
         .build()?;
-    let collection_name = "singleShard";
-    client.collection_info(collection_name).await?;
+    client.collection_info(&config.collection_name).await?;
 
     println!(
         "Rank {} task={} connecting to Qdrant at {} with offset {}-{}, worker target {}, and batch size {}",
@@ -713,7 +716,7 @@ async fn worker(
                     run_upload(
                         rank,
                         &client,
-                        collection_name,
+                        &config.collection_name,
                         view,
                         start_slice,
                         n_rows_total,
@@ -729,7 +732,7 @@ async fn worker(
                     run_query(
                         rank,
                         &client,
-                        collection_name,
+                        &config.collection_name,
                         view,
                         start_slice,
                         config.batch_size,
@@ -752,7 +755,7 @@ async fn worker(
                     run_upload_streaming(
                         rank,
                         &client,
-                        collection_name,
+                        &config.collection_name,
                         meta,
                         &config.npy_path,
                         start_slice,
@@ -770,7 +773,7 @@ async fn worker(
                     run_query_streaming(
                         rank,
                         &client,
-                        collection_name,
+                        &config.collection_name,
                         meta,
                         &config.npy_path,
                         start_slice,
