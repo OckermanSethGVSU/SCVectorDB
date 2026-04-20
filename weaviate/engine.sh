@@ -120,7 +120,7 @@ engine_make_run_dir_name() {
             echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_CS${INSERT_CORPUS_SIZE}_${timestamp}"
             ;;
         QUERY_BS|QUERY_CORE)
-            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_QBS${QUERY_BATCH_CURRENT}_Q${QUERY_WORKLOAD}_${timestamp}"
+            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_QBS${QUERY_BATCH_CURRENT}_Q${QUERY_CORPUS_SIZE}_${timestamp}"
             ;;
         QUERY_SCALING)
             local total_workers=$((NODES_CURRENT * WORKERS_PER_NODE_CURRENT))

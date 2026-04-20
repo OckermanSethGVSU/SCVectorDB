@@ -45,10 +45,10 @@ export STORAGE_MEDIUM="${STORAGE_MEDIUM}"
 export USEPERF="${USEPERF}"
 export CLASS_NAME="${CLASS_NAME:-}"
 export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:-}"
-export QUERY_FILEPATH="${QUERY_FILEPATH:-}"
+export QUERY_DATA_FILEPATH="${QUERY_DATA_FILEPATH:-}"
 export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:-0}"
 
-export QUERY_WORKLOAD="${QUERY_WORKLOAD:-0}"
+export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:-0}"
 export QUERY_TOPK="${QUERY_TOPK:-10}"
 export QUERY_EF="${QUERY_EF:-64}"
 export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:-32}"
@@ -208,7 +208,7 @@ create_class_with_consensus() {
     local class_json
     class_json=$(python3 - <<PY
 import json
-metric_map = {"COSINE": "cosine", "DOT": "dot", "L2": "l2-squared", "cosine": "cosine", "dot": "dot"}
+metric_map = {"IP": "dot", "COSINE": "cosine", "DOT": "dot", "L2": "l2-squared", "ip": "dot", "cosine": "cosine", "dot": "dot"}
 distance = metric_map.get("${DISTANCE_METRIC}", "cosine")
 class_def = {
     "class": "${CLASS_NAME}",
@@ -619,7 +619,7 @@ run_query_phase() {
     else
         total_query_clients=$((TOTAL * qcpw))
     fi
-    echo "[INFO] Query phase: ${total_query_clients} clients (mode=${QUERY_CLIENT_MODE}), workload=${QUERY_WORKLOAD}"
+    echo "[INFO] Query phase: ${total_query_clients} clients (mode=${QUERY_CLIENT_MODE}), workload=${QUERY_CORPUS_SIZE}"
 
     wait_for_all_nodes_healthy 120
 
@@ -648,7 +648,7 @@ run_query_phase() {
             local client_dir="${RESULT_PATH}/query_client_${cid}"
             mkdir -p "${client_dir}"
 
-            read -r q_start q_size <<< "$(partition_range "${QUERY_WORKLOAD}" "${total_query_clients}" "${cid}")"
+            read -r q_start q_size <<< "$(partition_range "${QUERY_CORPUS_SIZE}" "${total_query_clients}" "${cid}")"
 
             if [[ "${q_size}" -le 0 ]]; then
                 client_id=$((client_id + 1))
@@ -660,9 +660,9 @@ run_query_phase() {
                 export WEAVIATE_SCHEME="http"
                 export WEAVIATE_HOST="${ip}:${http_port}"
                 export START_ROW=$(( ${START_ROW:-0} + q_start ))
-                export QUERY_WORKLOAD="${q_size}"
+                export QUERY_CORPUS_SIZE="${q_size}"
                 export RESULT_PATH="${client_dir}"
-                export QUERY_FILEPATH="${QUERY_FILEPATH}"
+                export QUERY_DATA_FILEPATH="${QUERY_DATA_FILEPATH}"
                 export CLASS_NAME="${CLASS_NAME}"
                 export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE}"
                 export QUERY_TOPK="${QUERY_TOPK}"
@@ -712,7 +712,7 @@ summary = {
     "task": os.environ.get("TASK"),
     "class_name": os.environ.get("CLASS_NAME"),
     "corpus_size": int(os.environ.get("INSERT_CORPUS_SIZE", "0")),
-    "query_workload": int(os.environ.get("QUERY_WORKLOAD", "0")),
+    "query_workload": int(os.environ.get("QUERY_CORPUS_SIZE", "0")),
     "workers_total": int(os.environ.get("NODES", "0")) * int(os.environ.get("WORKERS_PER_NODE", "0")),
     "upload_clients_per_worker": int(os.environ.get("INSERT_CLIENTS_PER_WORKER", "0")),
     "query_clients_per_worker": int(os.environ.get("QUERY_CLIENTS_PER_WORKER", "0")),
@@ -971,6 +971,7 @@ export WORKER_IP="${WEAVIATE_IP}"
 export REST_PORT="${WEAVIATE_HTTP_PORT}"
 export GRPC_PORT="${WEAVIATE_GRPC_PORT}"
 export DATA_FILE="${INSERT_DATA_FILEPATH}"
+export QUERY_FILE="${QUERY_DATA_FILEPATH}"
 export VEC_DIM="${VECTOR_DIM}"
 export MEASURE_VECS="${INSERT_CORPUS_SIZE}"
 

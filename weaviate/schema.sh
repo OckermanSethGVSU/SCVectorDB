@@ -19,17 +19,12 @@ register_weaviate_var "WORKERS_PER_NODE" "default" "4" "" "Worker processes laun
 # Engine/runtime selection
 register_weaviate_var "USEPERF" "default" "false" "true false" "Enable perf collection"
 register_weaviate_var "WEAVIATE_CLIENT_BINARY" "default" "insert_streaming" "" "Client binary copied into the run directory for insert/index/query_bs/query_core tasks"
-register_weaviate_var "VECTOR_DIM" "default" "2560" "" "Vector dimension"
-register_weaviate_var "DISTANCE_METRIC" "default" "COSINE" "COSINE DOT L2" "Distance metric"
 register_weaviate_var "GPU_INDEX" "default" "false" "true false" "Whether to use GPU indexing"
 
 # Insert / index workload
 register_weaviate_var "INSERT_CLIENTS_PER_WORKER" "default" "16" "" "Insert clients per worker"
 
 # Query workload
-register_weaviate_var "QUERY_FILEPATH" "default" "/lus/flare/projects/AuroraGPT/sockerman/pes2oEmbeddings/queries.npy" "" "Query vector file path"
-register_weaviate_var "QUERY_WORKLOAD" "default" "100000" "" "Number of queries to execute"
-register_weaviate_var "QUERY_BATCH_SIZE" "default" "256" "" "Query batch size"
 register_weaviate_var "QUERY_TOPK" "default" "10" "" "Query top-k"
 register_weaviate_var "QUERY_EF" "default" "64" "" "Query ef parameter"
 register_weaviate_var "QUERY_CLIENTS_PER_WORKER" "default" "1" "" "Query clients per worker rank"

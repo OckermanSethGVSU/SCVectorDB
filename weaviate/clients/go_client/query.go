@@ -286,10 +286,10 @@ func parseFlags() (config, error) {
 	flag.StringVar(&cfg.weaviateHost, "weaviate-host", getenvDefault("WEAVIATE_HOST", ""), "Weaviate host:port")
 	flag.StringVar(&cfg.className, "class-name", getenvDefault("CLASS_NAME", ""), "Weaviate class name")
 
-	flag.StringVar(&cfg.queryFile, "query-file", getenvDefault("QUERY_FILEPATH", ""), "Path to query .npy")
+	flag.StringVar(&cfg.queryFile, "query-file", getenvDefault("QUERY_DATA_FILEPATH", ""), "Path to query .npy")
 	flag.StringVar(&cfg.outputDir, "output-dir", getenvDefault("RESULT_PATH", "."), "Output directory")
 	flag.IntVar(&cfg.startRow, "start-row", getenvIntDefault("START_ROW", 0), "Starting query row")
-	flag.IntVar(&cfg.queryWorkload, "query-workload", getenvIntDefault("QUERY_WORKLOAD", 0), "Queries to run")
+	flag.IntVar(&cfg.queryWorkload, "query-workload", getenvIntDefault("QUERY_CORPUS_SIZE", 0), "Queries to run")
 	flag.IntVar(&cfg.vectorDim, "vector-dim", getenvIntDefault("VECTOR_DIM", 0), "Expected vector dimension")
 	flag.IntVar(&cfg.queryBatchSize, "query-batch-size", getenvIntDefault("QUERY_BATCH_SIZE", 32), "Batch size")
 	flag.IntVar(&cfg.topK, "top-k", getenvIntDefault("QUERY_TOPK", 10), "Top-k")
@@ -308,7 +308,7 @@ func parseFlags() (config, error) {
 		return config{}, errors.New("CLASS_NAME / --class-name is required")
 	}
 	if cfg.queryFile == "" {
-		return config{}, errors.New("QUERY_FILEPATH / --query-file is required")
+		return config{}, errors.New("QUERY_DATA_FILEPATH / --query-file is required")
 	}
 	if cfg.queryBatchSize <= 0 {
 		return config{}, errors.New("QUERY_BATCH_SIZE must be positive")

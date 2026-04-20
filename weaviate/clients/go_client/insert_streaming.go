@@ -945,6 +945,8 @@ func normalizeBalance(v string) balanceStrategy {
 
 func normalizeDistance(v string) string {
 	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "ip":
+		return "dot"
 	case "cosine":
 		return "cosine"
 	case "dot":
