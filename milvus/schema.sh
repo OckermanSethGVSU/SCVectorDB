@@ -41,20 +41,13 @@ register_milvus_var "BULK_IMPORT_LOAD_REQUEST" "default" "" "" "Bulk import requ
 register_milvus_var "BULK_IMPORT_SUMMARY_PATH" "default" "" "" "Path to bulk import summary output"
 
 # Collection / index settings
-register_milvus_var "VECTOR_DIM" "default" "2560" "" "Vector dimension"
-register_milvus_var "DISTANCE_METRIC" "default" "IP" "IP COSINE L2" "Distance metric"
 register_milvus_var "INIT_FLAT_INDEX" "default" "FALSE" "TRUE FALSE" "Whether to initialize a flat index"
 register_milvus_var "SHARDS" "default" "1" "" "Collection shard count"
 register_milvus_var "DML_CHANNELS" "default" "16" "" "DML channel count"
 register_milvus_var "FLUSH_BEFORE_INDEX" "default" "TRUE" "TRUE FALSE" "Flush collection before indexing"
 
 # Query workload
-register_milvus_var "QUERY_CORPUS_SIZE" "default" "" "" "Total queries to execute; empty means use all rows in the file"
 register_milvus_var "QUERY_CLIENTS_PER_PROXY" "default" "1" "" "Query clients per proxy"
-register_milvus_var "QUERY_BALANCE_STRATEGY" "default" "NO_BALANCE" "NO_BALANCE WORKER_BALANCE" "Query balancing policy"
-register_milvus_var "QUERY_STREAMING" "default" "False" "True False" "Enable query streaming behavior"
-register_milvus_var "QUERY_DATA_FILEPATH" "default" "" "" "Query vector file path"
-register_milvus_var "QUERY_BATCH_SIZE" "default" "32" "" "Query batch size; single value or sweep list"
 
 # Mixed workload controls
 register_milvus_var "INSERT_MODE" "default" "max" "max rate MAX RATE" "Mixed insert pacing mode"

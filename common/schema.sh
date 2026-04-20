@@ -13,6 +13,7 @@ register_common_var "NODES" "conditional" "" "" "Compute-node count to allocate 
 register_common_var "CORES" "default" "" "" "CPU cores assigned per worker rank; empty disables explicit CPU binding"
 register_common_var "STORAGE_MEDIUM" "default" "memory" "memory DAOS lustre SSD" "Storage medium for engine data"
 
+
 # PBS variables
 register_common_var "ACCOUNT" "conditional" "" "" "PBS project/account to charge for the run" "RUN_MODE=PBS"
 register_common_var "WALLTIME" "conditional" "" "" "PBS walltime" "RUN_MODE=PBS"
@@ -20,10 +21,24 @@ register_common_var "QUEUE" "conditional" "" "" "PBS queue name" "RUN_MODE=PBS"
 register_common_var "ENV_PATH" "default" "" "" "Python environment path"
 register_common_var "ALLOW_SYSTEM_PYTHON" "default" "False" "True False" "Allow PBS runs to use the already-loaded Python environment when ENV_PATH is empty"
 
+# Collection Variables
+register_common_var "VECTOR_DIM" "required" "" "" "Vector dimension"
+register_common_var "DISTANCE_METRIC" "default" "COSINE" "IP COSINE L2" "Distance metric"
+
+
 # INSERT variables
 register_common_var "INSERT_DATA_FILEPATH" "conditional" "" "" "Insert corpus file path" "TASK=INSERT|INDEX|QUERY|MIXED"
 register_common_var "INSERT_CORPUS_SIZE" "default" "" "" "Total vectors available to preload; empty means use all rows in the file"
 register_common_var "INSERT_BATCH_SIZE" "default" "512" "" "Insert batch size; single value or sweep list"
 register_common_var "INSERT_BALANCE_STRATEGY" "default" "WORKER_BALANCE" "NO_BALANCE WORKER_BALANCE" "Insert balancing policy"
 register_common_var "INSERT_STREAMING" "default" "False" "True False" "Enable streaming insert behavior"
+
+# QUERY variables
+register_common_var "QUERY_DATA_FILEPATH" "conditional" "" "" "Query vector file path" "TASK=QUERY|MIXED"
+register_common_var "QUERY_CORPUS_SIZE" "default" "" "" "Total queries to execute; empty means use all rows in the file"
+register_common_var "QUERY_BATCH_SIZE" "default" "32" "" "Query batch size; single value or sweep list"
+register_common_var "QUERY_BALANCE_STRATEGY" "conditional" "NO_BALANCE" "NO_BALANCE WORKER_BALANCE" "Query balancing policy" "TASK=QUERY|MIXED"
+register_common_var "QUERY_STREAMING" "default" "False" "True False" "Enable query streaming behavior"
+
+# Path variables
 register_common_var "BASE_DIR" "default" "" "" "Base directory containing generated run directories; auto-filled by the submit manager when empty"
