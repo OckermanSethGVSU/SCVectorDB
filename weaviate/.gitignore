@@ -1,10 +1,10 @@
 # timestamped run outputs
 results_*/
-query_scaling_*/
-query_core_*/
-query_bs_*/
-insert_*_N*_NP*_*/
-index_*_N*_NP*_CORES*/
+QUERY_SCALING_*/
+QUERY_CORE_*/
+QUERY_BS_*/
+INSERT_*_N*_NP*_*/
+INDEX_*_N*_NP*_CORES*/
 fig6_*/
 fig7_*/
 table5_*/

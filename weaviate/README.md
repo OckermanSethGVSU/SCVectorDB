@@ -27,8 +27,8 @@ other engines).
 - `main.sh`: PBS launch script copied into every run directory. Boots the
   cluster, waits for all ranks to register, creates the collection with
   schema consensus, then dispatches on `TASK` — `QUERY_SCALING` runs the
-  multi-phase insert → index quiescence → query pipeline; `insert`,
-  `index`, `query_bs`, and `query_core` exec `go_client/$WEAVIATE_CLIENT_BINARY`
+  multi-phase insert → index quiescence → query pipeline; `INSERT`,
+  `INDEX`, `QUERY_BS`, and `QUERY_CORE` exec `go_client/$WEAVIATE_CLIENT_BINARY`
 - `weaviateSetup/launchWeaviateNode.sh`: per-rank launcher invoked by
   `main.sh` via `mpirun`; pulls the container directly from
   `docker://semitechnologies/weaviate:1.36.2`
@@ -52,7 +52,7 @@ Generated Weaviate runs typically contain:
   file reads from)
 - `launchWeaviateNode.sh`, `mapping.py` — per-rank launcher and IP mapper
 - `main.sh` — unified launch script (every TASK dispatches through it)
-- `go_client/` — staged client binaries for this run (`query_scaling` stages
+- `go_client/` — staged client binaries for this run (`QUERY_SCALING` stages
   `$INSERT_BIN` and `$QUERY_SCALING_BIN`; every other TASK stages
   `$WEAVIATE_CLIENT_BINARY`), all `chmod +x`-ed
 - `perf/` — per-rank readiness flags (`weaviate_running<rank>.txt`) and any
@@ -66,7 +66,7 @@ Generated Weaviate runs typically contain:
   `/v1/nodes?output=verbose` used during the indexing-quiescence gate
 - `insert_summary.json`, `index_time.json`, `query_client_*/query_summary.json`,
   `query_scaling_summary.json` — per-phase and aggregate metrics for
-  `query_scaling` runs
+  `QUERY_SCALING` runs
 - `output.log` — combined stdout/stderr tee of the main script
 
 `run_config.env` is the canonical resolved run config for the generated run
@@ -76,11 +76,14 @@ directory; `engine_emit_runtime_env()` in `engine.sh` is what writes it.
 
 Required for runs:
 
-- `TASK`
+- `TASK`: one of `INSERT`, `INDEX`, `QUERY_BS`, `QUERY_CORE`, `QUERY_SCALING`
+  (case-sensitive; lowercase values are rejected at validation time)
 - `PLATFORM`
 - `WALLTIME`
 - `QUEUE`
 - `ACCOUNT`
+- `INSERT_DATA_FILEPATH`: required for `INSERT`, `INDEX`, and `QUERY_SCALING`
+  (the last runs its own insert phase)
 
 Common runtime knobs:
 
@@ -109,8 +112,8 @@ Engine/dataset knobs:
 Insert / index workload:
 
 - `INSERT_DATA_FILEPATH`
-- `INSERT_CORPUS_SIZE`
-- `INSERT_BATCH_SIZE`
+- `INSERT_CORPUS_SIZE` (Weaviate default: `10000000`)
+- `INSERT_BATCH_SIZE` (Weaviate default: `2048`)
 - `INSERT_CLIENTS_PER_WORKER`
 - `INSERT_BALANCE_STRATEGY`: `NO_BALANCE` or `WORKER_BALANCE`
 
@@ -130,11 +133,11 @@ Query workload:
 Per-task client binaries:
 
 - `WEAVIATE_CLIENT_BINARY`: client binary staged under `go_client/` for the
-  `insert` / `index` / `query_bs` / `query_core` tasks (default:
+  `INSERT` / `INDEX` / `QUERY_BS` / `QUERY_CORE` tasks (default:
   `insert_streaming`)
-- `INSERT_BIN`: binary used for the insert phase of `query_scaling`
+- `INSERT_BIN`: binary used for the insert phase of `QUERY_SCALING`
   (default: `insert_streaming`)
-- `QUERY_SCALING_BIN`: binary used for the query phase of `query_scaling`
+- `QUERY_SCALING_BIN`: binary used for the query phase of `QUERY_SCALING`
   (default: `query`)
 
 Use:
@@ -151,11 +154,11 @@ All tasks flow through the same `main.sh`, which brings up the cluster,
 waits for every rank's readiness flag, creates the collection with schema
 consensus, and then dispatches:
 
-- `insert`, `index`, `query_bs`, `query_core` — exec
+- `INSERT`, `INDEX`, `QUERY_BS`, `QUERY_CORE` — exec
   `go_client/$WEAVIATE_CLIENT_BINARY` with the proxy env scrubbed; the
   binary reads `WEAVIATE_HOST`, `CLASS_NAME`, `INSERT_DATA_FILEPATH`, etc. from
   env to decide its behavior.
-- `query_scaling` — multi-phase pipeline:
+- `QUERY_SCALING` — multi-phase pipeline:
   1. Creates the collection and waits for schema consensus across all
      workers (`create_class_with_consensus`, `wait_for_schema_consensus`).
   2. Runs the insert phase: `go_client/$INSERT_BIN` with
@@ -171,10 +174,10 @@ consensus, and then dispatches:
      `query_summary.json`, and aggregates into `query_scaling_summary.json`.
 
 Run-directory names are built by `engine_make_run_dir_name()` in
-`engine.sh`. For `query_scaling` the layout is:
+`engine.sh`. For `QUERY_SCALING` the layout is:
 
 ```
-query_scaling_${DATASET_LABEL}_${STORAGE_MEDIUM}_N<nodes>_NP<workers_per_node>\
+QUERY_SCALING_${DATASET_LABEL}_${STORAGE_MEDIUM}_N<nodes>_NP<workers_per_node>\
   _TW<total_workers>_UCPW<upload_clients>_QCPW<query_clients>_CORES<cores>\
   _IBS<upload_batch>_QBS<query_batch>_<timestamp>
 ```
@@ -223,7 +226,7 @@ compiled artifacts are git-ignored
 framework then stages the selected binaries into the run directory under
 `go_client/`.
 
-For `query_scaling`, `engine_copy_payload()` requires that both
+For `QUERY_SCALING`, `engine_copy_payload()` requires that both
 `clients/go_client/$INSERT_BIN` and `clients/go_client/$QUERY_SCALING_BIN`
 already exist on disk — if they do not, it prints the exact `build.sh`
 invocation needed and refuses to stage the run directory.
@@ -256,11 +259,11 @@ small allocation after only updating dataset paths and allocation settings.
   `engine_load_combo()`.
 - `main.sh` waits for every rank's readiness flag under `./perf/`, then
   adds a 60 s Raft stabilization pause before creating the class.
-- `query_scaling` tolerates a small insert shortfall (`INSERT_TOLERANCE=1e-5`
+- `QUERY_SCALING` tolerates a small insert shortfall (`INSERT_TOLERANCE=1e-5`
   by default). If the Go client dies but the observed object count is
   within tolerance of `INSERT_CORPUS_SIZE`, the run continues; otherwise it exits
   non-zero and emits the `insert_end_1` event.
-- Runtime knobs that are implementation details of the `query_scaling`
+- Runtime knobs that are implementation details of the `QUERY_SCALING`
   pipeline — `RPC_TIMEOUT`, `DRAIN_*`, `INSERT_MAX_RETRIES`,
   `SCHEMA_CONSENSUS_TIMEOUT`, `DAOS_POOL`, `DAOS_CONT`, etc. — live as env
   defaults inside `main.sh`, not in the schema. Override them with
