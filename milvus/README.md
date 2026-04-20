@@ -8,12 +8,11 @@ Main HPC entrypoint:
 
 ## Current workflow capabilities
 
-- Task modes: `INSERT`, `INDEX`, `QUERY` (`TASK`)
+- Task modes: `INSERT`, `INDEX`, `QUERY`, `IMPORT`, `MIXED` (`TASK`)
 - Deployment modes: `STANDALONE`, `DISTRIBUTED` (`MODE`)
 - Platforms: `POLARIS`, `AURORA` (`PLATFORM`)
 - Storage media: `memory`, `DAOS`, `lustre`, `SSD` (`STORAGE_MEDIUM`)
-- WAL settings: `woodpecker`, `default` (`WAL`)
-- Perf modes: `NONE`, `STAT`, `RECORD` (`PERF`)
+- Perf modes: `NONE`, `STAT`, `TRACE` (`PERF`)
 - Optional tracing via `TRACING=True`
 - Insert/query balancing used by the Go clients:
   - `INSERT_BALANCE_STRATEGY`: `NO_BALANCE`, `WORKER_BALANCE`
@@ -28,6 +27,7 @@ Main HPC entrypoint:
   - `MINIO_MODE`: `single`, `stripped`
   - `MINIO_MEDIUM`: `DAOS`, `lustre`
   - `ETCD_MODE`: `single`, `replicated`
+  - `ETCD_MEDIUM`
   - `STREAMING_NODES`, `STREAMING_NODES_PER_CN`
   - `NUM_PROXIES`, `NUM_PROXIES_PER_CN`
   - `DML_CHANNELS`
@@ -66,7 +66,8 @@ Main HPC entrypoint:
      - `lustre`: `<run>/bulk-import-stage`
      - `SSD`: `/local/scratch/<run>/bulk-import-stage`
 7. If `TASK=INDEX`, run `scripts/index.py`.
-8. Write timing outputs, summaries, optional tracing data, and worker logs.
+8. If `TASK=MIXED`, run the Go mixed client and then generate a merged timeline with `qdrant/scripts/mixed_timeline.py`.
+9. Write timing outputs, summaries, optional tracing data, and worker logs.
 
 ## Important submit variables (`pbs_submit_manager.sh`)
 
@@ -81,16 +82,23 @@ Main HPC entrypoint:
 
 - `TASK`
 - `MODE`
+- `RUN_MODE`
 - `STORAGE_MEDIUM`
 - `PERF`
 - `TRACING`
 - `WAL`
 - `GPU_INDEX`
 - `DEBUG`
+- `AUTO_CLEANUP`
 - `BASE_DIR`
 - `ENV_PATH`
+- `ALLOW_SYSTEM_PYTHON`
 - `MILVUS_BUILD_DIR`
 - `MILVUS_CONFIG_DIR`
+- `MINIO_MODE`
+- `MINIO_MEDIUM`
+- `ETCD_MODE`
+- `ETCD_MEDIUM`
 - Insert path:
   - `INSERT_DATA_FILEPATH`
   - `INSERT_CORPUS_SIZE`
@@ -111,12 +119,23 @@ Main HPC entrypoint:
   - `DISTANCE_METRIC`
   - `RESTORE_DIR`
   - `EXPECTED_CORPUS_SIZE`
+- Mixed path:
+  - `MIXED_DATA_FILEPATH`
+  - `MIXED_CORPUS_SIZE`
+  - `MIXED_RESULT_PATH`
+  - `MIXED_INSERT_CLIENTS_PER_PROXY`
+  - `MIXED_QUERY_CLIENTS_PER_PROXY`
+  - `MIXED_INSERT_BATCH_SIZE`
+  - `MIXED_QUERY_BATCH_SIZE`
+  - `INSERT_MODE`, `QUERY_MODE`
+  - `INSERT_OPS_PER_SEC`, `QUERY_OPS_PER_SEC`
+  - `INSERT_START_ID`
 - Distributed-only controls listed above
 
 ### Scheduler variables
 
 - `WALLTIME`
-- `queue`
+- `QUEUE`
 
 ## Go clients
 
@@ -133,6 +152,18 @@ Important binaries/scripts:
 - `clients/batch_client/batch_client`: insert/query client used by `main.sh`
 - `clients/mixed/mixed`: mixed insert/query runner
 - `clients/run_mixed.sh`: example mixed-runner invocation
+
+## Local mode
+
+`local_main.sh` provides a container-backed local harness for:
+
+- `TASK=INSERT`
+- `TASK=INDEX`
+- `TASK=QUERY`
+- `TASK=IMPORT`
+- `TASK=MIXED`
+
+Local mode uses Docker or Podman plus local config generation under the run directory. `TASK=IMPORT` requires `MINIO_MODE=single` locally.
 
 ## Mixed runner notes
 
@@ -171,6 +202,7 @@ Per run directory you will typically see:
 Examples of required non-committed artifacts include:
 
 - Milvus/etcd/MinIO Apptainer images
+- `milvus/sifs/` payloads expected by PBS staging
 - built Go clients
 - Python environments referenced by `ENV_PATH`
 - dataset `.npy` files and optional restore directories

@@ -25,7 +25,6 @@ From the repo root:
 - `sampleConfigs/`: example config files for the unified submit manager
 - `clients/batch_client/`: insert/query Rust client
 - `clients/mixed/`: mixed insert/query Rust client
-- `clients/query/`, `clients/upload/`: older specialized clients kept in the tree
 - `runtime_state/`: optional seed runtime-state payload copied into generated runs
 
 ## Important run artifacts
@@ -93,6 +92,9 @@ Mixed-workload knobs:
 
 - `MIXED_DATA_FILEPATH`
 - `MIXED_CORPUS_SIZE`
+- `MIXED_INSERT_CLIENTS_PER_WORKER`
+- `MIXED_QUERY_CLIENTS_PER_WORKER`
+- `RESULT_PATH`
 - `INSERT_MODE`
 - `QUERY_MODE`
 - `INSERT_OPS_PER_SEC`
@@ -176,6 +178,8 @@ Local runs use:
 - a local Qdrant container
 - `clients/batch_client`
 - optional `clients/mixed`
+
+Supported local tasks are `INSERT`, `QUERY`, `MIXED`, and `LAUNCH`.
 
 Typical workflow:
 

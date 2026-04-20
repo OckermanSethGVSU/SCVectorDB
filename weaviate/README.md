@@ -99,8 +99,9 @@ Common runtime knobs:
 Engine/dataset knobs:
 
 - `VECTOR_DIM`
-- `DISTANCE_METRIC`: `COSINE`, `DOT`, or `L2`; mapped to Weaviate's
-  `cosine`/`dot`/`l2-squared` by `create_class_with_consensus`
+- `DISTANCE_METRIC`: `IP`, `COSINE`, or `L2`; `IP` is translated to
+  Weaviate's `dot`, and the others map to `cosine`/`l2-squared` in
+  `create_class_with_consensus`
 - `GPU_INDEX`: forwarded to the Go client (defaults to `false`)
 - `DATASET_LABEL`: dataset tag used in run-directory names
 - `CLASS_NAME`: Weaviate class/collection name
@@ -115,8 +116,8 @@ Insert / index workload:
 
 Query workload:
 
-- `QUERY_FILEPATH`
-- `QUERY_WORKLOAD`
+- `QUERY_DATA_FILEPATH`
+- `QUERY_CORPUS_SIZE`
 - `QUERY_BATCH_SIZE`
 - `QUERY_TOPK`
 - `QUERY_EF`
@@ -193,6 +194,9 @@ Apptainer cache; subsequent runs on the same host reuse it. There is no
 launcher. If you want to pin a different upstream tag, edit the `apptainer
 run` invocation in `weaviateSetup/launchWeaviateNode.sh`.
 
+There is no local-mode harness in `weaviate/` today; the unified engine only
+stages PBS runs.
+
 Platform activation (modules + Python venv) happens inside `main.sh`.
 `PLATFORM=AURORA` is currently supported; the script fails fast for any
 other platform. It sources the Python venv at
@@ -239,7 +243,7 @@ templates:
 - `aurora_pes2o_query_scaling.env` — pes2o embeddings, `CLASS_NAME=PES2OEF64`,
   `VECTOR_DIM=2560`, `DISTANCE_METRIC=COSINE`.
 - `aurora_yandex_query_scaling.env` — Yandex text2image embeddings,
-  `CLASS_NAME=YandexT2I`, `VECTOR_DIM=200`, `DISTANCE_METRIC=DOT`.
+  `CLASS_NAME=YandexT2I`, `VECTOR_DIM=200`, `DISTANCE_METRIC=IP`.
 
 Both default to `ACCOUNT=radix-io`, `WALLTIME=01:00:00`,
 `QUEUE=debug-scaling`, and `NODES=1`, so they can be used as-is against a

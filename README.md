@@ -54,19 +54,18 @@ Config files are plain `KEY=value` env-style files. Example:
 ENGINE=qdrant
 TASK=QUERY
 RUN_MODE=local
-PLATFORM=AURORA
-WALLTIME=00:10:00
-QUEUE=debug-scaling
-ACCOUNT=myproj
-INSERT_FILEPATH=/path/to/base.npy
-QUERY_FILEPATH=/path/to/query.npy
+INSERT_DATA_FILEPATH=/path/to/base.npy
+QUERY_DATA_FILEPATH=/path/to/query.npy
+VECTOR_DIM=768
 ```
+
+For `RUN_MODE=local`, PBS-only settings such as `PLATFORM`, `WALLTIME`, `QUEUE`, and `ACCOUNT` are optional.
 
 ## Current engine status
 
 - `qdrant/`: actively migrated to the unified interface and current focus
 - `milvus/`: using the unified top-level interface with engine-specific logic in `milvus/`
-- `weaviate/`: using the unified top-level interface with engine-specific logic in `weaviate/`
+- `weaviate/`: using the unified top-level interface with engine-specific logic in `weaviate/` (PBS-only today)
 
 ## Environment expectations
 
@@ -85,6 +84,14 @@ Most HPC runs still depend on site-specific paths for:
 - Python environments
 - container images or server executables
 - output/storage locations
+
+Engine-specific details live in:
+
+- `qdrant/README.md`
+- `qdrant/clients/README.md`
+- `milvus/README.md`
+- `weaviate/README.md`
+- `weaviate/clients/README.md`
 
 ## Qdrant quick start
 

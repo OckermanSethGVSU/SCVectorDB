@@ -14,8 +14,9 @@ main`, so one source file produces one binary.
   crossing to queue drain (`vectorQueueLength == 0` for N stable polls).
   `ef` is a flag (default comes from `QUERY_EF`); distance from
   `DISTANCE_METRIC`.
-- `query` — query driver. Reads vectors from an `.npy`, runs `QUERY_WORKLOAD`
-  GraphQL nearVector batches, and writes `query_summary.json`. Used for
+- `query` — query driver. Reads vectors from an `.npy`, runs
+  `QUERY_CORPUS_SIZE` GraphQL nearVector batches, and writes
+  `query_summary.json`. Used for
   `query_bs`, `query_core`, and the per-client fan-out inside the
   `query_scaling` task.
 - `mixed_insert_query` — mixed insert/query workload for concurrent-write
