@@ -1,3 +1,76 @@
+
+summarize_standard_run() {
+    local task_name="$1"
+    local npy_dir="$2"
+    [[ -d "$npy_dir" ]] || return 0
+    shopt -s nullglob
+    local npy_files=("$npy_dir"/*.npy)
+    shopt -u nullglob
+    (( ${#npy_files[@]} > 0 )) || return 0
+    mkdir -p clientTiming
+    ACTIVE_TASK="$task_name" python3 summarize_client_timings.py \
+        --npy-dir "$npy_dir" \
+        --output-dir clientTiming \
+        --times-csv "./${task_name,,}_times.csv"
+}
+
+move_standard_npy_files() {
+    local target_dir="$1"
+    mkdir -p "$target_dir"
+    shopt -s nullglob
+    local npy_files=(./*.npy)
+    if (( ${#npy_files[@]} > 0 )); then
+        mv "${npy_files[@]}" "$target_dir"/
+    fi
+    shopt -u nullglob
+}
+
+finalize_cluster_run() {
+    touch flag.txt
+    touch ./runtime_state/flag.txt
+    mkdir -p systemStats
+    shopt -s nullglob
+    local file
+    mkdir -p clientTiming
+    local timing_files=()
+    [[ -f ./index_time.txt ]] && timing_files+=(./index_time.txt)
+    timing_files+=(./*_times.csv ./*_summary.csv)
+    if (( ${#timing_files[@]} > 0 )); then
+        mv "${timing_files[@]}" clientTiming/
+    fi
+    sleep 30
+    for file in ./*_system_*.csv ./*_final.csv; do
+        [[ -e "$file" ]] || continue
+        mv "$file" systemStats/
+    done
+    shopt -u nullglob
+    rm -f flag.txt
+    if [[ -f ./ip_registry.txt ]]; then
+        mv ./ip_registry.txt ./runtime_state/
+    fi
+    if [[ -d ./ip_registry.d ]]; then
+        mv ./ip_registry.d ./runtime_state/
+    fi
+    for file in ./all_nodefile.txt ./worker_nodefile.txt ./config.yaml; do
+        [[ -e "$file" ]] || continue
+        mv "$file" ./runtime_state/
+    done
+}
+
+wait_for_launch_stop_flag() {
+    touch ./runtime_state/workflow_start.txt ./runtime_state/workflow_stop.txt
+    echo "TASK=LAUNCH: Qdrant cluster is up and will stay running until you create flag.txt or runtime_state/flag.txt in this run directory."
+
+    while [[ ! -e flag.txt && ! -e ./runtime_state/flag.txt ]]; do
+        sleep 1
+    done
+
+    echo "TASK=LAUNCH: stop flag detected; stopping Qdrant cluster."
+    touch flag.txt ./runtime_state/flag.txt
+    sleep 30
+}
+
+
 if [[ -z "${BASE_DIR:-}" ]]; then
     BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
@@ -29,25 +102,6 @@ if [[ -n "${ENV_PATH:-}" ]]; then
 fi
 
 cd "$RUN_DIR"
-
-# if we are running mixed, set the insert offset
-if [[ "$TASK" == "MIXED" && -z "${INSERT_START_ID:-}" ]]; then
-    if [[ -n "${RESTORE_DIR:-}" ]]; then
-        INSERT_START_ID="$EXPECTED_CORPUS_SIZE"
-    elif [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
-        INSERT_START_ID="$INSERT_CORPUS_SIZE"
-    elif [[ -n "${INSERT_DATA_FILEPATH:-}" ]]; then
-        if ! INSERT_START_ID="$(python3 inspect.py "$INSERT_DATA_FILEPATH")"; then
-            echo "Error: failed to derive INSERT_START_ID from INSERT_DATA_FILEPATH using inspect.py." >&2
-            exit 1
-        fi
-    else
-        echo "Error: TASK=MIXED requires INSERT_START_ID, INSERT_CORPUS_SIZE, RESTORE_DIR, or INSERT_DATA_FILEPATH." >&2
-        exit 1
-    fi
-    export INSERT_START_ID
-    echo "INSERT_START_ID=$INSERT_START_ID"
-fi
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
@@ -152,79 +206,6 @@ mv interfaces*.json interfaces/
 
 sleep 30
 
-
-summarize_standard_run() {
-    local task_name="$1"
-    local npy_dir="$2"
-    [[ -d "$npy_dir" ]] || return 0
-    shopt -s nullglob
-    local npy_files=("$npy_dir"/*.npy)
-    shopt -u nullglob
-    (( ${#npy_files[@]} > 0 )) || return 0
-    mkdir -p clientTiming
-    ACTIVE_TASK="$task_name" python3 summarize_client_timings.py \
-        --npy-dir "$npy_dir" \
-        --output-dir clientTiming \
-        --times-csv "./${task_name,,}_times.csv"
-}
-
-move_standard_npy_files() {
-    local target_dir="$1"
-    mkdir -p "$target_dir"
-    shopt -s nullglob
-    local npy_files=(./*.npy)
-    if (( ${#npy_files[@]} > 0 )); then
-        mv "${npy_files[@]}" "$target_dir"/
-    fi
-    shopt -u nullglob
-}
-
-finalize_cluster_run() {
-    touch flag.txt
-    touch ./runtime_state/flag.txt
-    mkdir -p systemStats
-    shopt -s nullglob
-    local file
-    mkdir -p clientTiming
-    local timing_files=()
-    [[ -f ./index_time.txt ]] && timing_files+=(./index_time.txt)
-    timing_files+=(./*_times.csv ./*_summary.csv)
-    if (( ${#timing_files[@]} > 0 )); then
-        mv "${timing_files[@]}" clientTiming/
-    fi
-    sleep 30
-    for file in ./*_system_*.csv ./*_final.csv; do
-        [[ -e "$file" ]] || continue
-        mv "$file" systemStats/
-    done
-    shopt -u nullglob
-    rm -f flag.txt
-    if [[ -f ./ip_registry.txt ]]; then
-        mv ./ip_registry.txt ./runtime_state/
-    fi
-    if [[ -d ./ip_registry.d ]]; then
-        mv ./ip_registry.d ./runtime_state/
-    fi
-    for file in ./all_nodefile.txt ./worker_nodefile.txt ./config.yaml; do
-        [[ -e "$file" ]] || continue
-        mv "$file" ./runtime_state/
-    done
-}
-
-wait_for_launch_stop_flag() {
-    touch ./runtime_state/workflow_start.txt ./runtime_state/workflow_stop.txt
-    echo "TASK=LAUNCH: Qdrant cluster is up and will stay running until you create flag.txt or runtime_state/flag.txt in this run directory."
-
-    while [[ ! -e flag.txt && ! -e ./runtime_state/flag.txt ]]; do
-        sleep 1
-    done
-
-    echo "TASK=LAUNCH: stop flag detected; stopping Qdrant cluster."
-    touch flag.txt ./runtime_state/flag.txt
-    sleep 30
-}
-
-
 ########## Workflow ###############
 line=$(head -n 1 ip_registry.txt)
 IFS=',' read -r id ip port <<< "$line"
@@ -286,7 +267,24 @@ fi
 
 
 if [[ "$TASK" == "MIXED" ]]; then
-
+    # set the insert offset
+    if [[ -z "${INSERT_START_ID:-}" ]]; then
+        if [[ -n "${RESTORE_DIR:-}" ]]; then
+            INSERT_START_ID="$EXPECTED_CORPUS_SIZE"
+        elif [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
+            INSERT_START_ID="$INSERT_CORPUS_SIZE"
+        elif [[ -n "${INSERT_DATA_FILEPATH:-}" ]]; then
+            if ! INSERT_START_ID="$(python3 inspect.py "$INSERT_DATA_FILEPATH")"; then
+                echo "Error: failed to derive INSERT_START_ID from INSERT_DATA_FILEPATH using inspect.py." >&2
+                exit 1
+            fi
+        else
+            echo "Error: TASK=MIXED requires INSERT_START_ID, INSERT_CORPUS_SIZE, RESTORE_DIR, or INSERT_DATA_FILEPATH." >&2
+            exit 1
+        fi
+        export INSERT_START_ID
+        echo "INSERT_START_ID=$INSERT_START_ID"
+    fi
 
     if [[ -z "$RESTORE_DIR"  ]]; then
         # index the data
