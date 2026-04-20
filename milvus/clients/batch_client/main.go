@@ -807,7 +807,7 @@ func clientWorker(
 	}
 
 	collectionName := os.Getenv("COLLECTION_NAME")
-	vectorField := "vector"        // TODO
+	vectorField := "vector" // TODO
 	idField := "id"
 	localLastID := int64(endIdx - 1)
 
@@ -1201,42 +1201,27 @@ func main() {
 	if err != nil {
 		log.Fatalf("invalid %s=%q: %v", batchEnv, batchSizeStr, err)
 	}
+	if len(batchSizes) != 1 {
+		log.Fatalf("%s must contain exactly one batch size for now", batchEnv)
+	}
+	batchSize := batchSizes[0]
 
 	resultPath := os.Getenv("RESULT_PATH")
 	if resultPath == "" {
 		log.Fatalf("invalid RESULT_PATH=%q", resultPath)
 	}
 
-	sweeps := make([]SweepConfig, 0, len(batchSizes))
-	if len(batchSizes) == 1 {
-		sweeps = append(sweeps, SweepConfig{
-			BatchSize:  batchSizes[0],
-			ResultPath: resultPath,
-			Label:      fmt.Sprintf("batch_%d", batchSizes[0]),
-		})
-	} else {
-		if strings.ToUpper(activeTask) != "QUERY" {
-			log.Fatalf("%s only supports batch size lists for QUERY", batchEnv)
-		}
-
-		for idx, batchSize := range batchSizes {
-			subdir := fmt.Sprintf("%s/query_batch_%d_run_%02d", resultPath, batchSize, idx)
-			if err := os.MkdirAll(subdir, 0755); err != nil {
-				log.Fatalf("failed to create result dir %s: %v", subdir, err)
-			}
-			sweeps = append(sweeps, SweepConfig{
-				BatchSize:  batchSize,
-				ResultPath: subdir,
-				Label:      fmt.Sprintf("batch_%d_run_%02d", batchSize, idx),
-			})
-		}
-	}
+	sweeps := []SweepConfig{{
+		BatchSize:  batchSize,
+		ResultPath: resultPath,
+		Label:      fmt.Sprintf("batch_%d", batchSize),
+	}}
 
 	totalClients := nWorkers * clientsPerWorker
 
 	fmt.Printf(
-		"CORPUS_SIZE=%d nProxies=%d clientsPerProxy=%d totalClients=%d DATA_FILEPATH=%s batch_sweeps=%v\n",
-		CORPUS_SIZE, nWorkers, clientsPerWorker, totalClients, DATA_PATH, batchSizes,
+		"CORPUS_SIZE=%d nProxies=%d clientsPerProxy=%d totalClients=%d DATA_FILEPATH=%s batch_size=%d\n",
+		CORPUS_SIZE, nWorkers, clientsPerWorker, totalClients, DATA_PATH, batchSize,
 	)
 
 	tracing := os.Getenv("TRACING")
