@@ -16,7 +16,7 @@ SCVectorDB contains HPC workflows for vector database experiments across Qdrant,
 
 ## Unified submit flow
 
-The repository now uses a single top-level submit entrypoint:
+The repository uses a single top-level submit entrypoint:
 
 ```bash
 ./pbs_submit_manager.sh --help
@@ -31,15 +31,8 @@ Behavior:
 - `--generate-only` generates the run directory but does not submit
 - `--help --engine <engine>` prints the engine variables, defaults, and requirement status
 
-Each engine keeps its engine-specific logic in its own directory:
+Each engine VDB its engine-specific logic in its own directory.
 
-- `qdrant/engine.sh`
-- `milvus/engine.sh`
-- `weaviate/engine.sh`
-
-Shared submit helpers live in:
-
-- `common/submit_lib.sh`
 
 ## Config model
 
@@ -61,77 +54,53 @@ VECTOR_DIM=768
 
 For `RUN_MODE=local`, PBS-only settings such as `PLATFORM`, `WALLTIME`, `QUEUE`, and `ACCOUNT` are optional.
 
-## Current engine status
+## Shared Schema Variables
 
-- `qdrant/`: actively migrated to the unified interface and current focus
-- `milvus/`: using the unified top-level interface with engine-specific logic in `milvus/`
-- `weaviate/`: using the unified top-level interface with engine-specific logic in `weaviate/` (PBS-only today)
+The common variables below are defined in `common/schema.sh` and apply across all engines. Engine-specific schemas add more variables on top of these.
 
-## Environment expectations
+### Control
 
-These workflows assume some combination of:
+- `TASK`: experiment task to run
+- `RUN_MODE`: `PBS` by default; use `LOCAL` or `local` for local harnesses
 
-- PBS Pro
-- MPI / `mpirun`
-- Apptainer
-- Python 3
-- site modules
-- optional DAOS helpers
+### Platform and allocation
 
-Most HPC runs still depend on site-specific paths for:
+- `PLATFORM`: PBS-only platform selector; currently `POLARIS` or `AURORA`
+- `NODES`: PBS-only compute node count for worker ranks
+- `CORES`: CPU cores per worker rank; leave empty to disable explicit CPU binding
+- `STORAGE_MEDIUM`: storage target for engine data; default `memory`
 
-- datasets
-- Python environments
-- container images or server executables
-- output/storage locations
+### PBS and Python environment
 
-Engine-specific details live in:
+- `ACCOUNT`: PBS project/account
+- `WALLTIME`: PBS walltime
+- `QUEUE`: PBS queue name
+- `ENV_PATH`: Python environment path to activate for PBS runs
+- `ALLOW_SYSTEM_PYTHON`: default `False`; set `True` to use the already-loaded Python environment when `ENV_PATH` is empty
 
-- `qdrant/README.md`
-- `qdrant/clients/README.md`
-- `milvus/README.md`
-- `weaviate/README.md`
-- `weaviate/clients/README.md`
+### Collection and vector settings
 
-## Qdrant quick start
+- `COLLECTION_NAME`: optional collection override; default `default_collection`
+- `VECTOR_DIM`: vector dimension
+- `DISTANCE_METRIC`: default `COSINE`; allowed values are `IP`, `COSINE`, and `L2`
 
-Inspect variables:
+### Insert workload
 
-```bash
-./pbs_submit_manager.sh --help --engine qdrant
-```
+- `INSERT_DATA_FILEPATH`: insert corpus `.npy` file path
+- `INSERT_CORPUS_SIZE`: total vectors available to preload; leave empty to use all rows in the file
+- `INSERT_BATCH_SIZE`: insert batch size; default `512`
+- `INSERT_BALANCE_STRATEGY`: default `WORKER_BALANCE`; allowed values are `NO_BALANCE` and `WORKER_BALANCE`
+- `INSERT_STREAMING`: default `False`; enables streaming insert behavior
 
-Generate only:
+### Query workload
 
-```bash
-./pbs_submit_manager.sh --generate-only --engine qdrant --config qdrant_run.env
-```
+- `QUERY_DATA_FILEPATH`: query vector `.npy` file path
+- `QUERY_CORPUS_SIZE`: total queries to execute; leave empty to use all rows in the file
+- `QUERY_BATCH_SIZE`: query batch size; default `32`
+- `QUERY_BALANCE_STRATEGY`: default `NO_BALANCE`; allowed values are `NO_BALANCE` and `WORKER_BALANCE`
+- `QUERY_STREAMING`: default `False`; enables streaming query behavior
+- `TOP_K`: default `10`; optional top-k override
 
-Normal run:
+### Output path
 
-```bash
-./pbs_submit_manager.sh --engine qdrant --config qdrant_run.env
-```
-
-For PBS Qdrant runs, provide a Qdrant SIF before generating or submitting:
-
-```bash
-qdrant/utils/download_sif.sh 1.16.1
-```
-
-Then set `QDRANT_SIF` in the run config to the filename under `qdrant/sifs/`:
-
-```bash
-QDRANT_SIF=qdrant_v1.16.1.sif
-```
-
-Sample configs live under `qdrant/sampleConfigs/`:
-
-```bash
-./pbs_submit_manager.sh --generate-only --config qdrant/sampleConfigs/aurora_yandex_query.env
-```
-
-## Notes
-
-- Generated run directories include `run_config.env`, which is the resolved run configuration used by `submit.sh`.
-- Generated artifacts, local data, and build outputs should generally not be committed.
+- `BASE_DIR`: base directory for generated run directories; auto-filled by the submit manager when empty
