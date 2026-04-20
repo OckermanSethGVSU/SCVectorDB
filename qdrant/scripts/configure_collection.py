@@ -162,6 +162,7 @@ while True:
         # time.sleep(30)
         exit()
 
+print(f"Created Collection: {collection_name}",flush=True)
 if run_mode == "local" or not rebalance_topology:
     time.sleep(2)
     info = client.get_collection(collection_name)
