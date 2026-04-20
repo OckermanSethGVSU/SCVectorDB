@@ -733,6 +733,7 @@ func clientWorker(
 	globalClientRank := workerRank*clientsPerWorker + clientID
 	ldebugfEnabled := envEnabled("DEBUG")
 	efSearch := getEnvIntDefault(64, "QUERY_EF_SEARCH", "EF_SEARCH")
+	topK := getEnvIntDefault(10, "QUERY_TOP_K", "TOP_K")
 
 	ACTIVE_TASK := os.Getenv("ACTIVE_TASK")
 	TASK := os.Getenv("TASK")
@@ -951,7 +952,7 @@ func clientWorker(
 					vectors[j] = entity.FloatVector(batch[j])
 				}
 
-				searchOpt := milvusclient.NewSearchOption(collectionName, 10, vectors).
+				searchOpt := milvusclient.NewSearchOption(collectionName, topK, vectors).
 					WithANNSField(vectorField).
 					WithConsistencyLevel(entity.ClBounded).
 					WithSearchParam("ef", strconv.Itoa(efSearch))

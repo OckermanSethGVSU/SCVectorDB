@@ -40,6 +40,8 @@ register_common_var "QUERY_CORPUS_SIZE" "default" "" "" "Total queries to execut
 register_common_var "QUERY_BATCH_SIZE" "default" "32" "" "Query batch size; single value or sweep list"
 register_common_var "QUERY_BALANCE_STRATEGY" "conditional" "NO_BALANCE" "NO_BALANCE WORKER_BALANCE" "Query balancing policy" "TASK=QUERY|MIXED"
 register_common_var "QUERY_STREAMING" "default" "False" "True False" "Enable query streaming behavior"
+register_common_var "TOP_K" "default" "10" "" "Optional top-k override"
+
 
 # Path variables
 register_common_var "BASE_DIR" "default" "" "" "Base directory containing generated run directories; auto-filled by the submit manager when empty"

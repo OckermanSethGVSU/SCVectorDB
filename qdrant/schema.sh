@@ -51,8 +51,6 @@ register_qdrant_var "INSERT_BATCH_MIN" "default" "" "" "Optional randomized inse
 register_qdrant_var "INSERT_BATCH_MAX" "default" "" "" "Optional randomized insert batch upper bound"
 register_qdrant_var "QUERY_BATCH_MIN" "default" "" "" "Optional randomized query batch lower bound"
 register_qdrant_var "QUERY_BATCH_MAX" "default" "" "" "Optional randomized query batch upper bound"
-
-register_qdrant_var "TOP_K" "default" "" "" "Optional top-k override"
 register_qdrant_var "RPC_TIMEOUT" "default" "" "" "Optional RPC timeout override"
 
 # Restore / recovery
