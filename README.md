@@ -54,9 +54,9 @@ VECTOR_DIM=768
 
 For `RUN_MODE=local`, PBS-only settings such as `PLATFORM`, `WALLTIME`, `QUEUE`, and `ACCOUNT` are optional.
 
-## Shared Schema Variables
+## Repo-Wide Variables
 
-The common variables below are defined in `common/schema.sh` and apply across all engines. Engine-specific schemas add more variables on top of these.
+The common variables below are defined in `common/schema.sh` and apply across all VDBs. For VDB specific variables, examine `schema.sh` in the specific VDB's folder (e.g., `milvus/schema.sh`). 
 
 ### Control
 
