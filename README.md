@@ -58,49 +58,31 @@ For `RUN_MODE=local`, PBS-only settings such as `PLATFORM`, `WALLTIME`, `QUEUE`,
 
 The common variables below are defined in `common/schema.sh` and apply across all engines. Engine-specific schemas add more variables on top of these.
 
-### Control
-
-- `TASK`: experiment task to run
-- `RUN_MODE`: `PBS` by default; use `LOCAL` or `local` for local harnesses
-
-### Platform and allocation
-
-- `PLATFORM`: PBS-only platform selector; currently `POLARIS` or `AURORA`
-- `NODES`: PBS-only compute node count for worker ranks
-- `CORES`: CPU cores per worker rank; leave empty to disable explicit CPU binding
-- `STORAGE_MEDIUM`: storage target for engine data; default `memory`
-
-### PBS and Python environment
-
-- `ACCOUNT`: PBS project/account
-- `WALLTIME`: PBS walltime
-- `QUEUE`: PBS queue name
-- `ENV_PATH`: Python environment path to activate for PBS runs
-- `ALLOW_SYSTEM_PYTHON`: default `False`; set `True` to use the already-loaded Python environment when `ENV_PATH` is empty
-
-### Collection and vector settings
-
-- `COLLECTION_NAME`: optional collection override; default `default_collection`
-- `VECTOR_DIM`: vector dimension
-- `DISTANCE_METRIC`: default `COSINE`; allowed values are `IP`, `COSINE`, and `L2`
-
-### Insert workload
-
-- `INSERT_DATA_FILEPATH`: insert corpus `.npy` file path
-- `INSERT_CORPUS_SIZE`: total vectors available to preload; leave empty to use all rows in the file
-- `INSERT_BATCH_SIZE`: insert batch size; default `512`
-- `INSERT_BALANCE_STRATEGY`: default `WORKER_BALANCE`; allowed values are `NO_BALANCE` and `WORKER_BALANCE`
-- `INSERT_STREAMING`: default `False`; enables streaming insert behavior
-
-### Query workload
-
-- `QUERY_DATA_FILEPATH`: query vector `.npy` file path
-- `QUERY_CORPUS_SIZE`: total queries to execute; leave empty to use all rows in the file
-- `QUERY_BATCH_SIZE`: query batch size; default `32`
-- `QUERY_BALANCE_STRATEGY`: default `NO_BALANCE`; allowed values are `NO_BALANCE` and `WORKER_BALANCE`
-- `QUERY_STREAMING`: default `False`; enables streaming query behavior
-- `TOP_K`: default `10`; optional top-k override
-
-### Output path
-
-- `BASE_DIR`: base directory for generated run directories; auto-filled by the submit manager when empty
+| Variable | Default | Required When | Allowed Values | Purpose |
+|---|---|---|---|---|
+| `TASK` | none | always | any | Experiment task |
+| `RUN_MODE` | `PBS` | optional | `PBS`, `LOCAL`, `local` | Run under PBS or use a local harness |
+| `PLATFORM` | none | `RUN_MODE=PBS` | `POLARIS`, `AURORA` | Target platform |
+| `NODES` | none | `RUN_MODE=PBS` | any | Compute-node count for worker ranks |
+| `CORES` | empty | optional | any | CPU cores per worker rank; empty disables explicit CPU binding |
+| `STORAGE_MEDIUM` | `memory` | optional | `memory`, `DAOS`, `lustre`, `SSD` | Storage medium for engine data |
+| `ACCOUNT` | none | `RUN_MODE=PBS` | any | PBS project/account |
+| `WALLTIME` | none | `RUN_MODE=PBS` | any | PBS walltime |
+| `QUEUE` | none | `RUN_MODE=PBS` | any | PBS queue name |
+| `ENV_PATH` | empty | optional | any | Python environment path |
+| `ALLOW_SYSTEM_PYTHON` | `False` | optional | `True`, `False` | Allow PBS runs to use the already-loaded Python environment when `ENV_PATH` is empty |
+| `COLLECTION_NAME` | `default_collection` | optional | any | Optional collection override |
+| `VECTOR_DIM` | none | always | any | Vector dimension |
+| `DISTANCE_METRIC` | `COSINE` | optional | `IP`, `COSINE`, `L2` | Distance metric |
+| `INSERT_DATA_FILEPATH` | none | `TASK=INSERT\|INDEX\|QUERY\|MIXED` | any | Insert corpus file path |
+| `INSERT_CORPUS_SIZE` | empty | optional | any | Total vectors to preload; empty uses all rows in the file |
+| `INSERT_BATCH_SIZE` | `512` | optional | any | Insert batch size; can be a sweep value |
+| `INSERT_BALANCE_STRATEGY` | `WORKER_BALANCE` | optional | `NO_BALANCE`, `WORKER_BALANCE` | Insert balancing policy |
+| `INSERT_STREAMING` | `False` | optional | `True`, `False` | Enable streaming insert behavior |
+| `QUERY_DATA_FILEPATH` | none | `TASK=QUERY\|MIXED` | any | Query vector file path |
+| `QUERY_CORPUS_SIZE` | empty | optional | any | Total queries to execute; empty uses all rows in the file |
+| `QUERY_BATCH_SIZE` | `32` | optional | any | Query batch size; can be a sweep value |
+| `QUERY_BALANCE_STRATEGY` | `NO_BALANCE` | `TASK=QUERY\|MIXED` | `NO_BALANCE`, `WORKER_BALANCE` | Query balancing policy |
+| `QUERY_STREAMING` | `False` | optional | `True`, `False` | Enable streaming query behavior |
+| `TOP_K` | `10` | optional | any | Optional top-k override |
+| `BASE_DIR` | empty | optional | any | Base directory for generated run directories; auto-filled when empty |
