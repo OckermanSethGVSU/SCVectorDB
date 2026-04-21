@@ -1,0 +1,33 @@
+# timestamped run outputs
+results_*/
+QUERY_SCALING_*/
+QUERY_CORE_*/
+QUERY_BS_*/
+INSERT_*_N*_NP*_*/
+INDEX_*_N*_NP*_CORES*/
+fig6_*/
+fig7_*/
+table5_*/
+
+# artifacts
+*.sif
+*.npy
+*.log
+*.out
+snapshots_old/
+raw_instances_old/
+weaviateSetup_old/
+
+# compiled Go binaries
+clients/go_client/insert_streaming
+clients/go_client/index
+clients/go_client/query
+clients/go_client/mixed_insert_query
+clients/go_client/*.exe
+
+# Go workspace caches
+clients/go_client/.gopath/
+
+# python/editor
+__pycache__/
+.codex/

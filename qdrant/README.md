@@ -1,162 +1,200 @@
-# Qdrant workflow
+# Qdrant
 
-This directory contains the Qdrant workflows used in this repo: distributed PBS launches, Rust ingest/query clients, a mixed insert/query runner, and a local container-backed smoke test.
+This directory contains the Qdrant engine implementation used by the unified submit interface.
 
-Main HPC entrypoint:
+## Main entrypoint
 
-- `pbs_submit_manager.sh`
+From the repo root:
 
-Local smoke-test entrypoint:
+```bash
+./pbs_submit_manager.sh --help --engine qdrant
+./pbs_submit_manager.sh --engine qdrant --config qdrant_run.env
+./pbs_submit_manager.sh --generate-only --engine qdrant --config qdrant_run.env
+```
 
-- `local_test.sh`
+## Directory structure
 
-## Current workflow capabilities
+- `engine.sh`: Qdrant engine wiring for the unified submit manager
+- `schema.sh`: Qdrant variable registry and defaults
+- `main.sh`: PBS/HPC runtime flow
+- `local_main.sh`: local container-backed runtime flow
+- `runtime/cluster/`: Qdrant node launch scripts for PBS runs
+- `scripts/`: collection setup, indexing, profiling, summaries, and mixed timeline tools
+- `utils/`: dependency checks, SIF download helpers, and input inspection tools
+- `sifs/`: local Qdrant SIF cache used by PBS run staging
+- `sampleConfigs/`: example config files for the unified submit manager
+- `clients/batch_client/`: insert/query Rust client
+- `clients/mixed/`: mixed insert/query Rust client
+- `runtime_state/`: optional seed runtime-state payload copied into generated runs
 
-- Task modes: `INSERT`, `INDEX`, `QUERY` (`TASK` in `pbs_submit_manager.sh`)
-- Platforms: `POLARIS`, `AURORA` (`PLATFORM`)
-- Storage media: `memory`, `DAOS`, `lustre`, `SSD` (`STORAGE_MEDIUM`)
-- Perf modes: `NONE`, `STAT`, `TRACE` (`PERF`)
-- Insert/query balancing strategies:
-  - `INSERT_BALANCE_STRATEGY`: `NO_BALANCE`, `WORKER_BALANCE`
-  - `QUERY_BALANCE_STRATEGY`: `NO_BALANCE`, `WORKER_BALANCE`
-- Vector/index controls:
-  - `VECTOR_DIM`
-  - `DISTANCE_METRIC`: `IP`, `COSINE`, `L2`
-  - `GPU_INDEX`: `True`, `False`
-- Restore/status path via `RESTORE_DIR` and `EXPECTED_CORPUS_SIZE`
+## Important run artifacts
 
-## Important files
+Generated Qdrant runs now typically contain:
 
-- `pbs_submit_manager.sh`: parameter sweep and PBS script generation
-- `main.sh`: runtime orchestration for cluster launch, ingest, query, and index paths
-- `local_test.sh`: local container-backed test for standard or mixed runs
-- `check_dependencies.sh`: dependency validation helper
-- `qdrantSetup/`: cluster launch scripts and local collection/data preparation
-- `generalPython/`: topology setup, profiling, summaries, index/status helpers
-- `rustCode/`: Rust clients and build helpers
+- `submit.sh`
+- `run_config.env`
+- `qdrant.sif`
+- `runtime_state/`
+- `uploadNPY/`
+- `queryNPY/`
+- `clientTiming/`
+- `systemStats/`
 
-## Current Rust clients used here
+`run_config.env` is the canonical resolved run config for the generated run directory.
 
-See `rustCode/README.md` for the full breakdown. The important projects are:
+## Common Qdrant variables
 
-- `rustCode/multiClientOP/`: current combined insert/query client used by `main.sh`
-- `rustCode/mixedrunner/`: mixed insert/query runner with JSONL event logs
-- `rustCode/multiClientUpload/`: older upload-only client kept in the repo
-- `rustCode/multiClientQuery/`: older query-only client kept in the repo
-
-## HPC runtime flow (`main.sh`)
-
-1. Load platform modules and Python environment.
-2. Optionally mount DAOS storage.
-3. Generate per-rank storage/config directories.
-4. Launch Qdrant worker ranks across compute nodes.
-5. Start profiling helpers on the client and worker nodes.
-6. Wait for cluster readiness and run `configureTopo.py`.
-7. Run `./multiClientOP` with `ACTIVE_TASK=INSERT` for ingest.
-8. Run `python3 multi_client_summary.py` and move `.npy` timing outputs into `uploadNPY/`.
-9. If `TASK=INDEX`, run `generalPython/index.py`.
-10. If `TASK=QUERY`, run `./multiClientOP` again with `ACTIVE_TASK=QUERY`, then summarize results.
-
-## Important submit variables (`pbs_submit_manager.sh`)
-
-### Sweep variables
-
-- `NODES=(...)`
-- `WORKERS_PER_NODE=(...)`
-- `CORES=(...)`
-- `INSERT_BATCH_SIZE=(...)`
-- `QUERY_BATCH_SIZE=(...)`
-
-### Runtime variables
+Required for runs:
 
 - `TASK`
+- `PLATFORM`
+- `WALLTIME`
+- `QUEUE`
+- `ACCOUNT`
+
+Required for PBS runs:
+
+- `QDRANT_SIF`: filename under `qdrant/sifs/`, such as `qdrant_v1.16.1.sif`
+- `ENV_PATH`, unless `ALLOW_SYSTEM_PYTHON=True`
+
+Common runtime knobs:
+
+- `RUN_MODE`: `PBS` or `local`
+- `BASE_DIR`: optional base Qdrant directory; auto-filled by the submit manager when empty
+- `NODES`
+- `WORKERS_PER_NODE`
+- `CORES`
 - `STORAGE_MEDIUM`
-- `PERF`
+- `ENV_PATH`: Python environment root activated by PBS runs
+- `ALLOW_SYSTEM_PYTHON`: set `True` to use the already-loaded Python environment instead of `ENV_PATH`
+- `QDRANT_SIF`: source SIF filename copied from `qdrant/sifs/` into generated runs as `qdrant.sif`
+- `QDRANT_EXECUTABLE`: optional local executable override copied from `qdrant/qdrantBuilds/`; leave empty to use the executable inside the SIF
+- `LOG_LEVEL`
 - `VECTOR_DIM`
 - `DISTANCE_METRIC`
 - `GPU_INDEX`
-- `PLATFORM`
-- `QDRANT_EXECUTABLE`
-- Insert path:
-  - `INSERT_FILEPATH`
-  - `INSERT_CORPUS_SIZE`
-  - `INSERT_BATCH_SIZE`
-  - `INSERT_CLIENTS_PER_WORKER`
-  - `INSERT_BALANCE_STRATEGY`
-- Query path:
-  - `QUERY_FILEPATH`
-  - `QUERY_CORPUS_SIZE`
-  - `QUERY_BATCH_SIZE`
-  - `QUERY_CLIENTS_PER_WORKER`
-  - `QUERY_BALANCE_STRATEGY`
-- Restore/status path:
-  - `RESTORE_DIR`
-  - `EXPECTED_CORPUS_SIZE`
+- `REBALANCE_TOPOLOGY`
 
-### Scheduler variables
+Insert/query file inputs:
 
-- `WALLTIME`
-- `queue`
+- `INSERT_DATA_FILEPATH`
+- `QUERY_DATA_FILEPATH`
+- `INSERT_CORPUS_SIZE`
+- `QUERY_CORPUS_SIZE`
 
-## Local test script (`local_test.sh`)
+Index/search tuning:
 
-`local_test.sh` starts a local Qdrant container, prepares a local collection plus synthetic `.npy` files, and then runs either:
+- `HNSW_M`
+- `HNSW_EF_CONSTRUCTION`
+- `HNSW_EF_SEARCH`
 
-- `standard` mode: insert followed by query via `multiClientOP`
-- `mixed` mode: the Rust mixed runner with configurable insert/query worker counts and pacing
+Mixed-workload knobs:
 
-Examples:
+- `MIXED_DATA_FILEPATH`
+- `MIXED_CORPUS_SIZE`
+- `MIXED_INSERT_CLIENTS_PER_WORKER`
+- `MIXED_QUERY_CLIENTS_PER_WORKER`
+- `RESULT_PATH`
+- `INSERT_MODE`
+- `QUERY_MODE`
+- `INSERT_OPS_PER_SEC`
+- `QUERY_OPS_PER_SEC`
+- `INSERT_START_ID`
 
-```bash
-./local_test.sh
-./local_test.sh --mixed
-./local_test.sh --mixed --insert-clients 2 --query-clients 2 --mode max
-./local_test.sh --mixed --insert-clients 1 --query-clients 1 --insert-mode rate --insert-ops-per-sec 100 --query-mode max
-```
+For `TASK=MIXED`, `INSERT_START_ID` is used as the ID offset for mixed inserts. If it is empty, `main.sh` derives it in this order:
 
-## Build notes
+1. `RESTORE_DIR` set: use `EXPECTED_CORPUS_SIZE`
+2. `INSERT_CORPUS_SIZE` set: use `INSERT_CORPUS_SIZE`
+3. `INSERT_DATA_FILEPATH` set: run the staged `inspect.py` helper to read the `.npy` row count
+4. otherwise fail
 
-Build Rust clients from `qdrant/rustCode`:
+Use:
 
 ```bash
-cd rustCode
-./compile.sh multiClientOP
-./compile.sh mixedrunner
+./pbs_submit_manager.sh --help --engine qdrant
 ```
 
-Older client projects can also be built if needed:
+to see the full variable list, defaults, and requirement rules.
+
+## PBS setup
+
+Download or provide a Qdrant SIF before generating PBS runs. The helper defaults to the latest upstream image and saves a versioned filename:
 
 ```bash
-./compile.sh multiClientUpload
-./compile.sh multiClientQuery
+qdrant/utils/download_sif.sh
+# writes qdrant/sifs/qdrant_latest.sif
+
+qdrant/utils/download_sif.sh 1.16.1
+# writes qdrant/sifs/qdrant_v1.16.1.sif
 ```
 
-## Dependency check
-
-Run manually:
+Set `QDRANT_SIF` to the filename, not a path:
 
 ```bash
-./check_dependencies.sh
-./check_dependencies.sh --missing-only
+QDRANT_SIF=qdrant_v1.16.1.sif
 ```
 
-## Expected outputs
+Generated PBS runs always receive the selected file as `qdrant.sif`, which is what `runtime/cluster/launchQdrantNode.sh` executes.
 
-HPC runs usually produce:
+PBS runs require an explicit Python environment by default:
 
-- `workflow.out`, `output.log`
-- `insert_times.csv` or query timing summaries
-- `uploadNPY/*.npy`
-- `systemStats/*.csv`
-- cluster status files and per-node logs
+```bash
+ENV_PATH=/path/to/python/env
+```
 
-Local mixed runs produce:
+If the loaded modules/current environment already provide all Python dependencies, opt out explicitly:
 
-- `local_test_data/mixed_logs/insert_client_*.jsonl`
-- `local_test_data/mixed_logs/query_client_*.jsonl`
+```bash
+ALLOW_SYSTEM_PYTHON=True
+```
 
-## Notes
+## Example configs
 
-- `pbs_submit_manager.sh` still writes `submit.sh` in the working directory and stages workflow files from there.
-- In the current submit manager, `qsub $target_file` is commented out, so submission is not automatic until you re-enable it.
-- The Rust Qdrant client uses gRPC. For local mixed runs, `local_test.sh` now points `QDRANT_URL` at the local gRPC port.
+Sample configs live under `qdrant/sampleConfigs/`. For example:
+
+```bash
+./pbs_submit_manager.sh --generate-only --config qdrant/sampleConfigs/aurora_yandex_query.env
+```
+
+Remove `--generate-only` when the config is ready to submit.
+
+## Utilities
+
+Use `utils/inspect.py` to inspect `.npy` workload files:
+
+```bash
+qdrant/utils/inspect.py /path/to/file.npy
+qdrant/utils/inspect.py /path/to/file.npy --field shape
+qdrant/utils/inspect.py /path/to/file.npy --field dtype
+```
+
+The default output is row count, which is useful for `INSERT_CORPUS_SIZE`, `QUERY_CORPUS_SIZE`, or `INSERT_START_ID`.
+
+## Local mode
+
+Local runs use:
+
+- `local_main.sh`
+- a local Qdrant container
+- `clients/batch_client`
+- optional `clients/mixed`
+
+Supported local tasks are `INSERT`, `QUERY`, `MIXED`, and `LAUNCH`.
+
+Typical workflow:
+
+```bash
+./pbs_submit_manager.sh --generate-only --engine qdrant --config qdrant_local.env
+cd qdrant/<generated-run-dir>
+bash submit.sh
+```
+
+## Notes on current behavior
+
+- Empty `INSERT_CORPUS_SIZE` / `QUERY_CORPUS_SIZE` means use all rows in the `.npy` file.
+- Empty `CORES` means no explicit CPU binding.
+- `REBALANCE_TOPOLOGY=False` keeps `configure_collection.py` in simple setup mode.
+- `clientTiming/` holds timing CSVs and summary outputs.
+- `systemStats/` holds periodic and final profiler CSVs; profilers remove their non-final CSV after writing the final one.
+- `runtime_state/` receives registry files, nodefiles, and top-level `config.yaml` during cleanup.
+- `runtime_state/flag.txt` is the shared stop signal for worker-side consumers; the top-level `flag.txt` is cleaned up at the end.

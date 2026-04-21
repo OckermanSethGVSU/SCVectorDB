@@ -5,6 +5,12 @@ import requests
 from pymilvus import MilvusClient
 import time
 
+RUNTIME_STATE_DIR = os.getenv("RUNTIME_STATE_DIR", "./runtime_state")
+
+
+def runtime_state_path(name: str) -> str:
+    return os.path.join(RUNTIME_STATE_DIR, name)
+
 def wait_for_milvus(host, port):
     print(f"Waiting for Milvus at {host}:{port}...")
     for _ in range(60):
@@ -24,7 +30,7 @@ def read_ip_from_file(path):
         return f.read().strip()
 
 
-MILVUS_HOST = read_ip_from_file("worker.ip")
+MILVUS_HOST = read_ip_from_file(runtime_state_path("worker.ip"))
 MILVUS_HEALTH_PORT = int(os.getenv("MILVUS_HEALTH_PORT", "9091"))
 MILVUS_GRPC_PORT = int(os.getenv("MILVUS_GRPC_PORT", "20001"))
 MILVUS_TOKEN = os.getenv("MILVUS_TOKEN", "root:Milvus")

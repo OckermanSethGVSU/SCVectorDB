@@ -144,8 +144,12 @@ validate_programmatic_submit_config() {
         errors+=("NODES must be > 0; got '$num_nodes'.")
     fi
 
-    if (( num_cores <= 0 )); then
-        errors+=("CORES must be > 0; got '$num_cores'.")
+    if [[ -n "$num_cores" ]]; then
+        if ! [[ "$num_cores" =~ ^[0-9]+$ ]]; then
+            errors+=("CORES must be a positive integer when set; got '$num_cores'.")
+        elif (( num_cores <= 0 )); then
+            errors+=("CORES must be > 0 when set; got '$num_cores'.")
+        fi
     fi
 
     if [[ "$mode_lower" == "distributed" ]]; then

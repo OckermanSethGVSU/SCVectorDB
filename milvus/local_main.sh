@@ -4,6 +4,20 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_DIR="${RUN_DIR:-$(pwd)}"
 
+if [[ -f "$RUN_DIR/run_config.env" ]]; then
+    set -a
+    source "$RUN_DIR/run_config.env"
+    set +a
+fi
+
+export_default_var() {
+    local name="$1"
+    local default_value="$2"
+
+    printf -v "$name" '%s' "${!name:-$default_value}"
+    export "$name"
+}
+
 PYTHON_ENV_VARS=(
     NO_PROXY=""
     no_proxy=""
@@ -13,54 +27,19 @@ PYTHON_ENV_VARS=(
     HTTPS_PROXY=""
 )
 
-export BASE_DIR="${BASE_DIR:-$(dirname "$RUN_DIR")}"
-export myDIR="${myDIR:-$(basename "$RUN_DIR")}"
-export RESULT_PATH="${RESULT_PATH:-$RUN_DIR}"
+BASE_DIR="${BASE_DIR:-$(dirname "$RUN_DIR")}"
+export_default_var myDIR "$(basename "$RUN_DIR")"
+export_default_var RESULT_PATH "$RUN_DIR"
+export_default_var RUNTIME_STATE_DIR "$RUN_DIR/runtime_state"
+export_default_var MILVUS_HOST "127.0.0.1"
 
-export PLATFORM="${PLATFORM:-LOCAL}"
-export CORES="${CORES:-1}"
-export MODE="${MODE:-STANDALONE}"
-export TASK="${TASK:-INSERT}"
-export WAL="${WAL:-woodpecker}"
-export DML_CHANNELS="${DML_CHANNELS:-16}"
-export MINIO_MEDIUM="${MINIO_MEDIUM:-lustre}"
-export BULK_UPLOAD_STAGING_MEDIUM="${BULK_UPLOAD_STAGING_MEDIUM:-${STORAGE_MEDIUM:-lustre}}"
-export ETCD_MODE="${ETCD_MODE:-single}"
-
-if [[ -n "${MINIO_MODE:-}" ]]; then
-    export MINIO_MODE
-elif [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
-    export MINIO_MODE="single"
-else
-    export MINIO_MODE="off"
+if [[ -z "${MINIO_MODE:-}" ]]; then
+    if [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
+        export MINIO_MODE="single"
+    else
+        export MINIO_MODE="off"
+    fi
 fi
-
-export NUM_PROXIES="${NUM_PROXIES:-1}"
-export NUM_PROXIES_PER_CN="${NUM_PROXIES_PER_CN:-1}"
-export COORDINATOR_NODES="${COORDINATOR_NODES:-1}"
-export COORDINATOR_NODES_PER_CN="${COORDINATOR_NODES_PER_CN:-1}"
-export STREAMING_NODES="${STREAMING_NODES:-1}"
-export STREAMING_NODES_PER_CN="${STREAMING_NODES_PER_CN:-1}"
-export QUERY_NODES="${QUERY_NODES:-1}"
-export QUERY_NODES_PER_CN="${QUERY_NODES_PER_CN:-1}"
-export DATA_NODES="${DATA_NODES:-1}"
-export DATA_NODES_PER_CN="${DATA_NODES_PER_CN:-1}"
-
-export GPU_INDEX="${GPU_INDEX:-False}"
-export VECTOR_DIM="${VECTOR_DIM:-2560}"
-export DISTANCE_METRIC="${DISTANCE_METRIC:-COSINE}"
-export INIT_FLAT_INDEX="${INIT_FLAT_INDEX:-TRUE}"
-export FLUSH_BEFORE_INDEX="${FLUSH_BEFORE_INDEX:-TRUE}"
-
-export TRACING="${TRACING:-False}"
-export PERF="${PERF:-NONE}"
-export PERF_EVENTS="${PERF_EVENTS:-}"
-export DEBUG="${DEBUG:-False}"
-export RESTORE_DIR="${RESTORE_DIR:-}"
-export EXPECTED_CORPUS_SIZE="${EXPECTED_CORPUS_SIZE:-0}"
-
-export MILVUS_HOST="${MILVUS_HOST:-127.0.0.1}"
-export MILVUS_TOKEN="${MILVUS_TOKEN:-root:Milvus}"
 
 if [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
     DEFAULT_MILVUS_GRPC_PORT="20001"
@@ -73,31 +52,57 @@ fi
 export MILVUS_GRPC_PORT="${MILVUS_GRPC_PORT:-$DEFAULT_MILVUS_GRPC_PORT}"
 export MILVUS_HEALTH_PORT="${MILVUS_HEALTH_PORT:-$DEFAULT_MILVUS_HEALTH_PORT}"
 
-CONTAINER_NAME="${MILVUS_LOCAL_NAME:-milvus-standalone}"
-IMAGE="${MILVUS_LOCAL_IMAGE:-milvusdb/milvus:v2.6.12}"
-ETCD_IMAGE="${MILVUS_ETCD_IMAGE:-quay.io/coreos/etcd:v3.5.18}"
-ETCD_PORT="${MILVUS_ETCD_PORT:-2379}"
-VOLUMES_DIR="${MILVUS_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/milvus}"
-MINIO_CONTAINER_NAME="${MINIO_LOCAL_NAME:-milvus-minio}"
-MINIO_IMAGE="${MINIO_LOCAL_IMAGE:-minio/minio:RELEASE.2025-02-28T09-55-16Z}"
-MINIO_API_PORT="${MINIO_API_PORT:-9000}"
-MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9001}"
-MINIO_HOST="${MINIO_HOST:-127.0.0.1}"
-MINIO_INTERNAL_HOST="${MINIO_INTERNAL_HOST:-$MINIO_CONTAINER_NAME}"
-MINIO_BUCKET_NAME="${MINIO_BUCKET_NAME:-a-bucket}"
-MINIO_ACCESS_KEY_ID="${MINIO_ACCESS_KEY_ID:-minioadmin}"
-MINIO_SECRET_ACCESS_KEY="${MINIO_SECRET_ACCESS_KEY:-minioadmin}"
-MINIO_NETWORK_NAME="${MINIO_NETWORK_NAME:-milvus-local-net}"
-MINIO_VOLUMES_DIR="${MINIO_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/minio}"
-LOCAL_CLUSTER_PREFIX="${MILVUS_LOCAL_CLUSTER_PREFIX:-milvus-local}"
-CONFIG_DIR="${RUN_DIR}/configs"
-LOCAL_SHARED_STORAGE_PATH="${LOCAL_SHARED_STORAGE_PATH:-$RUN_DIR/volumes/localfs/shared}"
-EMBED_ETCD_FILE="$RUN_DIR/embedEtcd.yaml"
-USER_CONFIG_FILE="$RUN_DIR/user.yaml"
-STANDARD_BINARY_PATH="${STANDARD_BINARY_PATH:-}"
-MIXED_BINARY_PATH="${MIXED_BINARY_PATH:-}"
+export_default_var CONTAINER_NAME "${MILVUS_LOCAL_NAME:-milvus-standalone}"
+export_default_var IMAGE "${MILVUS_LOCAL_IMAGE:-milvusdb/milvus:v2.6.12}"
+export_default_var ETCD_IMAGE "${MILVUS_ETCD_IMAGE:-quay.io/coreos/etcd:v3.5.18}"
+export_default_var ETCD_PORT "${MILVUS_ETCD_PORT:-2379}"
+export_default_var VOLUMES_DIR "${MILVUS_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/milvus}"
+export_default_var MINIO_CONTAINER_NAME "${MINIO_LOCAL_NAME:-milvus-minio}"
+export_default_var MINIO_IMAGE "${MINIO_LOCAL_IMAGE:-minio/minio:RELEASE.2025-02-28T09-55-16Z}"
+export_default_var MINIO_API_PORT "${MINIO_API_PORT:-9000}"
+export_default_var MINIO_CONSOLE_PORT "${MINIO_CONSOLE_PORT:-9001}"
+export_default_var MINIO_HOST "${MINIO_HOST:-127.0.0.1}"
+export_default_var MINIO_INTERNAL_HOST "${MINIO_INTERNAL_HOST:-$MINIO_CONTAINER_NAME}"
+export_default_var MINIO_BUCKET_NAME "${MINIO_BUCKET_NAME:-a-bucket}"
+export_default_var MINIO_ACCESS_KEY_ID "${MINIO_ACCESS_KEY_ID:-minioadmin}"
+export_default_var MINIO_SECRET_ACCESS_KEY "${MINIO_SECRET_ACCESS_KEY:-minioadmin}"
+export_default_var MINIO_NETWORK_NAME "${MINIO_NETWORK_NAME:-milvus-local-net}"
+export_default_var MINIO_VOLUMES_DIR "${MINIO_LOCAL_VOLUME_DIR:-$RUN_DIR/volumes/minio}"
+export_default_var LOCAL_CLUSTER_PREFIX "${MILVUS_LOCAL_CLUSTER_PREFIX:-milvus-local}"
+export_default_var CONFIG_DIR "$RUN_DIR/configs"
+export_default_var LOCAL_SHARED_STORAGE_PATH "${LOCAL_SHARED_STORAGE_PATH:-$RUN_DIR/volumes/localfs/shared}"
+export_default_var EMBED_ETCD_FILE "$RUN_DIR/embedEtcd.yaml"
+export_default_var USER_CONFIG_FILE "$RUN_DIR/user.yaml"
+export_default_var STANDARD_BINARY_PATH "${STANDARD_BINARY_PATH:-}"
+export_default_var MIXED_BINARY_PATH "${MIXED_BINARY_PATH:-}"
 
-mkdir -p "$RUN_DIR" "$RUN_DIR/workerOut" "$VOLUMES_DIR" "$MINIO_VOLUMES_DIR" "$CONFIG_DIR" "$LOCAL_SHARED_STORAGE_PATH"
+mkdir -p "$RUN_DIR" "$RUNTIME_STATE_DIR" "$VOLUMES_DIR" "$MINIO_VOLUMES_DIR" "$CONFIG_DIR" "$LOCAL_SHARED_STORAGE_PATH"
+
+distributed_registry_path() {
+    local component="$1"
+
+    case "$component" in
+        etcd)
+            printf '%s\n' "$RUN_DIR/etcdFiles/etcd_registry.txt"
+            ;;
+        minio)
+            printf '%s\n' "$RUN_DIR/minioFiles/minio_registry.txt"
+            ;;
+        COORDINATOR|STREAMING|QUERY|DATA|PROXY)
+            printf '%s\n' "$RUN_DIR/$component/${component}_registry.txt"
+            ;;
+        *)
+            echo "Unknown distributed registry component: $component" >&2
+            return 1
+            ;;
+    esac
+}
+
+if [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
+    export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$(distributed_registry_path PROXY)}"
+else
+    export PROXY_REGISTRY_PATH="${PROXY_REGISTRY_PATH:-$RUNTIME_STATE_DIR/PROXY_registry.txt}"
+fi
 
 pick_binary() {
     local override="$1"
@@ -121,13 +126,33 @@ pick_binary() {
 
 STANDARD_BINARY_PATH="$(pick_binary \
     "$STANDARD_BINARY_PATH" \
-    "$ROOT_DIR/goCode/multiClientOP/multiClientOP" \
-    "$ROOT_DIR/multiClientOP")"
+    "$ROOT_DIR/clients/batch_client/batch_client" \
+    "$ROOT_DIR/batch_client")"
 
 MIXED_BINARY_PATH="$(pick_binary \
     "$MIXED_BINARY_PATH" \
-    "$ROOT_DIR/goCode/mixedRunner/mixedRunner" \
-    "$ROOT_DIR/mixedRunner")"
+    "$ROOT_DIR/clients/mixed/mixed" \
+    "$ROOT_DIR/mixed")"
+
+resolve_mixed_insert_start_id() {
+    if [[ "$TASK" != "MIXED" || -n "${INSERT_START_ID:-}" ]]; then
+        return 0
+    fi
+
+    if [[ -n "${RESTORE_DIR:-}" ]]; then
+        export INSERT_START_ID="${EXPECTED_CORPUS_SIZE:?EXPECTED_CORPUS_SIZE is required when RESTORE_DIR is set}"
+    elif [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
+        export INSERT_START_ID="$INSERT_CORPUS_SIZE"
+    elif [[ -n "${INSERT_DATA_FILEPATH:-}" ]]; then
+        if ! export INSERT_START_ID="$(env "${PYTHON_ENV_VARS[@]}" python3 ./npy_inspect.py "$INSERT_DATA_FILEPATH")"; then
+            echo "Error: failed to derive INSERT_START_ID from INSERT_DATA_FILEPATH using npy_inspect.py." >&2
+            exit 1
+        fi
+    else
+        echo "Error: TASK=MIXED requires INSERT_START_ID, INSERT_CORPUS_SIZE, RESTORE_DIR, or INSERT_DATA_FILEPATH." >&2
+        exit 1
+    fi
+}
 
 ensure_runtime_tools() {
     if command -v docker >/dev/null 2>&1; then
@@ -144,12 +169,12 @@ ensure_runtime_tools() {
 
     if [[ "$TASK" == "MIXED" ]]; then
         if [[ ! -x "$MIXED_BINARY_PATH" ]]; then
-            echo "Missing mixedrunner binary at $MIXED_BINARY_PATH" >&2
+            echo "Missing mixed binary at $MIXED_BINARY_PATH" >&2
             exit 1
         fi
     else
         if [[ ! -x "$STANDARD_BINARY_PATH" ]]; then
-            echo "Missing multiClientOP binary at $STANDARD_BINARY_PATH" >&2
+            echo "Missing batch_client binary at $STANDARD_BINARY_PATH" >&2
             exit 1
         fi
     fi
@@ -177,13 +202,13 @@ EOF
 }
 
 write_registry_files() {
-    printf '%s\n' "$MILVUS_HOST" > "$RUN_DIR/worker.ip"
-    printf '0,%s,%s,%s\n' "$MILVUS_HOST" "$MILVUS_GRPC_PORT" "$MILVUS_HEALTH_PORT" > "$RUN_DIR/PROXY_registry.txt"
+    printf '%s\n' "$MILVUS_HOST" > "$RUNTIME_STATE_DIR/worker.ip"
+    printf '0,%s,%s,%s\n' "$MILVUS_HOST" "$MILVUS_GRPC_PORT" "$MILVUS_HEALTH_PORT" > "$RUNTIME_STATE_DIR/PROXY_registry.txt"
 
     if [[ "$MINIO_MODE" == "single" ]]; then
-        printf '0,%s,%s\n' "$MINIO_HOST" "$MINIO_API_PORT" > "$RUN_DIR/minio_registry.txt"
+        printf '0,%s,%s\n' "$MINIO_HOST" "$MINIO_API_PORT" > "$RUNTIME_STATE_DIR/minio_registry.txt"
     else
-        rm -f "$RUN_DIR/minio_registry.txt"
+        rm -f "$RUNTIME_STATE_DIR/minio_registry.txt"
     fi
 }
 
@@ -348,8 +373,8 @@ prepare_distributed_support_files() {
 
     if [[ -f "$RUN_DIR/replace_unified.py" ]]; then
         replace_source="$RUN_DIR/replace_unified.py"
-    elif [[ -f "$ROOT_DIR/generalPython/replace_unified.py" ]]; then
-        replace_source="$ROOT_DIR/generalPython/replace_unified.py"
+    elif [[ -f "$ROOT_DIR/scripts/replace_unified.py" ]]; then
+        replace_source="$ROOT_DIR/scripts/replace_unified.py"
     fi
 
     if [[ -z "$replace_source" ]]; then
@@ -365,8 +390,8 @@ prepare_distributed_support_files() {
         return 0
     fi
 
-    if [[ -f "$ROOT_DIR/cpuMilvus/configs/unified_milvus.yaml" ]]; then
-        config_source="$ROOT_DIR/cpuMilvus/configs/unified_milvus.yaml"
+    if [[ -f "$ROOT_DIR/runtime/configs/unified_milvus.yaml" ]]; then
+        config_source="$ROOT_DIR/runtime/configs/unified_milvus.yaml"
     elif [[ -f "$RUN_DIR/unified_milvus.yaml" ]]; then
         config_source="$RUN_DIR/unified_milvus.yaml"
     fi
@@ -383,35 +408,41 @@ write_distributed_registry_files() {
     local etcd_instances
     local minio_instances
     local role role_count rank service_port metrics_port
+    local etcd_registry minio_registry role_registry
 
     etcd_instances="$(distributed_etcd_instances)"
     minio_instances="$(distributed_minio_instances)"
+    etcd_registry="$(distributed_registry_path etcd)"
+    minio_registry="$(distributed_registry_path minio)"
 
-    printf '%s\n' "$MILVUS_HOST" > "$RUN_DIR/worker.ip"
-    : > "$RUN_DIR/etcd_registry.txt"
-    : > "$RUN_DIR/minio_registry.txt"
-    : > "$RUN_DIR/COORDINATOR_registry.txt"
-    : > "$RUN_DIR/STREAMING_registry.txt"
-    : > "$RUN_DIR/QUERY_registry.txt"
-    : > "$RUN_DIR/DATA_registry.txt"
-    : > "$RUN_DIR/PROXY_registry.txt"
+    printf '%s\n' "$MILVUS_HOST" > "$RUNTIME_STATE_DIR/worker.ip"
+    mkdir -p "$RUN_DIR/etcdFiles" "$RUN_DIR/minioFiles" \
+        "$RUN_DIR/COORDINATOR" "$RUN_DIR/STREAMING" "$RUN_DIR/QUERY" "$RUN_DIR/DATA" "$RUN_DIR/PROXY"
+    : > "$etcd_registry"
+    : > "$minio_registry"
+    : > "$(distributed_registry_path COORDINATOR)"
+    : > "$(distributed_registry_path STREAMING)"
+    : > "$(distributed_registry_path QUERY)"
+    : > "$(distributed_registry_path DATA)"
+    : > "$(distributed_registry_path PROXY)"
 
     for ((rank=0; rank<etcd_instances; rank++)); do
         printf '%s,%s,%s,%s\n' \
             "$rank" \
             "$MILVUS_HOST" \
             "$((2379 + (100 * rank)))" \
-            "$((2380 + (100 * rank)))" >> "$RUN_DIR/etcd_registry.txt"
+            "$((2380 + (100 * rank)))" >> "$etcd_registry"
     done
 
     for ((rank=0; rank<minio_instances; rank++)); do
         printf '%s,%s,%s\n' \
             "$rank" \
             "$MILVUS_HOST" \
-            "$((9000 + (100 * rank)))" >> "$RUN_DIR/minio_registry.txt"
+            "$((9000 + (100 * rank)))" >> "$minio_registry"
     done
 
     for role in COORDINATOR STREAMING QUERY DATA PROXY; do
+        role_registry="$(distributed_registry_path "$role")"
         case "$role" in
             COORDINATOR) role_count="$COORDINATOR_NODES" ;;
             STREAMING) role_count="$STREAMING_NODES" ;;
@@ -424,7 +455,7 @@ write_distributed_registry_files() {
             service_port="$(role_service_port "$role" "$rank")"
             metrics_port="$(role_metrics_port "$role" "$rank")"
             printf '%s,%s,%s,%s\n' \
-                "$rank" "$MILVUS_HOST" "$service_port" "$metrics_port" >> "$RUN_DIR/${role}_registry.txt"
+                "$rank" "$MILVUS_HOST" "$service_port" "$metrics_port" >> "$role_registry"
         done
     done
 }
@@ -787,6 +818,8 @@ run_setup_collection() {
     env "${PYTHON_ENV_VARS[@]}" python3 ./setup_collection.py
 }
 
+resolve_mixed_insert_start_id
+
 normalize_insert_method() {
     local method="${INSERT_METHOD:-traditional}"
     method="${method,,}"
@@ -823,25 +856,22 @@ normalize_bulk_upload_transport() {
 
 run_insert() {
 	export ACTIVE_TASK="INSERT"
-	export INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:?INSERT_BALANCE_STRATEGY is required}"
-	export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:?INSERT_CORPUS_SIZE is required}"
-	export INSERT_CLIENTS_PER_PROXY="${INSERT_CLIENTS_PER_PROXY:?INSERT_CLIENTS_PER_PROXY is required}"
-	export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
-	export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
-	export INSERT_STREAMING="${INSERT_STREAMING:-}"
+	: "${INSERT_BALANCE_STRATEGY:?INSERT_BALANCE_STRATEGY is required}"
+	: "${INSERT_CLIENTS_PER_PROXY:?INSERT_CLIENTS_PER_PROXY is required}"
+	: "${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
+	: "${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
 
 	env GOGC="${LOCAL_INSERT_GOGC:-25}" "${PYTHON_ENV_VARS[@]}" "$STANDARD_BINARY_PATH"
 }
 
 run_bulk_upload() {
     export ACTIVE_TASK="IMPORT"
-    export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:?INSERT_CORPUS_SIZE is required}"
-    export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
-    export INSERT_STREAMING="${INSERT_STREAMING:-}"
-    export IMPORT_PROCESSES="${IMPORT_PROCESSES:-${INSERT_CLIENTS_PER_PROXY:-1}}"
-    export COLLECTION_NAME="${COLLECTION_NAME:-standalone}"
-    export VECTOR_FIELD="${VECTOR_FIELD:-vector}"
-    export ID_FIELD="${ID_FIELD:-id}"
+    : "${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
+    : "${IMPORT_PROCESSES:?IMPORT_PROCESSES is required}"
+    COLLECTION_NAME="${COLLECTION_NAME:-standalone}"
+    VECTOR_FIELD="${VECTOR_FIELD:-vector}"
+    ID_FIELD="${ID_FIELD:-id}"
+    export COLLECTION_NAME VECTOR_FIELD ID_FIELD
     export MINIO_ENDPOINT="${MINIO_ENDPOINT:-${MINIO_HOST}:${MINIO_API_PORT}}"
     local bulk_transport
     local bulk_script
@@ -851,7 +881,7 @@ run_bulk_upload() {
     if [[ -n "${BULK_IMPORT_LOAD_REQUEST:-}" ]]; then
         bulk_request_args+=(--load-import-request "$BULK_IMPORT_LOAD_REQUEST")
     else
-        export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
+        : "${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
         bulk_request_args+=(--input "$INSERT_DATA_FILEPATH")
     fi
 
@@ -876,16 +906,21 @@ run_bulk_upload() {
         bulk_transport_args+=(--writer-mode remote)
     fi
 
-    env "${PYTHON_ENV_VARS[@]}" python3 "$bulk_script" \
-        --processes "$IMPORT_PROCESSES" \
-        --corpus-size "$INSERT_CORPUS_SIZE" \
-        --collection "$COLLECTION_NAME" \
-        --vector-field "$VECTOR_FIELD" \
-        --id-field "$ID_FIELD" \
-        --vector-dim "$VECTOR_DIM" \
-        --batch-rows "$INSERT_BATCH_SIZE" \
-        "${bulk_transport_args[@]}" \
+    local bulk_args=(
+        --processes "$IMPORT_PROCESSES"
+        --collection "$COLLECTION_NAME"
+        --vector-field "$VECTOR_FIELD"
+        --id-field "$ID_FIELD"
+        --vector-dim "$VECTOR_DIM"
+        --batch-rows "$INSERT_BATCH_SIZE"
+        "${bulk_transport_args[@]}"
         "${bulk_request_args[@]}"
+    )
+    if [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
+        bulk_args+=(--corpus-size "$INSERT_CORPUS_SIZE")
+    fi
+
+    env "${PYTHON_ENV_VARS[@]}" python3 "$bulk_script" "${bulk_args[@]}"
 }
 
 run_insert_for_task() {
@@ -901,58 +936,35 @@ run_insert_for_task() {
 
 run_index() {
     export ACTIVE_TASK="INDEX"
-    touch ./workerOut/workflow_start.txt
+    touch "$RUNTIME_STATE_DIR/workflow_start.txt"
     env "${PYTHON_ENV_VARS[@]}" python3 ./index.py
 }
 
 run_query() {
     export ACTIVE_TASK="QUERY"
-    export QUERY_BALANCE_STRATEGY="${QUERY_BALANCE_STRATEGY:?QUERY_BALANCE_STRATEGY is required}"
-    export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:?QUERY_CORPUS_SIZE is required}"
-    export QUERY_CLIENTS_PER_PROXY="${QUERY_CLIENTS_PER_PROXY:?QUERY_CLIENTS_PER_PROXY is required}"
-    export QUERY_DATA_FILEPATH="${QUERY_DATA_FILEPATH:?QUERY_DATA_FILEPATH is required}"
-    export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:?QUERY_BATCH_SIZE is required}"
-    export QUERY_STREAMING="${QUERY_STREAMING:-}"
+    : "${QUERY_BALANCE_STRATEGY:?QUERY_BALANCE_STRATEGY is required}"
+    : "${QUERY_CLIENTS_PER_PROXY:?QUERY_CLIENTS_PER_PROXY is required}"
+    : "${QUERY_DATA_FILEPATH:?QUERY_DATA_FILEPATH is required}"
+    : "${QUERY_BATCH_SIZE:?QUERY_BATCH_SIZE is required}"
 
     env "${PYTHON_ENV_VARS[@]}" "$STANDARD_BINARY_PATH"
 }
 
 run_mixed() {
     export ACTIVE_TASK="MIXED"
-    export MIXED_RESULT_PATH="${MIXED_RESULT_PATH:-mixed_logs}"
-    export INSERT_DATA_FILEPATH="${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
-    export INSERT_CORPUS_SIZE="${INSERT_CORPUS_SIZE:?INSERT_CORPUS_SIZE is required}"
-    export QUERY_DATA_FILEPATH="${QUERY_DATA_FILEPATH:?QUERY_DATA_FILEPATH is required}"
-    export QUERY_CORPUS_SIZE="${QUERY_CORPUS_SIZE:?QUERY_CORPUS_SIZE is required}"
-    export INSERT_BATCH_SIZE="${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
-    export QUERY_BATCH_SIZE="${QUERY_BATCH_SIZE:?QUERY_BATCH_SIZE is required}"
-    export INSERT_STREAMING="${INSERT_STREAMING:-}"
-    export QUERY_STREAMING="${QUERY_STREAMING:-}"
-    export INSERT_BALANCE_STRATEGY="${INSERT_BALANCE_STRATEGY:?INSERT_BALANCE_STRATEGY is required}"
-    export QUERY_BALANCE_STRATEGY="${QUERY_BALANCE_STRATEGY:?QUERY_BALANCE_STRATEGY is required}"
-    export INSERT_MODE="${INSERT_MODE:-max}"
-    export INSERT_OPS_PER_SEC="${INSERT_OPS_PER_SEC:-}"
-    export QUERY_MODE="${QUERY_MODE:-max}"
-    export QUERY_OPS_PER_SEC="${QUERY_OPS_PER_SEC:-}"
-    export INSERT_CLIENTS="${MIXED_INSERT_CLIENTS_PER_PROXY:-$INSERT_CLIENTS_PER_PROXY}"
-    export QUERY_CLIENTS="${MIXED_QUERY_CLIENTS_PER_PROXY:-$QUERY_CLIENTS_PER_PROXY}"
-    export MIXED_QUERY_CLIENTS_PER_PROXY="${MIXED_QUERY_CLIENTS_PER_PROXY:-}"
-    export MIXED_INSERT_CLIENTS_PER_PROXY="${MIXED_INSERT_CLIENTS_PER_PROXY:-}"
-    export MIXED_CORPUS_SIZE="${MIXED_CORPUS_SIZE:-$INSERT_CORPUS_SIZE}"
-    export MIXED_DATA_FILEPATH="${MIXED_DATA_FILEPATH:-$INSERT_DATA_FILEPATH}"
-    export COLLECTION_NAME="${COLLECTION_NAME:-standalone}"
-    export VECTOR_FIELD="${VECTOR_FIELD:-vector}"
-    export ID_FIELD="${ID_FIELD:-id}"
-    export TOP_K="${TOP_K:-10}"
-    export QUERY_EF_SEARCH="${QUERY_EF_SEARCH:-64}"
-    export EFSearch="${EFSearch:-$QUERY_EF_SEARCH}"
-    export SEARCH_CONSISTENCY="${SEARCH_CONSISTENCY:-bounded}"
-    export RPC_TIMEOUT="${RPC_TIMEOUT:-10m}"
-    export INSERT_BATCH_MIN="${INSERT_BATCH_MIN:-}"
-    export INSERT_BATCH_MAX="${INSERT_BATCH_MAX:-}"
-    export QUERY_BATCH_MIN="${QUERY_BATCH_MIN:-}"
-    export QUERY_BATCH_MAX="${QUERY_BATCH_MAX:-}"
-    export INSERT_START_ID="${INSERT_START_ID:?INSERT_START_ID is required}"
+    : "${INSERT_DATA_FILEPATH:?INSERT_DATA_FILEPATH is required}"
+    : "${QUERY_DATA_FILEPATH:?QUERY_DATA_FILEPATH is required}"
+    : "${INSERT_BATCH_SIZE:?INSERT_BATCH_SIZE is required}"
+    : "${QUERY_BATCH_SIZE:?QUERY_BATCH_SIZE is required}"
+    : "${INSERT_BALANCE_STRATEGY:?INSERT_BALANCE_STRATEGY is required}"
+    : "${QUERY_BALANCE_STRATEGY:?QUERY_BALANCE_STRATEGY is required}"
+    : "${MIXED_DATA_FILEPATH:?MIXED_DATA_FILEPATH is required}"
+    : "${INSERT_START_ID:?INSERT_START_ID is required}"
+    MIXED_RESULT_PATH="${MIXED_RESULT_PATH:-mixed_logs}"
+    INSERT_CLIENTS="${MIXED_INSERT_CLIENTS_PER_PROXY:-$INSERT_CLIENTS_PER_PROXY}"
+    QUERY_CLIENTS="${MIXED_QUERY_CLIENTS_PER_PROXY:-$QUERY_CLIENTS_PER_PROXY}"
+    EFSearch="${EFSearch:-$QUERY_EF_SEARCH}"
+    export MIXED_RESULT_PATH INSERT_CLIENTS QUERY_CLIENTS EFSearch
 
     mkdir -p "$MIXED_RESULT_PATH"
     env "${PYTHON_ENV_VARS[@]}" "$MIXED_BINARY_PATH"
@@ -970,18 +982,22 @@ run_mixed_timeline() {
         ./mixed_timeline.py
         --log-dir "$MIXED_RESULT_PATH"
         --insert-vectors "$MIXED_DATA_FILEPATH"
-        --insert-max-rows "$MIXED_CORPUS_SIZE"
         --query-vectors "$QUERY_DATA_FILEPATH"
-        --query-max-rows "$QUERY_CORPUS_SIZE"
         --metric "$mixed_timeline_metric"
         --insert-id-offset "$INSERT_START_ID"
     )
+    if [[ -n "$MIXED_CORPUS_SIZE" ]]; then
+        mixed_timeline_args+=(--insert-max-rows "$MIXED_CORPUS_SIZE")
+    fi
+    if [[ -n "$QUERY_CORPUS_SIZE" ]]; then
+        mixed_timeline_args+=(--query-max-rows "$QUERY_CORPUS_SIZE")
+    fi
 
     if [[ -z "$RESTORE_DIR" ]]; then
-        mixed_timeline_args+=(
-            --init-vectors "$INSERT_DATA_FILEPATH"
-            --init-max-rows "$INSERT_CORPUS_SIZE"
-        )
+        mixed_timeline_args+=(--init-vectors "$INSERT_DATA_FILEPATH")
+        if [[ -n "$INSERT_CORPUS_SIZE" ]]; then
+            mixed_timeline_args+=(--init-max-rows "$INSERT_CORPUS_SIZE")
+        fi
     fi
 
     env "${PYTHON_ENV_VARS[@]}" python3 "${mixed_timeline_args[@]}"
@@ -991,6 +1007,9 @@ summarize_insert() {
     env "${PYTHON_ENV_VARS[@]}" python3 ./multi_client_summary.py
     [[ -f times.csv ]] && mv times.csv insert_times.txt
     [[ -f summary.csv ]] && mv summary.csv insert_summary.txt
+}
+
+stage_insert_client_outputs() {
     mkdir -p uploadNPY
     shopt -s nullglob
     local files=(./*.npy)
@@ -1004,6 +1023,9 @@ summarize_query() {
     env "${PYTHON_ENV_VARS[@]}" python3 ./multi_client_summary.py
     [[ -f times.csv ]] && mv times.csv query_times.txt
     [[ -f summary.csv ]] && mv summary.csv query_summary.txt
+}
+
+stage_query_client_outputs() {
     mkdir -p queryNPY
     shopt -s nullglob
     local files=(./*.npy)
@@ -1013,6 +1035,44 @@ summarize_query() {
     shopt -u nullglob
 }
 
+cleanup_client_timings() {
+    mkdir -p "$RUN_DIR/clientTimings"
+    shopt -s nullglob
+    local candidate
+    local timing_files=()
+    for candidate in \
+        "$RUN_DIR"/*_times.txt \
+        "$RUN_DIR"/*_summary.txt \
+        "$RUN_DIR"/times.csv \
+        "$RUN_DIR"/summary.csv \
+        "$RUN_DIR"/index_time.txt \
+        "$RUN_DIR"/collection_time.txt
+    do
+        [[ -e "$candidate" ]] || continue
+        timing_files+=("$candidate")
+    done
+    if (( ${#timing_files[@]} > 0 )); then
+        mv "${timing_files[@]}" "$RUN_DIR/clientTimings"/
+    fi
+    shopt -u nullglob
+}
+
+move_yaml_files_to_runtime_state() {
+    local yaml_file rel_path target_path
+
+    while IFS= read -r -d '' yaml_file; do
+        rel_path="${yaml_file#$RUN_DIR/}"
+        target_path="$RUNTIME_STATE_DIR/$rel_path"
+        mkdir -p "$(dirname "$target_path")"
+        mv "$yaml_file" "$target_path"
+    done < <(
+        find "$RUN_DIR" \
+            -path "$RUNTIME_STATE_DIR" -prune -o \
+            -path "$RUN_DIR/volumes" -prune -o \
+            -type f \( -name '*.yaml' -o -name '*.yml' \) -print0
+    )
+}
+
 run_restore_status() {
     export EXPECTED_CORPUS_SIZE
     env "${PYTHON_ENV_VARS[@]}" python3 ./status.py
@@ -1020,6 +1080,8 @@ run_restore_status() {
 
 main() {
     cd "$RUN_DIR"
+    local should_summarize_insert=0
+    local should_summarize_query=0
     ensure_runtime_tools
     case "${MODE^^}" in
         STANDALONE)
@@ -1040,55 +1102,60 @@ main() {
 
         if [[ "$TASK" == "IMPORT" ]]; then
             run_bulk_upload
-            touch flag.txt
-            return 0
-        fi
-
-        if [[ "$TASK" == "INSERT" ]]; then
-            run_insert
+            touch "$RUNTIME_STATE_DIR/flag.txt"
         else
-            run_insert_for_task
-        fi
-
-        if [[ "$TASK" == "INSERT" ]]; then
-            touch flag.txt
-        fi
-
-        if [[ "$TASK" == "INSERT" ]] || [[ "$(normalize_insert_method)" == "traditional" ]]; then
-            summarize_insert
-        fi
-
-        if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
-            run_index
-
-            if [[ "$TASK" == "INDEX" ]]; then
-                touch ./workerOut/workflow_end.txt
-                touch flag.txt
-                return 0
+            if [[ "$TASK" == "INSERT" ]]; then
+                run_insert
+            else
+                run_insert_for_task
             fi
-        fi
 
-        sleep 5
+            if [[ "$TASK" == "INSERT" ]]; then
+                touch "$RUNTIME_STATE_DIR/flag.txt"
+            fi
+
+            if [[ "$TASK" == "INSERT" ]] || [[ "$TASK" == "MIXED" && "$(normalize_insert_method)" == "traditional" ]]; then
+                should_summarize_insert=1
+                stage_insert_client_outputs
+            fi
+
+            if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
+                run_index
+
+                if [[ "$TASK" == "INDEX" ]]; then
+                    touch "$RUNTIME_STATE_DIR/workflow_end.txt"
+                    touch "$RUNTIME_STATE_DIR/flag.txt"
+                fi
+            fi
+
+            sleep 5
+        fi
     else
         run_restore_status
     fi
 
     if [[ "$TASK" == "QUERY" ]]; then
         run_query
-        summarize_query
-        return 0
-    fi
-
-    if [[ "$TASK" == "MIXED" ]]; then
+        should_summarize_query=1
+        stage_query_client_outputs
+    elif [[ "$TASK" == "MIXED" ]]; then
         run_mixed
         run_mixed_timeline
-        return 0
-    fi
-
-    if [[ "$TASK" != "INSERT" && "$TASK" != "IMPORT" && "$TASK" != "INDEX" && "$TASK" != "QUERY" && "$TASK" != "MIXED" ]]; then
+    elif [[ "$TASK" != "INSERT" && "$TASK" != "IMPORT" && "$TASK" != "INDEX" && "$TASK" != "QUERY" && "$TASK" != "MIXED" ]]; then
         echo "Unsupported TASK '$TASK' for local_main.sh" >&2
         exit 1
     fi
+
+    if (( should_summarize_insert )); then
+        summarize_insert
+    fi
+
+    if (( should_summarize_query )); then
+        summarize_query
+    fi
+
+    cleanup_client_timings
+    move_yaml_files_to_runtime_state
 }
 
 main "$@"
