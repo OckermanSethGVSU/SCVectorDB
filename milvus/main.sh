@@ -1,4 +1,9 @@
 
+if [[ -f ./run_config.env ]]; then
+    set -a
+    source ./run_config.env
+    set +a
+fi
 
 launch_role() {
     local role="$1"                  # e.g., STREAMING, QUERY, DATA
@@ -62,6 +67,12 @@ wait_for_signal_files() {
     done
 }
 
+run_summary() {
+    local task="$1"     # INSERT or QUERY
+    local prefix="$2"   # insert or query
+    env "${PYTHON_ENV_VARS[@]}" ACTIVE_TASK="$task" python3 multi_client_summary.py
+}
+
 compute_local_shared_storage_path() {
     if [[ -n "${LOCAL_SHARED_STORAGE_PATH:-}" ]]; then
         printf '%s\n' "$LOCAL_SHARED_STORAGE_PATH"
@@ -82,6 +93,26 @@ compute_local_shared_storage_path() {
     esac
 }
 
+resolve_mixed_insert_start_id() {
+    if [[ "$TASK" != "MIXED" || -n "${INSERT_START_ID:-}" ]]; then
+        return 0
+    fi
+
+    if [[ -n "${RESTORE_DIR:-}" ]]; then
+        export INSERT_START_ID="${EXPECTED_CORPUS_SIZE:?EXPECTED_CORPUS_SIZE is required when RESTORE_DIR is set}"
+    elif [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
+        export INSERT_START_ID="$INSERT_CORPUS_SIZE"
+    elif [[ -n "${INSERT_DATA_FILEPATH:-}" ]]; then
+        if ! export INSERT_START_ID="$(env "${PYTHON_ENV_VARS[@]}" python3 ./npy_inspect.py "$INSERT_DATA_FILEPATH")"; then
+            echo "Error: failed to derive INSERT_START_ID from INSERT_DATA_FILEPATH using npy_inspect.py." >&2
+            exit 1
+        fi
+    else
+        echo "Error: TASK=MIXED requires INSERT_START_ID, INSERT_CORPUS_SIZE, RESTORE_DIR, or INSERT_DATA_FILEPATH." >&2
+        exit 1
+    fi
+}
+
 PYTHON_ENV_VARS=(
     NO_PROXY=""
     no_proxy=""
@@ -91,55 +122,23 @@ PYTHON_ENV_VARS=(
     HTTPS_PROXY=""
 )
 
-cd $BASE_DIR/$myDIR
 
-export BASE_DIR=$BASE_DIR
-export myDIR=$myDIR
-if [[ -z "${RESULT_PATH:-}" ]]; then
-    export RESULT_PATH="$BASE_DIR/$myDIR"
-elif [[ "$RESULT_PATH" != /* ]]; then
-    export RESULT_PATH="$BASE_DIR/$myDIR/$RESULT_PATH"
+RUN_DIR="$(pwd)"
+BASE_DIR="$(dirname "$RUN_DIR")"
+
+
+export myDIR="$(basename "$RUN_DIR")"
+export RESULT_PATH="$RUN_DIR"
+export RUNTIME_STATE_DIR="${RUN_DIR}/runtime_state"
+cd "$RUN_DIR"
+
+mkdir -p "$RUNTIME_STATE_DIR"
+
+if [[ "${MODE^^}" == "DISTRIBUTED" ]]; then
+    export PROXY_REGISTRY_PATH="${RUN_DIR}/PROXY/PROXY_registry.txt"
 else
-    export RESULT_PATH="$RESULT_PATH"
+    export PROXY_REGISTRY_PATH="${RUN_DIR}/runtime_state/PROXY_registry.txt"
 fi
-
-export PLATFORM=$PLATFORM
-export CORES=$CORES
-export MODE=$MODE
-export TASK=$TASK
-export WAL=$WAL
-export DML_CHANNELS=$DML_CHANNELS
-export MINIO_MODE=$MINIO_MODE
-export MINIO_MEDIUM=$MINIO_MEDIUM
-export ETCD_MEDIUM=${ETCD_MEDIUM:-$STORAGE_MEDIUM}
-export BULK_UPLOAD_STAGING_MEDIUM=$BULK_UPLOAD_STAGING_MEDIUM
-
-export NUM_PROXIES=$NUM_PROXIES
-export NUM_PROXIES_PER_CN=$NUM_PROXIES_PER_CN
-export COORDINATOR_NODES=$COORDINATOR_NODES
-export COORDINATOR_NODES_PER_CN=$COORDINATOR_NODES_PER_CN
-export QUERY_NODES=$QUERY_NODES
-export QUERY_NODES_PER_CN=$QUERY_NODES_PER_CN
-export DATA_NODES=$DATA_NODES
-export DATA_NODES_PER_CN=$DATA_NODES_PER_CN
-
-export GPU_INDEX=$GPU_INDEX
-export VECTOR_DIM=$VECTOR_DIM
-export DISTANCE_METRIC=$DISTANCE_METRIC
-export INIT_FLAT_INDEX=$INIT_FLAT_INDEX
-export SHARDS=$SHARDS
-export FLUSH_BEFORE_INDEX=$FLUSH_BEFORE_INDEX
-
-export TRACING=$TRACING
-export PERF=$PERF
-export PERF_EVENTS=$PERF_EVENTS
-
-export MILVUS_BUILD_DIR=$MILVUS_BUILD_DIR
-export MILVUS_CONFIG_DIR=$MILVUS_CONFIG_DIR
-
-export DEBUG=$DEBUG
-export RESTORE_DIR=$RESTORE_DIR
-export LOCAL_SHARED_STORAGE_PATH=${LOCAL_SHARED_STORAGE_PATH:-}
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -149,7 +148,6 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml load e2fsprogs
 
     module use /soft/modulefiles; module load conda; conda activate base
-    exec > >(tee workflow.log) 2>&1
 
 elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
@@ -161,6 +159,8 @@ fi
 # Activate Python env
 source $ENV_PATH/bin/activate
 cat $PBS_NODEFILE > all_nodefile.txt
+
+resolve_mixed_insert_start_id
 
 
 
@@ -214,7 +214,7 @@ if [[ "$MODE" == "STANDALONE" ]]; then
         exit 1
     fi
 
-    if [[ "$CORES" -eq 112 ]]; then
+    if [[ -z "${CORES:-}" ]]; then
         echo "Launching standalone: unrestricted cores"
 
         mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node ./standaloneLaunch.sh 0 $STORAGE_MEDIUM $PLATFORM STANDALONE $WAL &
@@ -227,13 +227,14 @@ if [[ "$MODE" == "STANDALONE" ]]; then
     mpirun -n 1 --ppn 1 --cpu-bind none --host $second_node python3 profile.py worker_0 $PLATFORM &
     python3 profile.py client_node $PLATFORM & 
 
-    TARGET="./workerOut/milvus_running.txt"
+    TARGET="$RUNTIME_STATE_DIR/milvus_running.txt"
     while [ ! -e "$TARGET" ]; do
     sleep 0.1
     done
 
     env "${PYTHON_ENV_VARS[@]}" python3 poll.py
     IP_ADDR=$(jq -r '.hsn0.ipv4[0]' interfaces0.json)
+    echo "$IP_ADDR" > "$RUNTIME_STATE_DIR/worker.ip"
 
 
 elif [[ "$MODE" == "DISTRIBUTED" ]]; then
@@ -308,7 +309,7 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
 
     
     # setup ETCD/Minio info which all parts will need
-    cp -r ${BASE_DIR}/cpuMilvus/configs/ .
+    cp -r ${BASE_DIR}/runtime/configs/ .
     rm ./configs/milvus.yaml
     python3 replace_unified.py --mode distributed
 
@@ -327,227 +328,79 @@ elif [[ "$MODE" == "DISTRIBUTED" ]]; then
     # Launch proxy
     launch_role PROXY "$NUM_PROXIES" "$NUM_PROXIES_PER_CN" "$STORAGE_MEDIUM" ./launch_milvus_part.sh
 
+    SIGNAL_FILES=()
+    for spec in \
+        "cord:$COORDINATOR_NODES" \
+        "query:$QUERY_NODES" \
+        "data:$DATA_NODES" \
+        "streaming:$STREAMING_NODES" \
+        "proxy:$NUM_PROXIES"
+    do
+        IFS=":" read -r name count <<< "$spec"
+
+        for ((rank=0; rank<count; rank++)); do
+            SIGNAL_FILES+=("$RUNTIME_STATE_DIR/${name}${rank}_running.txt")
+        done
+    done
+
     # execute.sh only writes these markers after each component passes its health check.
-    SIGNAL_FILES=(
-    )
-
-    for ((rank=0; rank<COORDINATOR_NODES; rank++)); do
-        SIGNAL_FILES+=("./workerOut/cord${rank}_running.txt")
-    done
-
-    for ((rank=0; rank<QUERY_NODES; rank++)); do
-        SIGNAL_FILES+=("./workerOut/query${rank}_running.txt")
-    done
-
-    for ((rank=0; rank<DATA_NODES; rank++)); do
-        SIGNAL_FILES+=("./workerOut/data${rank}_running.txt")
-    done
-
-    for ((rank=0; rank<STREAMING_NODES; rank++)); do
-        SIGNAL_FILES+=("./workerOut/streaming${rank}_running.txt")
-    done
-
-    for ((rank=0; rank<NUM_PROXIES; rank++)); do
-        SIGNAL_FILES+=("./workerOut/proxy${rank}_running.txt")
-    done
-
     wait_for_signal_files "${SIGNAL_FILES[@]}"
+    
     IP_ADDR=$(jq -r '.hsn0.ipv4[0]' PROXY/PROXY0.json)
-    echo $IP_ADDR > worker.ip
+    echo "$IP_ADDR" > "$RUNTIME_STATE_DIR/worker.ip"
     sleep 30
     
     env "${PYTHON_ENV_VARS[@]}" python3 poll.py
 fi
 
-normalize_insert_method() {
-    local method="${INSERT_METHOD:-traditional}"
-    method="${method,,}"
-    case "$method" in
-        traditional|standard|direct)
-            printf 'traditional\n'
-            ;;
-        bulk|bulk_upload|bulk-upload|import)
-            printf 'bulk\n'
-            ;;
-        *)
-            echo "Unsupported INSERT_METHOD='$INSERT_METHOD'. Valid options: traditional, bulk" >&2
-            exit 1
-            ;;
-    esac
-}
 
-normalize_bulk_upload_transport() {
-    local transport="${BULK_UPLOAD_TRANSPORT:-writer}"
-    transport="${transport,,}"
-    case "$transport" in
-        writer|remote_writer|remote-writer)
-            printf 'writer\n'
-            ;;
-        mc|mc_cp|mc-cp|minio_mc|minio-mc)
-            printf 'mc\n'
-            ;;
-        *)
-            echo "Unsupported BULK_UPLOAD_TRANSPORT='$BULK_UPLOAD_TRANSPORT'. Valid options: writer, mc" >&2
-            exit 1
-            ;;
-    esac
-}
 
-run_direct_insert() {
-    export ACTIVE_TASK="INSERT"
-    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
-    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
-    export INSERT_CLIENTS_PER_PROXY=$INSERT_CLIENTS_PER_PROXY
-    export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
-    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
-    export INSERT_STREAMING=$INSERT_STREAMING
 
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
-
-    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
-
-    mv times.csv insert_times.txt
-    mv summary.csv insert_summary.txt
-    mkdir -p uploadNPY
-    mv *.npy uploadNPY
-}
-
-run_bulk_insert() {
-    export ACTIVE_TASK="IMPORT"
-    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
-    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
-    export INSERT_STREAMING=$INSERT_STREAMING
-    export IMPORT_PROCESSES=${IMPORT_PROCESSES:-${INSERT_CLIENTS_PER_PROXY:-1}}
-    export COLLECTION_NAME=${COLLECTION_NAME:-standalone}
-    export VECTOR_FIELD=${VECTOR_FIELD:-vector}
-    export ID_FIELD=${ID_FIELD:-id}
-    local bulk_transport
-    local bulk_script
-    local bulk_transport_args=()
-    bulk_request_args=()
-
-    if [[ -n "${BULK_IMPORT_LOAD_REQUEST:-}" ]]; then
-        bulk_request_args+=(--load-import-request "$BULK_IMPORT_LOAD_REQUEST")
-    else
-        export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
-        bulk_request_args+=(--input "$INSERT_DATA_FILEPATH")
-    fi
-
-    if [[ -n "${BULK_IMPORT_REQUEST_PATH:-}" ]]; then
-        bulk_request_args+=(--import-request-path "$BULK_IMPORT_REQUEST_PATH")
-    fi
-
-    if [[ "${BULK_IMPORT_PREPARE_ONLY:-}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
-        bulk_request_args+=(--prepare-only)
-    fi
-
-    if [[ "${MINIO_MODE}" == "off" ]]; then
-        echo "INSERT_METHOD=bulk requires remote MinIO storage; set MINIO_MODE to single or stripped." >&2
-        exit 1
-    fi
-
-    bulk_transport="$(normalize_bulk_upload_transport)"
-    if [[ "$bulk_transport" == "mc" ]]; then
-        bulk_script="bulk_upload_import_mc.py"
-    else
-        bulk_script="bulk_upload_import.py"
-        bulk_transport_args+=(--writer-mode remote)
-    fi
-
-    env "${PYTHON_ENV_VARS[@]}" python3 "$bulk_script" \
-        --processes "$IMPORT_PROCESSES" \
-        --corpus-size "$INSERT_CORPUS_SIZE" \
-        --collection "$COLLECTION_NAME" \
-        --vector-field "$VECTOR_FIELD" \
-        --id-field "$ID_FIELD" \
-        --vector-dim "$VECTOR_DIM" \
-        --batch-rows "$INSERT_BATCH_SIZE" \
-        "${bulk_transport_args[@]}" \
-        "${bulk_request_args[@]}"
-}
-
-run_insert_for_task() {
-    local insert_method
-    insert_method="$(normalize_insert_method)"
-
-    if [[ "$insert_method" == "bulk" ]]; then
-        run_bulk_insert
-    else
-        run_direct_insert
-    fi
-}
+should_summarize_insert=0
+should_summarize_query=0
 
 # if we are not restoring, run insert and/or indexing
 if [ -z "$RESTORE_DIR" ]; then
     env "${PYTHON_ENV_VARS[@]}" python3 setup_collection.py
 
-    if [[ "$TASK" == "IMPORT" ]]; then
-        run_bulk_insert
-        
-        touch flag.txt
-    
-    else
-        if [[ "$TASK" == "INSERT" ]]; then
-            run_direct_insert
-        elif [[ "$TASK" == "IMPORT" ]]; then
-            run_bulk_insert
-        else
-            run_insert_for_task
-        fi
-        
-        if [[ "$TASK" == "INSERT" || "$TASK" == "IMPORT" ]]; then
-            touch flag.txt
-        fi
+    export ACTIVE_TASK="INSERT"
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
+    should_summarize_insert=1
+    mkdir -p uploadNPY
+    mv *.npy uploadNPY/
+
+    if [[ "$TASK" == "INSERT" || "$TASK" == "IMPORT" ]]; then
+        touch "$RUNTIME_STATE_DIR/flag.txt"
     fi
 
     if [[ "$TASK" == "INDEX" || "$TASK" == "QUERY" || "$TASK" == "MIXED" ]]; then
         export ACTIVE_TASK="INDEX"
         if [[ "$TASK" == "INDEX" ]]; then
-            touch ./workerOut/workflow_start.txt
+            touch "$RUNTIME_STATE_DIR/workflow_start.txt"
         fi
         env "${PYTHON_ENV_VARS[@]}" python3 index.py
         
         if [[ "$TASK" == "INDEX" ]]; then
-            touch ./workerOut/workflow_end.txt
-            touch flag.txt
+            touch "$RUNTIME_STATE_DIR/workflow_end.txt"
+            touch "$RUNTIME_STATE_DIR/flag.txt"
         fi
     fi
     sleep 30
 else
-    export EXPECTED_CORPUS_SIZE=$EXPECTED_CORPUS_SIZE
-    export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
-    export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
-    export QUERY_CLIENTS_PER_PROXY=$QUERY_CLIENTS_PER_PROXY
-    export QUERY_DATA_FILEPATH=$QUERY_DATA_FILEPATH
-    export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
-    export QUERY_STREAMING=$QUERY_STREAMING
     env "${PYTHON_ENV_VARS[@]}" python3 status.py
-
 fi
 
 if [[ "$TASK" == "QUERY" ]]; then
     
-
     export ACTIVE_TASK="QUERY"
-    export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
-    export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
-    export QUERY_CLIENTS_PER_PROXY=$QUERY_CLIENTS_PER_PROXY
-    export QUERY_DATA_FILEPATH=$QUERY_DATA_FILEPATH
-    export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
-    export QUERY_STREAMING=$QUERY_STREAMING
-
-
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
-
-    env "${PYTHON_ENV_VARS[@]}" python3 multi_client_summary.py
-
-    mv times.csv query_times.txt
-    mv summary.csv query_summary.txt
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
+    should_summarize_query=1
     mkdir -p queryNPY
-    mv *.npy queryNPY
+    mv *.npy queryNPY/
+    
 
     if [[ "$TRACING" == "True" ]]; then
-        touch flag.txt
+        touch "$RUNTIME_STATE_DIR/flag.txt"
         while [[ ! -f traces.jsonl ]]; do
             sleep 1
         done
@@ -564,39 +417,14 @@ if [[ "$TASK" == "MIXED" ]]; then
         export MIXED_RESULT_PATH="$MIXED_RESULT_PATH"
     fi
 
-    export INSERT_DATA_FILEPATH=$INSERT_DATA_FILEPATH
-    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
-    export QUERY_DATA_FILEPATH=$QUERY_DATA_FILEPATH
-    export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
-    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
-    export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
     export MIXED_INSERT_BATCH_SIZE=${MIXED_INSERT_BATCH_SIZE:-$INSERT_BATCH_SIZE}
     export MIXED_QUERY_BATCH_SIZE=${MIXED_QUERY_BATCH_SIZE:-$QUERY_BATCH_SIZE}
-    export INSERT_STREAMING=$INSERT_STREAMING
-    export QUERY_STREAMING=$QUERY_STREAMING
-    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
-    export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
     export INSERT_START_ID=$INSERT_START_ID
-    export INSERT_MODE=${INSERT_MODE:-max}
-    export INSERT_OPS_PER_SEC=$INSERT_OPS_PER_SEC
-    export QUERY_MODE=${QUERY_MODE:-max}
-    export QUERY_OPS_PER_SEC=$QUERY_OPS_PER_SEC
-    export MIXED_CORPUS_SIZE=$MIXED_CORPUS_SIZE
-    export MIXED_DATA_FILEPATH=$MIXED_DATA_FILEPATH
-    export MIXED_QUERY_CLIENTS_PER_PROXY=$MIXED_QUERY_CLIENTS_PER_PROXY
-    export MIXED_INSERT_CLIENTS_PER_PROXY=$MIXED_INSERT_CLIENTS_PER_PROXY
-    export COLLECTION_NAME=$COLLECTION_NAME
-    export VECTOR_FIELD=$VECTOR_FIELD
-    export ID_FIELD=$ID_FIELD
-    export TOP_K=$TOP_K
-    export QUERY_EF_SEARCH=$QUERY_EF_SEARCH
+    COLLECTION_NAME="${COLLECTION_NAME:-standalone}"
+    VECTOR_FIELD="${VECTOR_FIELD:-vector}"
+    ID_FIELD="${ID_FIELD:-id}"
+    TOP_K="${TOP_K:-10}"
     export EFSearch=$QUERY_EF_SEARCH
-    export SEARCH_CONSISTENCY=$SEARCH_CONSISTENCY
-    export RPC_TIMEOUT=$RPC_TIMEOUT
-    export INSERT_BATCH_MIN=$INSERT_BATCH_MIN
-    export INSERT_BATCH_MAX=$INSERT_BATCH_MAX
-    export QUERY_BATCH_MIN=$QUERY_BATCH_MIN
-    export QUERY_BATCH_MAX=$QUERY_BATCH_MAX
     export MIXED_INSERT_BATCH_MIN=${MIXED_INSERT_BATCH_MIN:-$INSERT_BATCH_MIN}
     export MIXED_INSERT_BATCH_MAX=${MIXED_INSERT_BATCH_MAX:-$INSERT_BATCH_MAX}
     export MIXED_QUERY_BATCH_MIN=${MIXED_QUERY_BATCH_MIN:-$QUERY_BATCH_MIN}
@@ -605,7 +433,7 @@ if [[ "$TASK" == "MIXED" ]]; then
     export QUERY_CLIENTS=${MIXED_QUERY_CLIENTS_PER_PROXY:-$QUERY_CLIENTS_PER_PROXY}
     mkdir -p "$MIXED_RESULT_PATH"
 
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixedRunner
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixed
 
     MIXED_TIMELINE_METRIC="dot"
     if [[ "$DISTANCE_METRIC" == "COSINE" ]]; then
@@ -618,35 +446,47 @@ if [[ "$TASK" == "MIXED" ]]; then
         mixed_timeline.py
         --log-dir "$MIXED_RESULT_PATH"
         --insert-vectors "$MIXED_DATA_FILEPATH"
-        --insert-max-rows "$MIXED_CORPUS_SIZE"
         --query-vectors "$QUERY_DATA_FILEPATH"
-        --query-max-rows "$QUERY_CORPUS_SIZE"
         --metric "$MIXED_TIMELINE_METRIC"
         --insert-id-offset "$INSERT_START_ID"
     )
+    if [[ -n "$MIXED_CORPUS_SIZE" ]]; then
+        MIXED_TIMELINE_ARGS+=(--insert-max-rows "$MIXED_CORPUS_SIZE")
+    fi
+    if [[ -n "$QUERY_CORPUS_SIZE" ]]; then
+        MIXED_TIMELINE_ARGS+=(--query-max-rows "$QUERY_CORPUS_SIZE")
+    fi
 
     if [[ -z "$RESTORE_DIR" ]]; then
-        MIXED_TIMELINE_ARGS+=(
-            --init-vectors "$INSERT_DATA_FILEPATH"
-            --init-max-rows "$INSERT_CORPUS_SIZE"
-        )
+        MIXED_TIMELINE_ARGS+=(--init-vectors "$INSERT_DATA_FILEPATH")
+        if [[ -n "$INSERT_CORPUS_SIZE" ]]; then
+            MIXED_TIMELINE_ARGS+=(--init-max-rows "$INSERT_CORPUS_SIZE")
+        fi
     fi
 
     env "${PYTHON_ENV_VARS[@]}" python3 "${MIXED_TIMELINE_ARGS[@]}"
 fi
+
+
+(( should_summarize_insert )) && run_summary INSERT insert
+(( should_summarize_query ))  && run_summary QUERY query
+
+mkdir -p client_timings
+mv *.csv *.txt client_timings/
+mv ./configs/ runtime_state/
+mv *.out *.json *.jsonl runtime_state/
 
 if [[ "$TRACING" == "True" ]]; then
         python3 analyze_traces.py > analysis.txt
 fi
 
 
-if [[ "$STORAGE_MEDIUM" == "DAOS" || "$ETCD_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then
-    DAOS_POOL="radix-io"
-    DAOS_CONT="vectorDBTesting"
-    rm -fr /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
-elif [[ "$STORAGE_MEDIUM" == "lustre" || "$MODE" == "DISTRIBUTED" ]]; then
-    echo "Removed the rm for now"
-    # rm -fr ./milvusDir/
+if [[ "${AUTO_CLEANUP}" ]]; then
+    if [[ "$STORAGE_MEDIUM" == "DAOS" || "$ETCD_MEDIUM" == "DAOS" || "$MINIO_MEDIUM" == "DAOS" ]]; then
+        DAOS_POOL="radix-io"
+        DAOS_CONT="vectorDBTesting"
+        rm -fr /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
+    elif [[ "$STORAGE_MEDIUM" == "lustre" || "$MODE" == "DISTRIBUTED" ]]; then
+        rm -fr ./milvusDir/
+    fi
 fi
-
-chmod -R g+rwX "$BASE_DIR/$myDIR"

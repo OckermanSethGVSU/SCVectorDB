@@ -1,17 +1,81 @@
 
-export myDIR=$myDIR
-export VECTOR_DIM=$VECTOR_DIM
-export DISTANCE_METRIC=$DISTANCE_METRIC
-export GPU_INDEX=$GPU_INDEX
-export QDRANT_EXECUTABLE=$QDRANT_EXECUTABLE
-export PERF=$PERF
-export PERF_EVENTS=$PERF_EVENTS
-export RESTORE_DIR=$RESTORE_DIR
-export INSERT_TRACE=$INSERT_TRACE
-export QUERY_TRACE=$QUERY_TRACE
-export INSERT_STREAMING=$INSERT_STREAMING
-export QUERY_STREAMING=$QUERY_STREAMING
+summarize_standard_run() {
+    local task_name="$1"
+    local npy_dir="$2"
+    [[ -d "$npy_dir" ]] || return 0
+    shopt -s nullglob
+    local npy_files=("$npy_dir"/*.npy)
+    shopt -u nullglob
+    (( ${#npy_files[@]} > 0 )) || return 0
+    mkdir -p clientTiming
+    ACTIVE_TASK="$task_name" python3 summarize_client_timings.py \
+        --npy-dir "$npy_dir" \
+        --output-dir clientTiming \
+        --times-csv "./${task_name,,}_times.csv"
+}
 
+move_standard_npy_files() {
+    local target_dir="$1"
+    mkdir -p "$target_dir"
+    shopt -s nullglob
+    local npy_files=(./*.npy)
+    if (( ${#npy_files[@]} > 0 )); then
+        mv "${npy_files[@]}" "$target_dir"/
+    fi
+    shopt -u nullglob
+}
+
+finalize_cluster_run() {
+    touch flag.txt
+    touch ./runtime_state/flag.txt
+    mkdir -p systemStats
+    shopt -s nullglob
+    local file
+    mkdir -p clientTiming
+    local timing_files=()
+    [[ -f ./index_time.txt ]] && timing_files+=(./index_time.txt)
+    timing_files+=(./*_times.csv ./*_summary.csv)
+    if (( ${#timing_files[@]} > 0 )); then
+        mv "${timing_files[@]}" clientTiming/
+    fi
+    sleep 30
+    for file in ./*_system_*.csv ./*_final.csv; do
+        [[ -e "$file" ]] || continue
+        mv "$file" systemStats/
+    done
+    shopt -u nullglob
+    rm -f flag.txt
+    if [[ -f ./ip_registry.txt ]]; then
+        mv ./ip_registry.txt ./runtime_state/
+    fi
+    if [[ -d ./ip_registry.d ]]; then
+        mv ./ip_registry.d ./runtime_state/
+    fi
+    for file in ./all_nodefile.txt ./worker_nodefile.txt ./config.yaml; do
+        [[ -e "$file" ]] || continue
+        mv "$file" ./runtime_state/
+    done
+}
+
+wait_for_launch_stop_flag() {
+    touch ./runtime_state/workflow_start.txt ./runtime_state/workflow_stop.txt
+    echo "TASK=LAUNCH: Qdrant cluster is up and will stay running until you create flag.txt or runtime_state/flag.txt in this run directory."
+
+    while [[ ! -e flag.txt && ! -e ./runtime_state/flag.txt ]]; do
+        sleep 1
+    done
+
+    echo "TASK=LAUNCH: stop flag detected; stopping Qdrant cluster."
+    touch flag.txt ./runtime_state/flag.txt
+    sleep 30
+}
+
+
+if [[ -z "${BASE_DIR:-}" ]]; then
+    BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+RUN_DIR="${RUN_DIR:-$BASE_DIR/$myDIR}"
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -20,17 +84,24 @@ if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml apptainer/main
     ml load e2fsprogs
     module use /soft/modulefiles; module load conda; conda activate base
-    source /eagle/projects/radix-io/sockerman/cleanQdrant/qdrantEnv/bin/activate
 
-    cd /eagle/projects/radix-io/sockerman/SCVectorDB/qdrant/$myDIR
-    exec > >(tee output.log) 2>&1
 elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load apptainer
     module load frameworks
-    source /lus/flare/projects/radix-io/sockerman/temp/qdrant/newEnv/bin/activate
-    cd /lus/flare/projects/radix-io/sockerman/temp/qdrant/$myDIR
 fi
 
+set -a
+source ./run_config.env
+set +a
+
+
+if [[ -n "${ENV_PATH:-}" ]]; then
+    echo "Activating Python environment: $ENV_PATH"
+    source "$ENV_PATH/bin/activate"
+    echo "ENV_PATH not set; using current Python environment: $(command -v python3)"
+fi
+
+cd "$RUN_DIR"
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
@@ -56,7 +127,7 @@ cat $PBS_NODEFILE > all_nodefile.txt
 
 # create configs for each rank, 1 launched per node
 mpirun -n $TOTAL --ppn $WORKERS_PER_NODE --cpu-bind none --hostfile worker_nodefile.txt  \
-    python3 gen_dirs.py --storage_medium $STORAGE_MEDIUM --path /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR
+    python3 gen_dirs.py --storage_medium $STORAGE_MEDIUM --path /tmp/${DAOS_POOL}/${DAOS_CONT}/$myDIR --log_level "$LOG_LEVEL"
 
 # launch qdrant nodes
 for ((i=0; i<NODES; i++)); do
@@ -65,10 +136,14 @@ for ((i=0; i<NODES; i++)); do
     entry=$(sed -n "${line_num}p" "$PBS_NODEFILE")
     for ((j=0; j<WORKERS_PER_NODE; j++)); do
         index=$(((i * WORKERS_PER_NODE) + j))
-        echo "Launching node ${index} with cores ${CORES}"
+        if [[ -n "${CORES:-}" ]]; then
+            echo "Launching node ${index} with cores ${CORES}"
+        else
+            echo "Launching node ${index} with cpu-bind none"
+        fi
 
-        # don't use binding if we are using all cores, else set it
-        if [[ "$CORES" -eq 112 ]]; then            
+        # Empty CORES means do not request explicit core depth binding.
+        if [[ -z "${CORES:-}" ]]; then
             mpirun -n 1 --ppn 1 --cpu-bind none --host $entry ./launchQdrantNode.sh $index $STORAGE_MEDIUM &
         else
             mpirun -n 1 --ppn 1 -d $CORES --cpu-bind depth --host $entry ./launchQdrantNode.sh $index $STORAGE_MEDIUM &
@@ -103,7 +178,7 @@ done
 while true; do
   all_running=1
   for ((rank=0; rank<=MAX_RANK; rank++)); do
-    if [ ! -e "./perf/qdrant_running${rank}.txt" ]; then
+    if [ ! -e "./runtime_state/qdrant_running${rank}.txt" ]; then
       all_running=0
       break
     fi
@@ -131,136 +206,93 @@ mv interfaces*.json interfaces/
 
 sleep 30
 
-
 ########## Workflow ###############
 line=$(head -n 1 ip_registry.txt)
 IFS=',' read -r id ip port <<< "$line"
 port=$((port - 1))
+
+if [[ "$TASK" == "LAUNCH" ]]; then
+    wait_for_launch_stop_flag
+else
 
 if [ -z "$RESTORE_DIR" ]; then
     
     # Setup the cluster 
     TARGET_FILE="ready.flag"
     while [[ ! -e "$TARGET_FILE" ]]; do
-        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 configureTopo.py
+        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 configure_collection.py
         sleep 30
     done
     rm $TARGET_FILE
     sleep 3
 
-    export INSERT_CORPUS_SIZE=$INSERT_CORPUS_SIZE
-    export INSERT_CLIENTS_PER_WORKER=$INSERT_CLIENTS_PER_WORKER
-    export INSERT_FILEPATH=$INSERT_FILEPATH
-    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
-    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
-    export INSERT_STREAMING=$INSERT_STREAMING
     export ACTIVE_TASK="INSERT"
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
     
     # tell the profs to close and give them time to do so
     if [[ "$TASK" == "INSERT" ]]; then
-        touch flag.txt
-        touch ./perf/flag.txt
-        sleep 30
-        mkdir systemStats/
-        mv *_system_*.csv systemStats/
+        finalize_cluster_run
     fi
 
-    python3 multi_client_summary.py
-
-    mkdir -p uploadNPY
-    mv *.npy uploadNPY
+    move_standard_npy_files uploadNPY
    
    
     if [[ "$TASK" == "INDEX" ]]; then
 
         # TODO: parameterize index
-        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
+        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 build_index.py
+        summarize_standard_run INSERT uploadNPY
         
-        touch flag.txt
-        touch ./perf/flag.txt
-        sleep 30
-        mkdir systemStats/
-        mv *_system_*.csv systemStats/
+        finalize_cluster_run
     fi
 else
-    export EXPECTED_CORPUS_SIZE=$EXPECTED_CORPUS_SIZE
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 status.py
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 collection_status.py
 fi
 
 
 if [[ "$TASK" == "QUERY" ]]; then
     # index the data
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 build_index.py
 
-    export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
-    export QUERY_CLIENTS_PER_WORKER=$QUERY_CLIENTS_PER_WORKER
-    export TOTAL_QUERY_CLIENTS=$TOTAL_QUERY_CLIENTS
-    export QUERY_FILEPATH=$QUERY_FILEPATH
-    export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
-    export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
-    export QUERY_STREAMING=$QUERY_STREAMING
     export ACTIVE_TASK="QUERY"
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./multiClientOP
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
 
-    python3 multi_client_summary.py
+    move_standard_npy_files queryNPY
+    summarize_standard_run INSERT uploadNPY
+    summarize_standard_run QUERY queryNPY
 
-    touch flag.txt
-    touch ./perf/flag.txt
-    sleep 30
-    mkdir systemStats/
-    mv *_system_*.csv systemStats/
+    finalize_cluster_run
 
-    mkdir -p queryNPY
-    mv *.npy queryNPY
 fi
 
 
 if [[ "$TASK" == "MIXED" ]]; then
-
+    # set the insert offset
+    if [[ -z "${INSERT_START_ID:-}" ]]; then
+        if [[ -n "${RESTORE_DIR:-}" ]]; then
+            INSERT_START_ID="$EXPECTED_CORPUS_SIZE"
+        elif [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
+            INSERT_START_ID="$INSERT_CORPUS_SIZE"
+        elif [[ -n "${INSERT_DATA_FILEPATH:-}" ]]; then
+            if ! INSERT_START_ID="$(python3 inspect.py "$INSERT_DATA_FILEPATH")"; then
+                echo "Error: failed to derive INSERT_START_ID from INSERT_DATA_FILEPATH using inspect.py." >&2
+                exit 1
+            fi
+        else
+            echo "Error: TASK=MIXED requires INSERT_START_ID, INSERT_CORPUS_SIZE, RESTORE_DIR, or INSERT_DATA_FILEPATH." >&2
+            exit 1
+        fi
+        export INSERT_START_ID
+        echo "INSERT_START_ID=$INSERT_START_ID"
+    fi
 
     if [[ -z "$RESTORE_DIR"  ]]; then
         # index the data
-        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 index.py
+        NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 build_index.py
     fi
 
-    # Reuses these vars from insert
-    export INSERT_CLIENTS_PER_WORKER=$INSERT_CLIENTS_PER_WORKER
-    export INSERT_BATCH_SIZE=$INSERT_BATCH_SIZE
-    export INSERT_BALANCE_STRATEGY=$INSERT_BALANCE_STRATEGY
-
-    # Reuses these query vars
-    export QUERY_CORPUS_SIZE=$QUERY_CORPUS_SIZE
-    export QUERY_CLIENTS_PER_WORKER=$QUERY_CLIENTS_PER_WORKER
-    export QUERY_FILEPATH=$QUERY_FILEPATH
-    export QUERY_BATCH_SIZE=$QUERY_BATCH_SIZE
-    export QUERY_BALANCE_STRATEGY=$QUERY_BALANCE_STRATEGY
-
-    # Actual important mixed vars
-    export MIXED_CORPUS_SIZE=$MIXED_CORPUS_SIZE
-    export MIXED_DATA_FILEPATH=$MIXED_DATA_FILEPATH
-    export MIXED_QUERY_CLIENTS_PER_WORKER=$MIXED_QUERY_CLIENTS_PER_WORKER
-    export MIXED_INSERT_CLIENTS_PER_WORKER=$MIXED_INSERT_CLIENTS_PER_WORKER
-    export RESULT_PATH=$RESULT_PATH
-    export INSERT_MODE=$INSERT_MODE
-    export INSERT_OPS_PER_SEC=$INSERT_OPS_PER_SEC
-    export INSERT_START_ID=$INSERT_START_ID
-    export QUERY_MODE=$QUERY_MODE
-    export QUERY_OPS_PER_SEC=$QUERY_OPS_PER_SEC
-    
-    # optimal vars included for completeness 
-    export COLLECTION_NAME=$COLLECTION_NAME
-    export TOP_K=$TOP_K
-    export QUERY_EF_SEARCH=$QUERY_EF_SEARCH
-    export RPC_TIMEOUT=$RPC_TIMEOUT
-    export QDRANT_REGISTRY_PATH=$QDRANT_REGISTRY_PATH
-    export INSERT_BATCH_MIN=$INSERT_BATCH_MIN
-    export INSERT_BATCH_MAX=$INSERT_BATCH_MAX
-    export QUERY_BATCH_MIN=$QUERY_BATCH_MIN
-    export QUERY_BATCH_MAX=$QUERY_BATCH_MAX
-
     export ACTIVE_TASK="MIXED"
-    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixedRunner
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixed
 
     MIXED_TIMELINE_METRIC="dot"
     if [[ "$DISTANCE_METRIC" == "COSINE" ]]; then
@@ -273,31 +305,45 @@ if [[ "$TASK" == "MIXED" ]]; then
         mixed_timeline.py
         --log-dir "$RESULT_PATH"
         --insert-vectors "$MIXED_DATA_FILEPATH"
-        --insert-max-rows "$MIXED_CORPUS_SIZE"
-        --query-vectors "$QUERY_FILEPATH"
-        --query-max-rows "$QUERY_CORPUS_SIZE"
+        --query-vectors "$QUERY_DATA_FILEPATH"
         --metric "$MIXED_TIMELINE_METRIC"
         --insert-id-offset "$INSERT_START_ID"
     )
+    if [[ -n "$MIXED_CORPUS_SIZE" ]]; then
+        MIXED_TIMELINE_ARGS+=(
+            --insert-max-rows "$MIXED_CORPUS_SIZE"
+        )
+    fi
+    if [[ -n "$QUERY_CORPUS_SIZE" ]]; then
+        MIXED_TIMELINE_ARGS+=(
+            --query-max-rows "$QUERY_CORPUS_SIZE"
+        )
+    fi
     if [[ -z "$RESTORE_DIR" ]]; then
         MIXED_TIMELINE_ARGS+=(
-            --init-vectors "$INSERT_FILEPATH"
-            --init-max-rows "$INSERT_CORPUS_SIZE"
+            --init-vectors "$INSERT_DATA_FILEPATH"
         )
+        if [[ -n "$INSERT_CORPUS_SIZE" ]]; then
+            MIXED_TIMELINE_ARGS+=(
+                --init-max-rows "$INSERT_CORPUS_SIZE"
+            )
+        fi
     fi
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 "${MIXED_TIMELINE_ARGS[@]}"
 
-    touch flag.txt
-    touch ./perf/flag.txt
-    sleep 30
-    mkdir systemStats/
-    mv *_system_*.csv systemStats/
+    finalize_cluster_run
+fi
+
 fi
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
 
     # techincally optional but still good to do
     clean-dfuse.sh  ${DAOS_POOL}:${DAOS_CONT}
+fi
+
+if [[ "$TASK" == "INSERT" ]]; then
+    summarize_standard_run INSERT uploadNPY
 fi
 
 mkdir workerOut

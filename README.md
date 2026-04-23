@@ -1,86 +1,120 @@
 # SCVectorDB
 
-SCVectorDB is a collection of PBS-oriented HPC workflows for large-scale vector database experiments. The repository currently contains working workflows for Qdrant and Milvus, plus early Weaviate scaffolding and graphing utilities used for post-run analysis.
+SCVectorDB contains HPC workflows for vector database experiments across Qdrant, Milvus, and Weaviate.
 
-## Top-level layout
+## Layout
 
 ```text
 .
-├── README.md
+├── pbs_submit_manager.sh
+├── common/
 ├── graphing/
 ├── milvus/
 ├── qdrant/
-└── weaivate/
+└── weaviate/
 ```
 
-## Current repository contents
+## Unified submit flow
 
-- `qdrant/`: Qdrant cluster launch, ingest/query clients, local test helpers, and Rust mixed insert/query runner.
-- `milvus/`: Milvus standalone/distributed workflows, Go client binaries, and mixed insert/query runner for timeline-style experiments.
-- `graphing/`: notebooks and scripts for analyzing insert/query/index outputs.
-- `weaivate/`: early workflow scaffolding for Weaviate.
-
-## Common execution model
-
-Most HPC workflows in this repo follow the same pattern:
-
-1. Set experiment variables in `pbs_submit_manager.sh`.
-2. Generate a run-specific PBS submission script with exported runtime variables.
-3. Stage workflow scripts, binaries, and site-specific assets into a run directory.
-4. Append the workflow entrypoint (`main.sh`) to the generated script.
-5. Submit with `qsub` when ready.
-
-## Environment expectations
-
-These workflows assume an HPC environment with most or all of the following:
-
-- PBS Pro (`qsub`, `$PBS_NODEFILE`)
-- MPI (`mpirun`)
-- Apptainer
-- Python 3 and project-specific Python environments
-- `jq`
-- Site module system (`module` / `ml`)
-- Optional DAOS helpers (`launch-dfuse.sh`, `clean-dfuse.sh`)
-
-Most submitted runs also rely on site-specific absolute paths for:
-
-- container images or executables
-- Python environments
-- dataset `.npy` files
-- prebuilt client binaries
-- output base directories
-
-## Local vs HPC usage
-
-- Use `qdrant/local_test.sh` for a local container-backed smoke test of Qdrant clients.
-- Use `qdrant/pbs_submit_manager.sh` and `milvus/pbs_submit_manager.sh` for full HPC runs.
-- The local Qdrant script can now run either the standard insert-then-query path or the Rust mixed runner.
-
-## Quick start
-
-### Qdrant
+The repository uses a single top-level submit entrypoint:
 
 ```bash
-cd qdrant
-bash pbs_submit_manager.sh
+./pbs_submit_manager.sh --help
+./pbs_submit_manager.sh --help --engine qdrant
+./pbs_submit_manager.sh --engine qdrant --config path/to/run.env
+./pbs_submit_manager.sh --generate-only --engine qdrant --config path/to/run.env
 ```
 
-For a local container-backed test:
+Behavior:
+
+- normal execution generates the run directory and submits if `RUN_MODE=PBS`
+- `--generate-only` generates the run directory but does not submit
+- `--help --engine <engine>` prints the engine variables, defaults, and requirement status
+
+Each engine VDB its engine-specific logic in its own directory.
+
+
+## Config model
+
+Runs can be configured with:
+
+- `--set KEY=value`
+- `--config path/to/file.env`
+
+Config files are plain `KEY=value` env-style files. Example:
 
 ```bash
-cd qdrant
-./local_test.sh
-./local_test.sh --mixed --insert-clients 1 --query-clients 1 --mode max
+ENGINE=qdrant
+TASK=QUERY
+RUN_MODE=local
+INSERT_DATA_FILEPATH=/path/to/base.npy
+QUERY_DATA_FILEPATH=/path/to/query.npy
+VECTOR_DIM=768
 ```
 
-### Milvus
+For `RUN_MODE=local`, PBS-only settings such as `PLATFORM`, `WALLTIME`, `QUEUE`, and `ACCOUNT` are optional.
 
-```bash
-cd milvus
-bash pbs_submit_manager.sh
-```
+## Repo-Wide Variables
 
-## Notes
+The common variables below are defined in `common/schema.sh` and apply across all VDBs. For VDB specific variables, examine `schema.sh` in the specific VDB's folder (e.g., `milvus/schema.sh`). 
 
-- Site-specific values in each submit manager still need to be reviewed before submitting jobs.
-- Generated local test artifacts such as `.local/`, `ip_registry.txt`, `local_test_data/`, and Rust `target/` directories are not part of the intended source tree.
+### Control
+
+| Variable | Default | Required When | Allowed Values | Purpose |
+|---|---|---|---|---|
+| `TASK` | none | always | `LAUNCH`, `INSERT`, `INDEX`, `QUERY`, `MIXED` | Experiment task |
+| `RUN_MODE` | `PBS` | optional | `PBS`, `LOCAL`, `local` | Run under PBS or use a local harness |
+
+### Platform and Allocation
+
+| Variable | Default | Required When | Allowed Values | Purpose |
+|---|---|---|---|---|
+| `PLATFORM` | none | `RUN_MODE=PBS` | `POLARIS`, `AURORA` | Target platform |
+| `NODES` | none | `RUN_MODE=PBS` | any | Compute-node count for worker ranks |
+| `CORES` | empty | optional | any | CPU cores per worker rank; empty disables explicit CPU binding |
+| `STORAGE_MEDIUM` | `memory` | optional | `memory`, `DAOS`, `lustre`, `SSD` | Storage medium for engine data |
+
+### PBS and Python Environment
+
+| Variable | Default | Required When | Allowed Values | Purpose |
+|---|---|---|---|---|
+| `ACCOUNT` | none | `RUN_MODE=PBS` | any | PBS project/account |
+| `WALLTIME` | none | `RUN_MODE=PBS` | any | PBS walltime |
+| `QUEUE` | none | `RUN_MODE=PBS` | any | PBS queue name |
+| `ENV_PATH` | empty | optional | any | Python environment path |
+| `ALLOW_SYSTEM_PYTHON` | `False` | optional | `True`, `False` | Allow PBS runs to use the already-loaded Python environment when `ENV_PATH` is empty |
+
+### Collection and Vector Settings
+
+| Variable | Default | Required When | Allowed Values | Purpose |
+|---|---|---|---|---|
+| `COLLECTION_NAME` | `default_collection` | optional | any | Optional collection override |
+| `VECTOR_DIM` | none | always | any | Vector dimension |
+| `DISTANCE_METRIC` | `COSINE` | optional | `IP`, `COSINE`, `L2` | Distance metric |
+
+### Insert Workload
+
+| Variable | Default | Required When | Allowed Values | Purpose |
+|---|---|---|---|---|
+| `INSERT_DATA_FILEPATH` | none | `TASK=INSERT\|INDEX\|QUERY\|MIXED` | any | Insert corpus file path |
+| `INSERT_CORPUS_SIZE` | empty | optional | any | Total vectors to preload; empty uses all rows in the file |
+| `INSERT_BATCH_SIZE` | `512` | optional | any | Insert batch size; can be a sweep value |
+| `INSERT_BALANCE_STRATEGY` | `WORKER_BALANCE` | optional | `NO_BALANCE`, `WORKER_BALANCE` | Insert balancing policy |
+| `INSERT_STREAMING` | `False` | optional | `True`, `False` | Enable streaming insert behavior |
+
+### Query Workload
+
+| Variable | Default | Required When | Allowed Values | Purpose |
+|---|---|---|---|---|
+| `QUERY_DATA_FILEPATH` | none | `TASK=QUERY\|MIXED` | any | Query vector file path |
+| `QUERY_CORPUS_SIZE` | empty | optional | any | Total queries to execute; empty uses all rows in the file |
+| `QUERY_BATCH_SIZE` | `32` | optional | any | Query batch size; can be a sweep value |
+| `QUERY_BALANCE_STRATEGY` | `NO_BALANCE` | `TASK=QUERY\|MIXED` | `NO_BALANCE`, `WORKER_BALANCE` | Query balancing policy |
+| `QUERY_STREAMING` | `False` | optional | `True`, `False` | Enable streaming query behavior |
+| `TOP_K` | `10` | optional | any | Optional top-k override |
+
+### Paths
+
+| Variable | Default | Required When | Allowed Values | Purpose |
+|---|---|---|---|---|
+| `BASE_DIR` | empty | optional | any | Base directory for generated run directories; auto-filled when empty |

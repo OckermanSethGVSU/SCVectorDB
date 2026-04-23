@@ -13,9 +13,9 @@ apptainer exec --no-home --fakeroot --writable-tmpfs \
   otel-collector.sif /otelcol-contrib --config /otel_config.yaml > otel.out  2>&1 &
 
 OTEL_PID=$!
-
-
-SENTINEL_FILE="./flag.txt"
+RUNTIME_STATE_DIR="${RUNTIME_STATE_DIR:-./runtime_state}"
+mkdir -p "$RUNTIME_STATE_DIR"
+SENTINEL_FILE="$RUNTIME_STATE_DIR/flag.txt"
 
 while [[ ! -f "$SENTINEL_FILE" ]]; do
     sleep 1

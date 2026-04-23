@@ -1,0 +1,192 @@
+import argparse
+import csv
+import os
+import re
+from pathlib import Path
+
+import numpy as np
+
+
+SUMMARY_HEADER = [
+    "scope",
+    "operation",
+    "total_ms",
+    "mean_ms",
+    "std_ms",
+    "p99_ms",
+    "ops_per_s",
+    "vecs_per_s",
+]
+
+
+def env_required(name: str) -> str:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        raise RuntimeError(f"missing required environment variable: {name}")
+    return value.strip()
+
+
+def env_optional_int(name: str) -> int | None:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return None
+    return int(value.strip())
+
+
+def get_active_task() -> str:
+    raw = os.getenv("ACTIVE_TASK") or os.getenv("TASK")
+    if raw is None:
+        raise RuntimeError("missing ACTIVE_TASK/TASK")
+    task = raw.strip().upper()
+    if task not in {"INSERT", "QUERY"}:
+        raise RuntimeError(f"unsupported ACTIVE_TASK/TASK: {raw}")
+    return task
+
+
+def summarize_npy(path: Path, rank: int, name: str, batch_size: int):
+    arr = np.load(path) * 1000.0
+    total_ms = float(np.sum(arr))
+    total_sec = total_ms / 1000.0
+    op_count = len(arr)
+    ops_per_sec = op_count / total_sec if total_sec else 0.0
+    vecs_per_sec = (batch_size * op_count) / total_sec if total_sec else 0.0
+    return [rank, name, total_ms, float(np.mean(arr)), float(np.std(arr)), float(np.percentile(arr, 99)), ops_per_sec, vecs_per_sec], arr
+
+
+def aggregate_stats(label: str, arr: np.ndarray, total_time_sec: float, corpus_size: int):
+    total_ms = float(np.sum(arr))
+    op_count = len(arr)
+    ops_per_sec = op_count / total_time_sec if total_time_sec else 0.0
+    vecs_per_sec = corpus_size / total_time_sec if total_time_sec else 0.0
+    return ["aggregate", label, total_ms, float(np.mean(arr)), float(np.std(arr)), float(np.percentile(arr, 99)), ops_per_sec, vecs_per_sec]
+
+
+def extract_total_time(csv_path: Path) -> float:
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get("rank") == "0":
+                total_value = row.get("total_s")
+                if total_value is None:
+                    raise RuntimeError(
+                        f"missing total_s column in {csv_path}; saw columns {reader.fieldnames}"
+                    )
+                return float(total_value)
+    raise RuntimeError(f"rank 0 total not found in {csv_path}")
+
+
+def expected_client_count(task: str) -> int:
+    if task == "QUERY":
+        total_clients = env_optional_int("TOTAL_QUERY_CLIENTS")
+        if total_clients is not None:
+            return total_clients
+
+    n_workers = int(env_required("N_WORKERS"))
+    clients_per_worker = int(env_required(f"{task}_CLIENTS_PER_WORKER"))
+    return n_workers * clients_per_worker
+
+
+def resolve_corpus_size(task: str) -> int:
+    explicit = env_optional_int(f"{task}_CORPUS_SIZE")
+    if explicit is not None:
+        return explicit
+
+    if task == "INSERT":
+        npy_path = Path(env_required("INSERT_DATA_FILEPATH"))
+    else:
+        npy_path = Path(env_required("QUERY_DATA_FILEPATH"))
+
+    arr = np.load(npy_path, mmap_mode="r")
+    if arr.ndim != 2:
+        raise RuntimeError(f"expected a 2D npy array at {npy_path}, got shape {arr.shape}")
+    return int(arr.shape[0])
+
+
+def discover_ranks(prefix: str, main_prefix: str, expected_clients: int, npy_dir: Path) -> list[int]:
+    patterns = [
+        re.compile(rf"{re.escape(prefix)}_batch_construction_times_rank_(\d+)\.npy$"),
+        re.compile(rf"{re.escape(prefix)}_{re.escape(main_prefix)}_rank_(\d+)\.npy$"),
+        re.compile(rf"{re.escape(prefix)}_op_times_rank_(\d+)\.npy$"),
+    ]
+    rank_sets: list[set[int]] = []
+
+    for pattern in patterns:
+        ranks = set()
+        for path in npy_dir.glob("*.npy"):
+            match = pattern.fullmatch(path.name)
+            if match:
+                ranks.add(int(match.group(1)))
+        rank_sets.append(ranks)
+
+    common_ranks = set.intersection(*rank_sets)
+    if common_ranks:
+        return sorted(rank for rank in common_ranks if rank < expected_clients)
+
+    return list(range(expected_clients))
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--npy-dir", default=".", help="Directory containing timing .npy files")
+    parser.add_argument("--output-dir", default=".", help="Directory for summary CSV outputs")
+    parser.add_argument("--times-csv", default=None, help="Path to the per-rank timing CSV")
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    task = get_active_task()
+    prefix = task.lower()
+    batch_size = int(env_required(f"{task}_BATCH_SIZE"))
+    corpus_size = resolve_corpus_size(task)
+    clients = expected_client_count(task)
+    npy_dir = Path(args.npy_dir)
+    output_dir = Path(args.output_dir)
+
+    if task == "INSERT":
+        main_name = "insert"
+        main_prefix = "upload_times"
+    else:
+        main_name = "query"
+        main_prefix = "query_times"
+
+    summary_path = output_dir / f"{prefix}_summary.csv"
+    rank_summary_path = output_dir / f"{prefix}_rank_summary.csv"
+    times_csv = Path(args.times_csv) if args.times_csv else Path(f"{prefix}_times.csv")
+
+    with rank_summary_path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(SUMMARY_HEADER)
+
+    all_op = []
+
+    ranks = discover_ranks(prefix, main_prefix, clients, npy_dir)
+    if not ranks:
+        raise RuntimeError(
+            f"no rank timing files found for task={task} (expected up to {clients} ranks)"
+        )
+
+    for rank in ranks:
+        prep, _prep_arr = summarize_npy(npy_dir / f"{prefix}_batch_construction_times_rank_{rank}.npy", rank, "prep", batch_size)
+        main_stats, _main_arr = summarize_npy(npy_dir / f"{prefix}_{main_prefix}_rank_{rank}.npy", rank, main_name, batch_size)
+        op, op_arr = summarize_npy(npy_dir / f"{prefix}_op_times_rank_{rank}.npy", rank, "op", batch_size)
+
+        with rank_summary_path.open("a", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(prep)
+            writer.writerow(main_stats)
+            writer.writerow(op)
+
+        all_op.append(op_arr)
+
+    total_time_sec = extract_total_time(times_csv)
+    stacked_op = np.concatenate(all_op)
+
+    with summary_path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(SUMMARY_HEADER)
+        writer.writerow(aggregate_stats(main_name, stacked_op, total_time_sec, corpus_size))
+
+
+if __name__ == "__main__":
+    main()
