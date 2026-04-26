@@ -285,8 +285,8 @@ func (g *RankZeroGate) Open() {
 	g.mu.Unlock()
 }
 
-// WriteCoordinator ensures rank 0 performs the first write and serializes
-// all writes after that so no two clients write concurrently.
+// WriteCoordinator ensures rank 0 emits the first CSV record and serializes
+// CSV appends after that so no two clients append concurrently.
 type WriteCoordinator struct {
 	mu               sync.Mutex
 	cond             *sync.Cond
@@ -935,17 +935,12 @@ func clientWorker(
 				}
 
 				startUpload = time.Now()
-				func() {
-					writeCoordinator.Lock(globalClientRank)
-					defer writeCoordinator.Unlock(globalClientRank)
-
-					_, err = mclient.Insert(
-						opCtx,
-						milvusclient.NewColumnBasedInsertOption(collectionName).
-							WithInt64Column(idField, ids).
-							WithFloatVectorColumn(vectorField, mcols, batch),
-					)
-				}()
+				_, err = mclient.Insert(
+					opCtx,
+					milvusclient.NewColumnBasedInsertOption(collectionName).
+						WithInt64Column(idField, ids).
+						WithFloatVectorColumn(vectorField, mcols, batch),
+				)
 			} else if ACTIVE_TASK == "QUERY" {
 				vectors := make([]entity.Vector, len(batch))
 				for j := range batch {
@@ -1105,7 +1100,8 @@ func clientWorker(
 		clientTotalToSearchable := searchableAtClient.Sub(startLoop).Seconds()
 		sharedWindow := sharedTiming.searchableAt.Sub(sharedTiming.loopStart).Seconds()
 
-		if err := resultWriter.Append(
+		writeCoordinator.Lock(globalClientRank)
+		err = resultWriter.Append(
 			sweep.ResultPath,
 			globalClientRank,
 			[]string{
@@ -1128,7 +1124,9 @@ func clientWorker(
 				strconv.FormatFloat(clientTotalToSearchable, 'g', -1, 64),
 				strconv.FormatFloat(sharedWindow, 'g', -1, 64),
 			},
-		); err != nil {
+		)
+		writeCoordinator.Unlock(globalClientRank)
+		if err != nil {
 			log.Fatal(err)
 		}
 
