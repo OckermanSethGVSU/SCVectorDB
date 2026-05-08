@@ -61,7 +61,7 @@ def resolve_dynamic_threshold() -> int:
         if task == "INSERT":
             print("Doubling the threshold for HNSW index build to isolate insert performance. Set TASK='INDEX' to time indexing, or explicitly set 'HNSW_DYNAMIC_THRESHOLD' if you want a custom threshold.", flush=True)
             return threshold * 2
-        if task in ["INDEX","QUERY"]:
+        if task in ["INDEX","QUERY","MIXED"]:
             return max(1, threshold - 1)
         return threshold
 

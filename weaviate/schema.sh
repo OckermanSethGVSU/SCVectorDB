@@ -35,3 +35,14 @@ register_weaviate_var "INSERT_CLIENTS_PER_WORKER" "default" "1" "" "Insert clien
 register_weaviate_var "QUERY_TOPK" "default" "10" "" "Query top-k"
 register_weaviate_var "HNSW_EF_SEARCH" "default" "64" "" "HNSW ef parameter used in collection creation for query-time search breadth"
 register_weaviate_var "QUERY_CLIENTS_PER_WORKER" "default" "1" "" "Query clients per worker rank"
+
+# Mixed workload
+register_weaviate_var "MIXED_INSERT_DATA_FILEPATH" "conditional" "" "" "Path to the data that the mixed insert clients will use" "TASK=MIXED"
+register_weaviate_var "MIXED_INSERT_CLIENTS" "default" "1" "" "Mixed insert clients"
+register_weaviate_var "MIXED_INSERT_MODE" "default" "MAX" "MAX RATE" "Mode of operation for insert clients. 'MAX' sends the inserts as fast as possible, while 'RATE' also you to specify a rate per second"
+register_weaviate_var "MIXED_INSERT_BATCH_SIZE" "default" "32" "" "Batch size of mixed insert clients"
+
+register_weaviate_var "MIXED_QUERY_DATA_FILEPATH" "conditional" "" "" "Path to the data that the mixed query clients will use" "TASK=MIXED"
+register_weaviate_var "MIXED_QUERY_CLIENTS" "default" "1" "" "Mixed query clients"
+register_weaviate_var "MIXED_QUERY_MODE" "default" "MAX" "MAX RATE" "Mode of operation for query clients. 'MAX' sends the query as fast as possible, while 'RATE' also you to specify a rate per second"
+register_weaviate_var "MIXED_QUERY_BATCH_SIZE" "default" "32" "" "Batch size of mixed query clients"

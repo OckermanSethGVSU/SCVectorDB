@@ -35,10 +35,10 @@ register_common_var "INSERT_BALANCE_STRATEGY" "default" "WORKER_BALANCE" "NO_BAL
 register_common_var "INSERT_STREAMING" "default" "False" "True False" "Enable streaming insert behavior"
 
 # QUERY variables
-register_common_var "QUERY_DATA_FILEPATH" "conditional" "" "" "Query vector file path" "TASK=QUERY|MIXED"
+register_common_var "QUERY_DATA_FILEPATH" "conditional" "" "" "Query vector file path" "TASK=QUERY"
 register_common_var "QUERY_CORPUS_SIZE" "default" "" "" "Total queries to execute; empty means use all rows in the file"
 register_common_var "QUERY_BATCH_SIZE" "default" "32" "" "Query batch size; single value or sweep list"
-register_common_var "QUERY_BALANCE_STRATEGY" "conditional" "NO_BALANCE" "NO_BALANCE WORKER_BALANCE" "Query balancing policy" "TASK=QUERY|MIXED"
+register_common_var "QUERY_BALANCE_STRATEGY" "conditional" "NO_BALANCE" "NO_BALANCE WORKER_BALANCE" "Query balancing policy" "TASK=QUERY"
 register_common_var "QUERY_STREAMING" "default" "False" "True False" "Enable query streaming behavior"
 register_common_var "TOP_K" "default" "10" "" "Optional top-k override"
 

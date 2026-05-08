@@ -5,6 +5,27 @@ run_summary() {
 }
 
 
+resolve_mixed_insert_start_id() {
+    if [[ "$TASK" != "MIXED" || -n "${INSERT_START_ID:-}" ]]; then
+        return 0
+    fi
+
+    if [[ -n "${RESTORE_DIR:-}" ]]; then
+        export MIXED_INSERT_START_ID="${EXPECTED_CORPUS_SIZE:?EXPECTED_CORPUS_SIZE is required when RESTORE_DIR is set}"
+    elif [[ -n "${INSERT_CORPUS_SIZE:-}" ]]; then
+        export MIXED_INSERT_START_ID="$INSERT_CORPUS_SIZE"
+    elif [[ -n "${INSERT_DATA_FILEPATH:-}" ]]; then
+        if ! export MIXED_INSERT_START_ID="$(env "${PYTHON_ENV_VARS[@]}" python3 ./npy_inspect.py "$INSERT_DATA_FILEPATH")"; then
+            echo "Error: failed to derive MIXED_INSERT_START_ID from INSERT_DATA_FILEPATH using npy_inspect.py." >&2
+            exit 1
+        fi
+    else
+        echo "Error: TASK=MIXED requires MIXED_INSERT_START_ID, INSERT_CORPUS_SIZE, RESTORE_DIR, or INSERT_DATA_FILEPATH." >&2
+        exit 1
+    fi
+}
+
+
 if [[ -f ./run_config.env ]]; then
     set -a
     source ./run_config.env
@@ -81,7 +102,7 @@ NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="
 
 if [ "$TASK" = "INSERT" ]; then
     export ACTIVE_TASK="INSERT"
-elif [ "$TASK" = "INDEX" ] || [ "$TASK" = "QUERY" ]; then
+elif [ "$TASK" = "INDEX" ] || [ "$TASK" = "QUERY" ] || [ "$TASK" = "MIXED" ]; then
     export ACTIVE_TASK="INDEX"
 else
     echo "Unknown TASK: $TASK"
@@ -105,5 +126,15 @@ if [[ "$TASK" == "QUERY" ]]; then
     run_summary QUERY query
     touch "runtime_state/flag.txt"
 fi
+
+
+if [[ "$TASK" == "MIXED" ]]; then
+    export ACTIVE_TASK="MIXED"
+    resolve_mixed_insert_start_id
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixed
+    touch "runtime_state/flag.txt"
+fi
+
+
 
 run_summary INSERT insert

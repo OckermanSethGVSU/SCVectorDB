@@ -139,12 +139,17 @@ engine_emit_runtime_env() {
 # Stage the Weaviate launch files, client binaries, and helper scripts.
 engine_copy_payload() {
     local target_dir="$1"
-    local client_src_dir="$ENGINE_DIR/clients/batch_client"
+    local batch_client_src_dir="$ENGINE_DIR/clients/batch_client"
+    local mixed_client_src_dir="$ENGINE_DIR/clients/mixed"
 
     copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" \
         "health_check.py" \
         "create_basic_collection.py" \
         "multi_client_summary.py"
+    if [[ "$TASK" == "MIXED" ]]; then
+        copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" \
+            "npy_inspect.py"
+    fi
     if [[ -d "$ENGINE_DIR/pythonUtils" ]]; then
         copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "pythonUtils"
     fi
@@ -153,17 +158,18 @@ engine_copy_payload() {
     local -A seen_bins=()
     local bin
 
-    if [[ "$TASK" == "MIXED" ]]; then
-        client_src_dir="$ENGINE_DIR/clients/mixed"
-        bins=("mixed")
-    elif [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
+    if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
         copy_engine_items "$ENGINE_DIR/weaviateSetup" "$target_dir" \
             "launchWeaviateNodeLocal.sh"
-        bins=("batch_client")
     else
         copy_engine_items "$ENGINE_DIR/weaviateSetup" "$target_dir" \
             "launchWeaviateNode.sh" \
             "mapping.py"
+    fi
+
+    if [[ "$TASK" == "MIXED" ]]; then
+        bins=("mixed" "batch_client")
+    else
         bins=("batch_client")
     fi
 
@@ -177,15 +183,33 @@ engine_copy_payload() {
     done
 
     for bin in "${unique_bins[@]}"; do
-        if [[ ! -f "$client_src_dir/$bin" ]]; then
-            echo "Required client binary missing: ${client_src_dir#$ENGINE_DIR/}/$bin" >&2
-            echo "Build it with: (cd $ENGINE_DIR/clients && ./build.sh ${bin})" >&2
-            return 1
-        fi
+        case "$bin" in
+            mixed)
+                if [[ ! -f "$mixed_client_src_dir/$bin" ]]; then
+                    echo "Required client binary missing: ${mixed_client_src_dir#$ENGINE_DIR/}/$bin" >&2
+                    echo "Build it with: (cd $ENGINE_DIR/clients && ./build.sh ${bin})" >&2
+                    return 1
+                fi
+                copy_engine_items "$mixed_client_src_dir" "$target_dir" "$bin"
+                ;;
+            batch_client)
+                if [[ ! -f "$batch_client_src_dir/$bin" ]]; then
+                    echo "Required client binary missing: ${batch_client_src_dir#$ENGINE_DIR/}/$bin" >&2
+                    echo "Build it with: (cd $ENGINE_DIR/clients && ./build.sh ${bin})" >&2
+                    return 1
+                fi
+                copy_engine_items "$batch_client_src_dir" "$target_dir" "$bin"
+                ;;
+            *)
+                echo "Unknown client binary requested for staging: $bin" >&2
+                return 1
+                ;;
+        esac
     done
-    copy_engine_items "$client_src_dir" "$target_dir" "${unique_bins[@]}"
     for bin in "${unique_bins[@]}"; do
-        chmod +x "$target_dir/$bin"
+        if [[ -f "$target_dir/$bin" ]]; then
+            chmod +x "$target_dir/$bin"
+        fi
     done
 
 }
