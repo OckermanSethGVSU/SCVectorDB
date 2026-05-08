@@ -35,14 +35,6 @@ const (
 	modeRate runMode = "rate"
 )
 
-type balanceStrategy string
-
-const (
-	balanceNone      balanceStrategy = "NO_BALANCE"
-	balancePerClient balanceStrategy = "PER_CLIENT"
-	balanceWorker    balanceStrategy = "WORKER_BALANCE"
-)
-
 type config struct {
 	// Connection, schema, and input/output paths.
 	milvusAddress     string
@@ -236,7 +228,7 @@ func parseFlags() (config, error) {
 	flag.StringVar(&cfg.vectorField, "vector-field", getenvDefault("VECTOR_FIELD", "vector"), "Vector field name")
 	flag.StringVar(&cfg.idField, "id-field", getenvDefault("ID_FIELD", "id"), "Primary key field name")
 	flag.Int64Var(&cfg.insertStartID, "insert-start-id", getenvInt64Default("INSERT_START_ID", 0), "Starting ID offset for inserted vectors")
-	flag.StringVar(&cfg.insertVectors, "insert-vectors", getenvDefault("INSERT_DATA_FILEPATH", ""), "Path to insert vectors .npy")
+	flag.StringVar(&cfg.insertVectors, "insert-vectors", getenvDefault("MIXED_DATA_FILEPATH", ""), "Path to insert vectors .npy")
 	flag.StringVar(&cfg.queryVectors, "query-vectors", getenvDefault("QUERY_DATA_FILEPATH", ""), "Path to query vectors .npy")
 	flag.StringVar(&cfg.outputDir, "output-dir", getenvDefault("MIXED_RESULT_PATH", getenvDefault("RESULT_PATH", "")), "Directory for per-client JSONL logs")
 	flag.IntVar(&cfg.insertCorpusSize, "insert-corpus-size", getenvIntDefault("INSERT_CORPUS_SIZE", 0), "Rows to read from the insert matrix; 0 means all rows")
@@ -993,7 +985,6 @@ func (d *dryRunBackend) Close(context.Context) error {
 }
 
 func pickProxyTarget(cfg config, r role, clientID int) (*proxyTarget, error) {
-	strategy := getBalanceStrategy(r)
 	registryPath := getenvDefault("PROXY_REGISTRY_PATH", "")
 	if registryPath == "" {
 		if strings.ToLower(strings.TrimSpace(os.Getenv("MODE"))) == "distributed" {
@@ -1002,34 +993,10 @@ func pickProxyTarget(cfg config, r role, clientID int) (*proxyTarget, error) {
 			registryPath = "./runtime_state/PROXY_registry.txt"
 		}
 	}
-	switch strategy {
-	case balanceNone:
-		return getProxyByRank(registryPath, 0)
-	case balancePerClient, balanceWorker:
-		// Clients are striped across proxy ranks with a simple modulo assignment.
-		numProxies := getenvIntDefault("NUM_PROXIES", 0)
-		if numProxies <= 0 {
-			return nil, fmt.Errorf("invalid NUM_PROXIES=%q", os.Getenv("NUM_PROXIES"))
-		}
-		return getProxyByRank(registryPath, clientID%numProxies)
-	default:
-		return nil, fmt.Errorf("unknown balance strategy %q", strategy)
-	}
-}
-
-func getBalanceStrategy(r role) balanceStrategy {
-	envName := fmt.Sprintf("%s_BALANCE_STRATEGY", strings.ToUpper(string(r)))
-	raw := strings.ToUpper(strings.TrimSpace(os.Getenv(envName)))
-	switch raw {
-	case "", string(balanceNone):
-		return balanceNone
-	case string(balancePerClient):
-		return balancePerClient
-	case string(balanceWorker):
-		return balanceWorker
-	default:
-		return balanceStrategy(raw)
-	}
+	_ = cfg
+	_ = r
+	_ = clientID
+	return getProxyByRank(registryPath, 0)
 }
 
 func getProxyByRank(filename string, targetRank int) (*proxyTarget, error) {
