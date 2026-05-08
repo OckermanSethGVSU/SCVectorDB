@@ -1,8 +1,6 @@
 # Overview
 
-SCVectorDB is a workflow collection for vector-database experiments on
-PBS-based HPC systems plus local harnesses for selected engines. It is not a
-single library or service with one build/test entrypoint.
+This repo is a workflow collection for vector-database experiments on PBS-based HPC systems plus local harnesses for selected engines. It is not a single library or service with one build/test entrypoint.
 
 ## Current Mental Model
 
@@ -43,9 +41,7 @@ There are two distinct layers in this repo:
 - tracked source files under version control
 - generated run directories and experiment outputs
 
-If you want workflow behavior changes, edit tracked source files. Do not treat
-generated run directories as canonical source unless the task is explicitly
-about inspecting one generated run.
+If you want workflow behavior changes, edit tracked source files. Do not treat generated run directories as canonical source unless the task is explicitly about inspecting one generated run.
 
 ## Engine Status
 
@@ -53,11 +49,3 @@ about inspecting one generated run.
 - `milvus/`: active, supports `RUN_MODE=PBS` and `RUN_MODE=LOCAL`
 - `weaviate/`: active, supports `RUN_MODE=PBS` and `RUN_MODE=LOCAL` in the
   current tracked workflow
-
-## Recommended Starting Point
-
-1. Run `git status --short`.
-2. Read the top-level README and the relevant engine README.
-3. Inspect the target engine's `engine.sh`, `schema.sh`, and runtime entrypoint.
-4. Confirm whether the user wants source changes or generated-run inspection.
-5. Prefer editing tracked source and regenerating behavior through the unified flow.
