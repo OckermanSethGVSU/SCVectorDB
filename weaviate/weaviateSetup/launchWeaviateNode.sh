@@ -150,7 +150,7 @@ mkdir -p "${TARGET_BASE}/node${RANK}"
 # echo "REGISTRY                : $(tr '\n' '; ' < "$OUTPUT_FILE")"
 # echo "============================================================"
 
-IMAGE="docker://semitechnologies/weaviate:1.36.2"
+IMAGE="docker://semitechnologies/weaviate:1.36.0"
 
 COMMON_ARGS=(
     --fakeroot
