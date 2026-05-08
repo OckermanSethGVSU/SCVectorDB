@@ -216,9 +216,13 @@ def main() -> int:
                     distance_metric=distance_metric(),
                     threshold=hnsw_dynamic_threshold,
                     hnsw=wvc.config.Configure.VectorIndex.hnsw(
+                        distance_metric=distance_metric(),
                         ef=HNSW_EF_SEARCH,
                         ef_construction=HNSW_EF_CONSTRUCTION,
                         max_connections=HNSW_M,
+                    ),
+                    flat=wvc.config.Configure.VectorIndex.flat(
+                        distance_metric=distance_metric(),
                     ),
                 )
             ),
