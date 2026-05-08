@@ -36,10 +36,10 @@ Source of truth:
 | `INSERT_BATCH_SIZE` | `512` | free-form | Insert batch size; single value or sweep list |
 | `INSERT_BALANCE_STRATEGY` | `WORKER_BALANCE` | `NO_BALANCE`, `WORKER_BALANCE` | Insert balancing policy |
 | `INSERT_STREAMING` | `False` | `True`, `False` | Enable streaming insert behavior |
-| `QUERY_DATA_FILEPATH` | required when `TASK=QUERY|MIXED` | free-form | Query vector file path |
+| `QUERY_DATA_FILEPATH` | required when `TASK=QUERY` | free-form | Query vector file path |
 | `QUERY_CORPUS_SIZE` | optional | free-form | Total queries to execute; empty means use all rows in the file |
 | `QUERY_BATCH_SIZE` | `32` | free-form | Query batch size; single value or sweep list |
-| `QUERY_BALANCE_STRATEGY` | required when `TASK=QUERY|MIXED` | `NO_BALANCE`, `WORKER_BALANCE` | Query balancing policy |
+| `QUERY_BALANCE_STRATEGY` | required when `TASK=QUERY` | `NO_BALANCE`, `WORKER_BALANCE` | Query balancing policy |
 | `QUERY_STREAMING` | `False` | `True`, `False` | Enable query streaming behavior |
 | `TOP_K` | `10` | free-form | Optional top-k override |
 | `BASE_DIR` | optional | free-form | Base directory containing generated run directories; auto-filled by the submit manager when empty |
@@ -190,3 +190,11 @@ Source of truth:
 | `QUERY_TOPK` | `10` | free-form | Query top-k |
 | `HNSW_EF_SEARCH` | `64` | free-form | HNSW ef parameter used in collection creation for query-time search breadth |
 | `QUERY_CLIENTS_PER_WORKER` | `1` | free-form | Query clients per worker rank |
+| `MIXED_INSERT_DATA_FILEPATH` | required when `TASK=MIXED` | free-form | Path to the data that the mixed insert clients will use |
+| `MIXED_INSERT_CLIENTS` | `1` | free-form | Mixed insert clients |
+| `MIXED_INSERT_MODE` | `MAX` | `MAX`, `RATE` | Mode of operation for insert clients. 'MAX' sends the inserts as fast as possible, while 'RATE' also you to specify a rate per second |
+| `MIXED_INSERT_BATCH_SIZE` | `32` | free-form | Batch size of mixed insert clients |
+| `MIXED_QUERY_DATA_FILEPATH` | required when `TASK=MIXED` | free-form | Path to the data that the mixed query clients will use |
+| `MIXED_QUERY_CLIENTS` | `1` | free-form | Mixed query clients |
+| `MIXED_QUERY_MODE` | `MAX` | `MAX`, `RATE` | Mode of operation for query clients. 'MAX' sends the query as fast as possible, while 'RATE' also you to specify a rate per second |
+| `MIXED_QUERY_BATCH_SIZE` | `32` | free-form | Batch size of mixed query clients |
