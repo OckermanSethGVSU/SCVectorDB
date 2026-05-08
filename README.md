@@ -6,7 +6,7 @@ HPC-VectorBench is a work-in-progress tool for running vector database (VDB) exp
 <br> <br>
 
 <p align="center">
-  <img src="docs/GithubHorizontalVectorDBLifecycle.png" alt="Benchmark architecture" width="600">
+  <img src="docs/figures/GithubHorizontalVectorDBLifecycle.png" alt="Benchmark architecture" width="600">
 </p>
 
 
