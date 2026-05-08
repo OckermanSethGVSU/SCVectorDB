@@ -21,7 +21,7 @@ fi
 RANK=$((RANK))
 TOTAL=$((TOTAL))
 NODE_NAME="node${RANK}"
-mkdir -p ./perf
+mkdir -p ./runtime_state
 
 # ------------------------------------------------------------
 # Discover LOCAL IP only
@@ -72,11 +72,11 @@ fi
 sleep 1
 
 
-# rank,node,ip,http,gossip,data,raft,raft_internal
-echo "${RANK},${NODE_NAME},${IP_ADDR},${HTTP_PORT},${CLUSTER_GOSSIP_BIND_PORT},${CLUSTER_DATA_BIND_PORT},${RAFT_PORT},${RAFT_INTERNAL_RPC_PORT}" >> "$OUTPUT_FILE"
+# rank,node,ip,http,grpc,gossip,data,raft,raft_internal
+echo "${RANK},${NODE_NAME},${IP_ADDR},${HTTP_PORT},${GRPC_PORT},${CLUSTER_GOSSIP_BIND_PORT},${CLUSTER_DATA_BIND_PORT},${RAFT_PORT},${RAFT_INTERNAL_RPC_PORT}" >> "$OUTPUT_FILE"
 
 while true; do
-    REG_COUNT=$(awk -F, 'NF >= 8 {seen[$1]=1} END {print length(seen)}' "$OUTPUT_FILE")
+    REG_COUNT=$(awk -F, 'NF >= 9 {seen[$1]=1} END {print length(seen)}' "$OUTPUT_FILE")
     if [[ "${REG_COUNT}" -ge "${TOTAL}" ]]; then
         break
     fi
@@ -86,9 +86,10 @@ done
 BOOTSTRAP_NODE_NAME=$(awk -F, '$1 == 0 {print $2; exit}' "$OUTPUT_FILE")
 BOOTSTRAP_IP=$(awk -F, '$1 == 0 {print $3; exit}' "$OUTPUT_FILE")
 BOOTSTRAP_HTTP_PORT=$(awk -F, '$1 == 0 {print $4; exit}' "$OUTPUT_FILE")
-BOOTSTRAP_GOSSIP_PORT=$(awk -F, '$1 == 0 {print $5; exit}' "$OUTPUT_FILE")
-BOOTSTRAP_DATA_PORT=$(awk -F, '$1 == 0 {print $6; exit}' "$OUTPUT_FILE")
-BOOTSTRAP_RAFT_PORT=$(awk -F, '$1 == 0 {print $7; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_GRPC_PORT=$(awk -F, '$1 == 0 {print $5; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_GOSSIP_PORT=$(awk -F, '$1 == 0 {print $6; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_DATA_PORT=$(awk -F, '$1 == 0 {print $7; exit}' "$OUTPUT_FILE")
+BOOTSTRAP_RAFT_PORT=$(awk -F, '$1 == 0 {print $8; exit}' "$OUTPUT_FILE")
 
 if [[ -z "${BOOTSTRAP_NODE_NAME}" || -z "${BOOTSTRAP_IP}" || -z "${BOOTSTRAP_GOSSIP_PORT}" || -z "${BOOTSTRAP_RAFT_PORT}" ]]; then
     echo "Error: failed to read rank 0 bootstrap info from '$OUTPUT_FILE'" >&2
@@ -158,6 +159,9 @@ COMMON_ARGS=(
 
     --env AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
     --env PERSISTENCE_DATA_PATH=/var/lib/weaviate
+    --env ASYNC_INDEXING="${ASYNC_INDEXING}"
+    --env DISABLE_LAZY_LOAD_SHARDS="${DISABLE_LAZY_LOAD_SHARDS}"
+    --env HNSW_STARTUP_WAIT_FOR_VECTOR_CACHE="${HNSW_STARTUP_WAIT_FOR_VECTOR_CACHE}"
 
     --env GO_PROFILING_PORT="${GO_PROFILING_PORT}"
     --env GRPC_PORT="${GRPC_PORT}"
@@ -235,6 +239,6 @@ else
     wait_for_ready "${IP_ADDR}" "${HTTP_PORT}"
 fi
 
-touch "./perf/weaviate_running${RANK}.txt"
+touch "./runtime_state/weaviate_running${RANK}.txt"
 
 wait

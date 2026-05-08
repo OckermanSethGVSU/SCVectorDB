@@ -1,21 +1,82 @@
 #!/usr/bin/env python3
 """Create a minimal Weaviate collection for UUID + self-provided vectors.
 
-This repo's `ip_registry.txt` stores the HTTP port but not the gRPC port.
-`launchWeaviateNode.sh` defines the gRPC port as `HTTP_PORT + 2`, so this
-script derives it the same way when connecting with the Python client.
+This repo's `ip_registry.txt` stores both HTTP and gRPC ports in the format:
+rank,node,ip,http,grpc,gossip,data,raft,raft_internal
 """
 
 import argparse
 import csv
+import os
 import pprint
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Set
 
+import numpy as np
 import weaviate
 import weaviate.classes as wvc
+
+COLLECTION_NAME = os.getenv("COLLECTION_NAME")
+
+
+def getenv_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return default
+    return int(value)
+
+
+HNSW_M = getenv_int("HNSW_M", 16)
+HNSW_EF_CONSTRUCTION = getenv_int("HNSW_EF_CONSTRUCTION", 100)
+HNSW_EF_SEARCH = getenv_int("HNSW_EF_SEARCH", 64)
+SHARD_COUNT = getenv_int("SHARD_COUNT", 1)
+
+
+def distance_metric():
+    metric = os.getenv("DISTANCE_METRIC", "COSINE").strip().upper()
+    if metric in {"IP", "DOT"}:
+        return wvc.config.VectorDistances.DOT
+    if metric in {"L2", "L2-SQUARED", "L2_SQUARED"}:
+        return wvc.config.VectorDistances.L2_SQUARED
+    return wvc.config.VectorDistances.COSINE
+
+
+def npy_row_count(path: Path) -> int:
+    arr = np.load(path, mmap_mode="r")
+    if arr.ndim != 2:
+        raise ValueError("expected 2D npy array in {0}, got shape {1!r}".format(path, arr.shape))
+    return int(arr.shape[0])
+
+
+def resolve_dynamic_threshold() -> int:
+    explicit = os.getenv("HNSW_DYNAMIC_THRESHOLD")
+    if explicit is not None and explicit.strip() != "":
+        return int(explicit)
+
+    task = os.getenv("TASK", "").strip().upper()
+
+    def adjust_threshold(threshold: int) -> int:
+        if task == "INSERT":
+            print("Doubling the threshold for HNSW index build to isolate insert performance. Set TASK='INDEX' to time indexing, or explicitly set 'HNSW_DYNAMIC_THRESHOLD' if you want a custom threshold.", flush=True)
+            return threshold * 2
+        if task in ["INDEX","QUERY"]:
+            return max(1, threshold - 1)
+        return threshold
+
+    corpus_size = os.getenv("INSERT_CORPUS_SIZE")
+    if corpus_size is not None and corpus_size.strip() != "":
+        return adjust_threshold(int(corpus_size))
+
+    data_path = os.getenv("INSERT_DATA_FILEPATH")
+    if data_path is not None and data_path.strip() != "":
+        return adjust_threshold(npy_row_count(Path(data_path)))
+
+    raise ValueError(
+        "HNSW_DYNAMIC_THRESHOLD resolution requires HNSW_DYNAMIC_THRESHOLD, "
+        "INSERT_CORPUS_SIZE, or INSERT_DATA_FILEPATH."
+    )
 
 
 @dataclass(frozen=True)
@@ -24,10 +85,7 @@ class NodeEntry:
     node_name: str
     ip: str
     http_port: int
-
-    @property
-    def grpc_port(self) -> int:
-        return self.http_port + 2
+    grpc_port: int
 
 
 def parse_registry(registry_path: Path) -> List[NodeEntry]:
@@ -43,9 +101,9 @@ def parse_registry(registry_path: Path) -> List[NodeEntry]:
             if not row or all(not item.strip() for item in row):
                 continue
 
-            if len(row) < 4:
+            if len(row) < 5:
                 raise ValueError(
-                    "{0}:{1}: expected at least 4 columns, got {2}".format(
+                    "{0}:{1}: expected at least 5 columns, got {2}".format(
                         registry_path, line_number, len(row)
                     )
                 )
@@ -55,9 +113,10 @@ def parse_registry(registry_path: Path) -> List[NodeEntry]:
                 node_name = row[1].strip()
                 ip = row[2].strip()
                 http_port = int(row[3].strip())
+                grpc_port = int(row[4].strip())
             except ValueError as exc:
                 raise ValueError(
-                    "{0}:{1}: failed to parse rank/http port from {2!r}".format(
+                    "{0}:{1}: failed to parse rank/http/grpc port from {2!r}".format(
                         registry_path, line_number, row
                     )
                 ) from exc
@@ -66,7 +125,15 @@ def parse_registry(registry_path: Path) -> List[NodeEntry]:
                 continue
 
             seen_ranks.add(rank)
-            entries.append(NodeEntry(rank=rank, node_name=node_name, ip=ip, http_port=http_port))
+            entries.append(
+                NodeEntry(
+                    rank=rank,
+                    node_name=node_name,
+                    ip=ip,
+                    http_port=http_port,
+                    grpc_port=grpc_port,
+                )
+            )
 
     entries.sort(key=lambda entry: entry.rank)
     return entries
@@ -108,22 +175,13 @@ def main() -> int:
         default=0,
         help="Registry rank to connect to (default: 0)",
     )
-    parser.add_argument(
-        "--collection",
-        default="BasicVectorCollection",
-        help="Collection name to create (default: BasicVectorCollection)",
-    )
-    parser.add_argument(
-        "--drop-if-exists",
-        action="store_true",
-        help="Delete the collection first if it already exists",
-    )
     args = parser.parse_args()
 
     registry_path = Path(args.registry)
     client = None
 
     try:
+        hnsw_dynamic_threshold = resolve_dynamic_threshold()
         client, node = connect_from_registry(registry_path, args.rank)
 
         if not client.is_ready():
@@ -135,15 +193,15 @@ def main() -> int:
             )
             return 1
 
-        exists = client.collections.exists(args.collection)
-        if exists and args.drop_if_exists:
-            client.collections.delete(args.collection)
+        exists = client.collections.exists(COLLECTION_NAME)
+        if exists:
+            client.collections.delete(COLLECTION_NAME)
             exists = False
-            print("Deleted existing collection {0}".format(args.collection))
+            print("Deleted existing collection {0}".format(COLLECTION_NAME), flush=True)
 
         if exists:
-            print("Collection {0} already exists".format(args.collection))
-            collection = client.collections.use(args.collection)
+            print("Collection {0} already exists".format(COLLECTION_NAME), flush=True)
+            collection = client.collections.use(COLLECTION_NAME)
             collection_config = collection.config.get()
             print("Collection status: exists=True" ,flush=True)
             print("Collection definition:", flush=True)
@@ -151,21 +209,41 @@ def main() -> int:
             return 0
 
         client.collections.create(
-            name=args.collection,
+            name=COLLECTION_NAME,
             description="Minimal collection storing only UUIDs and self-provided vectors",
-            vector_config=wvc.config.Configure.Vectors.self_provided(),
-            properties=[],
+            vector_config=wvc.config.Configure.Vectors.self_provided(
+                vector_index_config=wvc.config.Configure.VectorIndex.dynamic(
+                    distance_metric=distance_metric(),
+                    threshold=hnsw_dynamic_threshold,
+                    hnsw=wvc.config.Configure.VectorIndex.hnsw(
+                        ef=HNSW_EF_SEARCH,
+                        ef_construction=HNSW_EF_CONSTRUCTION,
+                        max_connections=HNSW_M,
+                    ),
+                )
+            ),
+            sharding_config=(
+                wvc.config.Configure.sharding(
+                    desired_count=SHARD_COUNT
+                )
+            ),
+            properties=[
+                wvc.config.Property(
+                    name="doc_id",
+                    data_type=wvc.config.DataType.INT,
+                ),
+            ],
         )
 
         print(
             "Created collection {0} on http://{1}:{2} using grpc port {3}".format(
-                args.collection, node.ip, node.http_port, node.grpc_port
+                COLLECTION_NAME, node.ip, node.http_port, node.grpc_port
             ), flush=True
         )
         print("Schema: no user properties; objects store UUID plus supplied vector")
-        collection = client.collections.use(args.collection)
+        collection = client.collections.use(COLLECTION_NAME)
         collection_config = collection.config.get()
-        print("Collection status: exists={0}".format(client.collections.exists(args.collection)))
+        print("Collection status: exists={0}".format(client.collections.exists(COLLECTION_NAME)))
         print("Collection definition:")
         print(collection_config, flush=True)
         return 0

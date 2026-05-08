@@ -1,3 +1,10 @@
+run_summary() {
+    local task="$1"     # INSERT or QUERY
+    local prefix="$2"   # insert or query
+    ACTIVE_TASK="$task" python3 multi_client_summary.py
+}
+
+
 if [[ -f ./run_config.env ]]; then
     set -a
     source ./run_config.env
@@ -36,6 +43,7 @@ fi
 
 TOTAL=$((NODES * WORKERS_PER_NODE))
 MAX_RANK=$((TOTAL - 1))
+export N_WORKERS=$TOTAL
 # Use unique worker hosts (skip first PBS node reserved for client)
 tail -n +2 "$PBS_NODEFILE" | awk '!seen[$0]++' > worker_nodefile.txt
 cat $PBS_NODEFILE > all_nodefile.txt
@@ -58,7 +66,7 @@ MPI_PID=$!
 
 echo "[INFO] Waiting for ${TOTAL} Weaviate workers to become ready..."
 for r in $(seq 0 "${MAX_RANK}"); do
-    target="./perf/weaviate_running${r}.txt"
+    target="./runtime_state/weaviate_running${r}.txt"
      while [[ ! -e "${target}" ]]; do
         sleep 0.5
      done 
@@ -67,3 +75,34 @@ echo "[INFO] All ${TOTAL} workers are ready"
 
 
 NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 health_check.py
+NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" python3 create_basic_collection.py
+
+
+if [ "$TASK" = "INSERT" ]; then
+    export ACTIVE_TASK="INSERT"
+elif [ "$TASK" = "INDEX" ] || [ "$TASK" = "QUERY" ];; then
+    export ACTIVE_TASK="INDEX"
+else
+    echo "Unknown TASK: $TASK"
+    exit 1
+fi
+NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
+
+mkdir -p uploadNPY
+mv *.npy uploadNPY/
+
+if [[ "$TASK" == "INSERT" || "$TASK" == "INDEX" ]]; then
+        touch "runtime_state/flag.txt"
+fi
+
+if [[ "$TASK" == "QUERY" ]]; then
+    export ACTIVE_TASK="QUERY"
+    NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./batch_client
+
+    mkdir -p queryNPY
+    mv *.npy queryNPY/
+    run_summary QUERY query
+    touch "runtime_state/flag.txt"
+fi
+
+run_summary INSERT insert

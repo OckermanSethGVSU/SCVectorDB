@@ -27,7 +27,7 @@ Any variable may be a single value or a sweep list separated by spaces.
 
 Command examples:
   ./pbs_submit_manager.sh --engine weaviate --set TASK=INSERT --set PLATFORM=AURORA --set WALLTIME=01:00:00 --set QUEUE=debug-scaling --set ACCOUNT=myproj
-  ./pbs_submit_manager.sh --generate-only --engine weaviate --set TASK=QUERY_BS --set PLATFORM=AURORA --set WALLTIME=01:00:00 --set QUEUE=debug-scaling --set ACCOUNT=myproj
+  ./pbs_submit_manager.sh --generate-only --engine weaviate --set TASK=QUERY --set PLATFORM=AURORA --set WALLTIME=01:00:00 --set QUEUE=debug-scaling --set ACCOUNT=myproj
 
 Variables
 ---------
@@ -98,21 +98,13 @@ engine_load_combo() {
     INSERT_BATCH_CURRENT="$INSERT_BATCH_SIZE"
     CORES_CURRENT="$CORES"
     TOTAL_NODES=$((NODES_CURRENT + 1))
-    JOB_NAME="${TASK}_${NODES_CURRENT}n_${WORKERS_PER_NODE_CURRENT}w_$(weaviate_cores_label)c_q${QUERY_BATCH_CURRENT}"
+    JOB_NAME="${TASK}_${STORAGE_MEDIUM}_N${NODES_CURRENT}"
     REQUIRES_DAOS="false"
 }
 
 # Validate a loaded combo after sweep expansion.
 engine_validate_combo() {
     schema_validate_current_values "$ENGINE_SCHEMA_PREFIX" || return 1
-
-    # The shared INSERT_DATA_FILEPATH rule only fires for TASK=INSERT|INDEX|QUERY|MIXED,
-    # so QUERY_SCALING (which runs its own insert phase) falls through the shared
-    # check. Require the insert corpus path explicitly here.
-    if [[ "${TASK^^}" == "QUERY_SCALING" && -z "${INSERT_DATA_FILEPATH:-}" ]]; then
-        echo "Weaviate variable 'INSERT_DATA_FILEPATH' is required when TASK=QUERY_SCALING." >&2
-        return 1
-    fi
 }
 
 # Build the Weaviate run directory name for the loaded combo.
@@ -120,26 +112,16 @@ engine_make_run_dir_name() {
     local timestamp
     timestamp="$(date +"%Y-%m-%d_%H_%M_%S")"
 
-    case "$TASK" in
-        INSERT)
-            echo "${TASK}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_C${INSERT_CLIENTS_CURRENT}_uploadBS${INSERT_BATCH_CURRENT}_${timestamp}"
-            ;;
-        INDEX)
-            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_CS${INSERT_CORPUS_SIZE}_${timestamp}"
-            ;;
-        QUERY_BS|QUERY_CORE)
-            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_CORES$(weaviate_cores_label)_QBS${QUERY_BATCH_CURRENT}_Q${QUERY_CORPUS_SIZE}_${timestamp}"
-            ;;
-        QUERY_SCALING)
-            local total_workers=$((NODES_CURRENT * WORKERS_PER_NODE_CURRENT))
-            echo "${TASK}_${DATASET_LABEL}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_NP${WORKERS_PER_NODE_CURRENT}_TW${total_workers}_UCPW${INSERT_CLIENTS_CURRENT}_QCPW${QUERY_CLIENTS_PER_WORKER}_CORES$(weaviate_cores_label)_IBS${INSERT_BATCH_CURRENT}_QBS${QUERY_BATCH_CURRENT}_${timestamp}"
-            ;;
-    esac
+    echo "${TASK}_${STORAGE_MEDIUM}_N${NODES_CURRENT}_${timestamp}"
 }
 
 # Select the Weaviate launch script copied into submit.sh.
 engine_main_script_path() {
-    echo "main.sh"
+    if [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
+        echo "local_main.sh"
+    else
+        echo "main.sh"
+    fi
 }
 
 # Emit run_config.env contents consumed by the Weaviate launch scripts.
@@ -154,33 +136,56 @@ engine_emit_runtime_env() {
     printf 'INSERT_CLIENTS_PER_WORKER=%s\n' "$INSERT_CLIENTS_CURRENT"
 }
 
-# Stage the Weaviate launch files, client binaries, and optional perf assets.
+# Stage the Weaviate launch files, client binaries, and helper scripts.
 engine_copy_payload() {
     local target_dir="$1"
-    copy_engine_items "$ENGINE_DIR/weaviateSetup" "$target_dir" \
-        "launchWeaviateNode.sh" \
-        "mapping.py"
+    local client_src_dir="$ENGINE_DIR/clients/batch_client"
+
+    copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" \
+        "health_check.py" \
+        "create_basic_collection.py" \
+        "multi_client_summary.py"
+    if [[ -d "$ENGINE_DIR/pythonUtils" ]]; then
+        copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "pythonUtils"
+    fi
 
     local -a bins
-    case "$TASK" in
-        QUERY_SCALING) bins=("$INSERT_BIN" "$QUERY_SCALING_BIN") ;;
-        *)             bins=("$WEAVIATE_CLIENT_BINARY") ;;
-    esac
+    local -A seen_bins=()
+    local bin
 
-    mkdir -p "$target_dir/go_client"
+    if [[ "$TASK" == "MIXED" ]]; then
+        client_src_dir="$ENGINE_DIR/clients/mixed"
+        bins=("mixed")
+    elif [[ "${RUN_MODE^^}" == "LOCAL" ]]; then
+        copy_engine_items "$ENGINE_DIR/weaviateSetup" "$target_dir" \
+            "launchWeaviateNodeLocal.sh"
+        bins=("batch_client")
+    else
+        copy_engine_items "$ENGINE_DIR/weaviateSetup" "$target_dir" \
+            "launchWeaviateNode.sh" \
+            "mapping.py"
+        bins=("batch_client")
+    fi
+
+    local -a unique_bins=()
     for bin in "${bins[@]}"; do
-        if [[ ! -f "$ENGINE_DIR/clients/go_client/$bin" ]]; then
-            echo "Required client binary missing: clients/go_client/$bin" >&2
-            echo "Build it with: (cd $ENGINE_DIR/clients/go_client && ./build.sh $bin)" >&2
+        [[ -n "$bin" ]] || continue
+        if [[ -z "${seen_bins[$bin]:-}" ]]; then
+            seen_bins["$bin"]=1
+            unique_bins+=("$bin")
+        fi
+    done
+
+    for bin in "${unique_bins[@]}"; do
+        if [[ ! -f "$client_src_dir/$bin" ]]; then
+            echo "Required client binary missing: ${client_src_dir#$ENGINE_DIR/}/$bin" >&2
+            echo "Build it with: (cd $ENGINE_DIR/clients && ./build.sh ${bin})" >&2
             return 1
         fi
     done
-    copy_engine_items "$ENGINE_DIR/clients/go_client" "$target_dir/go_client" "${bins[@]}"
-    for bin in "${bins[@]}"; do
-        chmod +x "$target_dir/go_client/$bin"
+    copy_engine_items "$client_src_dir" "$target_dir" "${unique_bins[@]}"
+    for bin in "${unique_bins[@]}"; do
+        chmod +x "$target_dir/$bin"
     done
 
-    if [[ -d "$ENGINE_DIR/perf" ]]; then
-        copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "perf"
-    fi
 }

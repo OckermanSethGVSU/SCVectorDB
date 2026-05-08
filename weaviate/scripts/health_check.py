@@ -1,11 +1,10 @@
 """Check readiness for each Weaviate node listed in ip_registry.txt.
 
 Registry format expected by this repo:
-rank,node,ip,http,gossip,data,raft,raft_internal
+rank,node,ip,http,grpc,gossip,data,raft,raft_internal
 
 The script prefers the official Weaviate client when it is installed. Since the
-registry does not expose a gRPC port, the readiness probe falls back to the
-HTTP readiness endpoint, which is sufficient for `is_ready()` style checks.
+readiness probe only needs HTTP, it ignores the extra gRPC column.
 """
 
 import argparse
