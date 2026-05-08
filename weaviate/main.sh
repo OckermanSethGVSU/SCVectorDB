@@ -36,6 +36,7 @@ fi
 if [[ -n "${ENV_PATH:-}" ]]; then
     echo "Activating Python environment: $ENV_PATH"
     source "$ENV_PATH/bin/activate"
+else
     echo "ENV_PATH not set; using current Python environment: $(command -v python3)"
 fi
 
@@ -80,7 +81,7 @@ NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="
 
 if [ "$TASK" = "INSERT" ]; then
     export ACTIVE_TASK="INSERT"
-elif [ "$TASK" = "INDEX" ] || [ "$TASK" = "QUERY" ];; then
+elif [ "$TASK" = "INDEX" ] || [ "$TASK" = "QUERY" ]; then
     export ACTIVE_TASK="INDEX"
 else
     echo "Unknown TASK: $TASK"
