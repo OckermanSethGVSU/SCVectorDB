@@ -35,7 +35,6 @@ High-level flow:
 - `qdrant/`: active Qdrant workflows, clients, runtime, and helpers
 - `milvus/`: active Milvus workflows, clients, runtime, and helpers
 - `weaviate/`: active Weaviate workflow, clients, runtime, and helpers
-- `graphing/`: post-run graphing and analysis utilities
 
 ## Source vs Generated Runs
 

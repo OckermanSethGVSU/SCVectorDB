@@ -31,7 +31,6 @@ submits PBS jobs when appropriate.
 .
 ├── pbs_submit_manager.sh
 ├── common/
-├── graphing/
 ├── milvus/
 ├── qdrant/
 └── weaviate/
