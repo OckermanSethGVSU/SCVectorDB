@@ -271,13 +271,16 @@ prompt_remove_path() {
     local reply=""
     local prompt_tty="/dev/tty"
 
+    if [[ ! -r "$prompt_tty" || ! -w "$prompt_tty" ]]; then
+        echo "No interactive terminal available; leaving '$target_path' in place." >&2
+        return 1
+    fi
+
     while true; do
-        if [[ ! -r "$prompt_tty" || ! -w "$prompt_tty" ]]; then
-            echo "No interactive terminal available; leaving '$target_path' in place." >&2
+        if ! read -r -p "Remove '$target_path'? [y/n] " reply < "$prompt_tty" > "$prompt_tty"; then
+            echo "Interactive prompt unavailable; leaving '$target_path' in place." >&2
             return 1
         fi
-
-        read -r -p "Remove '$target_path'? [y/n] " reply < "$prompt_tty" > "$prompt_tty"
         case "${reply,,}" in
             y|yes)
                 rm -rf -- "$target_path"
