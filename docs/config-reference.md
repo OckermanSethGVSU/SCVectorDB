@@ -9,7 +9,7 @@ source of truth.
 
 Source of truth:
 
-- [common/schema.sh](/home/seth/Documents/research/SCVectorDB/common/schema.sh)
+- [common/schema.sh](/lus/flare/projects/radix-io/sockerman/SCVectorDB/common/schema.sh)
 
 - These variables apply across all engines.
 - Some variables are only conditionally required based on `TASK` or `RUN_MODE`.
@@ -48,7 +48,7 @@ Source of truth:
 
 Source of truth:
 
-- [qdrant/schema.sh](/home/seth/Documents/research/SCVectorDB/qdrant/schema.sh)
+- [qdrant/schema.sh](/lus/flare/projects/radix-io/sockerman/SCVectorDB/qdrant/schema.sh)
 
 - Qdrant-specific behavior may derive additional runtime values from other settings.
 
@@ -91,7 +91,7 @@ Source of truth:
 
 Source of truth:
 
-- [milvus/schema.sh](/home/seth/Documents/research/SCVectorDB/milvus/schema.sh)
+- [milvus/schema.sh](/lus/flare/projects/radix-io/sockerman/SCVectorDB/milvus/schema.sh)
 
 - Milvus-specific runtime behavior may derive storage and topology details automatically.
 
@@ -168,7 +168,7 @@ Source of truth:
 
 Source of truth:
 
-- [weaviate/schema.sh](/home/seth/Documents/research/SCVectorDB/weaviate/schema.sh)
+- [weaviate/schema.sh](/lus/flare/projects/radix-io/sockerman/SCVectorDB/weaviate/schema.sh)
 
 - Weaviate collection creation also depends on `weaviate/scripts/create_basic_collection.py`.
 - When unset, `HNSW_DYNAMIC_THRESHOLD` may be derived from `INSERT_CORPUS_SIZE` or `INSERT_DATA_FILEPATH`.
@@ -177,6 +177,8 @@ Source of truth:
 |---|---|---|---|
 | `WORKERS_PER_NODE` | `1` | free-form | Worker processes launched per compute node |
 | `USEPERF` | `false` | `true`, `false` | Enable perf collection |
+| `WEAVIATE_SIF` | required when `RUN_MODE=PBS` | free-form | Weaviate SIF filename under weaviate/sifs, for example weaviate_1.36.0.sif |
+| `ALLOW_REMOTE_WEAVIATE_IMAGE` | `false` | `true`, `false` | Allow PBS runs to skip staging a local Weaviate SIF and pull WEAVIATE_IMAGE_URI at runtime |
 | `DEBUG` | `false` | `true`, `false` | Enable verbose client debug logging |
 | `GPU_INDEX` | `false` | `true`, `false` | Whether to use GPU indexing |
 | `ASYNC_INDEXING` | `true` | `true`, `false` | Enable Weaviate async indexing |
