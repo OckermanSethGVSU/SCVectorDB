@@ -8,6 +8,9 @@ source "$ROOT_DIR/common/submit_lib.sh"
 ENGINE="${ENGINE:-}"
 CONFIG_FILE=""
 CLI_SET_OVERRIDES=()
+QUEUE_CANDIDATES_ARG=""
+QUEUE_LIMITS_ARG=""
+SUBMIT_USERNAME_ARG=""
 HELP_REQUESTED="false"
 GENERATE_ONLY_REQUESTED="false"
 
@@ -27,6 +30,18 @@ while [[ $# -gt 0 ]]; do
             ;;
         --set)
             CLI_SET_OVERRIDES+=("$2")
+            shift 2
+            ;;
+        --queue-candidates)
+            QUEUE_CANDIDATES_ARG="$2"
+            shift 2
+            ;;
+        --queue-limits)
+            QUEUE_LIMITS_ARG="$2"
+            shift 2
+            ;;
+        --submit-username)
+            SUBMIT_USERNAME_ARG="$2"
             shift 2
             ;;
         -h|--help)
@@ -70,12 +85,14 @@ fi
 source "$ENGINE_DIR/engine.sh"
 
 common_set_defaults
+set_cli_queue_throttle_options "$QUEUE_CANDIDATES_ARG" "$QUEUE_LIMITS_ARG" "$SUBMIT_USERNAME_ARG"
 engine_set_defaults
 apply_cli_set_overrides "${CLI_SET_OVERRIDES[@]}"
 if [[ "$GENERATE_ONLY_REQUESTED" == "true" ]]; then
     GENERATE_ONLY="true"
 fi
 apply_common_overrides
+prime_queue_for_validation
 engine_apply_overrides
 
 if [[ "$HELP_REQUESTED" == "true" ]]; then
@@ -105,6 +122,8 @@ while IFS= read -r combo; do
     if [[ "$(type -t engine_validate_combo || true)" == "function" ]]; then
         engine_validate_combo
     fi
+
+    resolve_submission_queue_for_current_run
 
     RUN_DIR_NAME="$(engine_make_run_dir_name)"
     RUN_DIR_PATH="$ENGINE_DIR/$RUN_DIR_NAME"

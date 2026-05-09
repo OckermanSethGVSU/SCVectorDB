@@ -25,6 +25,12 @@ resolve_mixed_insert_start_id() {
     fi
 }
 
+if [[ -n "${PBS_O_WORKDIR:-}" ]]; then
+    SCRIPT_DIR="$PBS_O_WORKDIR"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+cd "$SCRIPT_DIR"
 
 if [[ -f ./run_config.env ]]; then
     set -a
@@ -34,11 +40,13 @@ fi
 
 
 
+RUN_DIR="${RUN_DIR:-$SCRIPT_DIR}"
 if [[ -z "${BASE_DIR:-}" ]]; then
-    BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    BASE_DIR="$(dirname "$RUN_DIR")"
 fi
 
-RUN_DIR="${RUN_DIR:-$BASE_DIR/$myDIR}"
+echo "[INFO] Using run directory: $RUN_DIR"
+cd "$RUN_DIR"
 
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then

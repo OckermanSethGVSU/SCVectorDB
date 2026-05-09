@@ -14,7 +14,7 @@ HPC-VectorBench is a work-in-progress tool for running vector database (VDB) exp
 
 
 ## Start Here
-Using simple configurations files or command line parameters, (e.g., [Weaviate query experiment file](weaviate/sampleConfigs/query_core_testing.env)), users can specify key parameters that the submit manager will use to generate an experimental directory. If the submit manager is called with `--generate-only` it will only generate the directory, otherwise it will submit the job to the PBS queue specified in the configuration file. To view the supported experimental parameters, consults the [configuration page](config-reference.md) in the documentation. 
+Using simple configurations files or command line parameters, (e.g., [Weaviate query experiment file](weaviate/sampleConfigs/query_core_testing.env)), users can specify key parameters that the submit manager will use to generate an experimental directory. If the submit manager is called with `--generate-only` it will only generate the directory, otherwise it will submit the job to the PBS queue specified in the configuration file. To view the supported experimental parameters, consult the [configuration page](config-reference.md) in the documentation. 
 
 
 ```bash
@@ -26,13 +26,14 @@ Using simple configurations files or command line parameters, (e.g., [Weaviate q
 ```
 
 ## Task-Driven Benchmarking  
-We designed our benchmark to allow us to test different common VDB tasks. Each task isolates a different part of vector database behavior so performance can be evaluated more cleanly and compared across engines. 
+We designed our benchmark to allow us to test different common VDB tasks. Each task isolates a different part of vector database behavior so performance can be evaluated more cleanly across engines. 
 
 * `INSERT`: measures data ingestion throughput, allowing users to test different storage mediums, batch sizes, clients per worker, and total workers
 
 * `INDEX`: isolates index construction cost after the data has been inserted, enabling users to test different storage mediums, virtual-core availability, index parameters, and numbers of workers.
 
 * `QUERY`: measures search latency and retrieval throughput on an already indexed collection, allowing users to test a variety of query parameters, performance with different numbers of cores, and scaling across multiple nodes.
+
 * `MIXED`: evaluates concurrent read/write behavior under combined insert and query load. This task is in the process of being expanded upon. 
 
 
@@ -49,7 +50,7 @@ This repository is designed to be extensible to allow for new vector databases t
     * The PBS runtime entrypoint copied into generated run directories. It is responsible for launching the database on the target cluster, waiting for readiness, and invoking the client workload for the selected task.
 
   - `local_main.sh`
-    * The local runtime entrypoint, if local mode is supported. This usually launches a loca container or standalone process and then runs the same staged client workflow without PBS.
+    * The local runtime entrypoint, if local mode is supported. This usually launches a local container or standalone process and then runs the same staged client workflow without PBS.
 
   - `clients/`
     * Contains the client source and build helpers used to drive insert, index, query, or mixed workloads. The engine should stage the built binaries from here into generated run directories.
@@ -57,6 +58,29 @@ This repository is designed to be extensible to allow for new vector databases t
   - `scripts/`
     * Holds engine-specific helpers such as collection creation, readiness checks, status inspection, result summarization, or setup utilities that are needed by the runtime scripts.
 
+## Built in PBS Utilties
+The unified submit manager also includes queue-watching functionality. It can monitor a set of specified PBS queues and automatically submit a job when an opening becomes available. This lets users stay within machine-specific queue limits while still defining all experimental configurations upfront, rather than repeatedly checking when experiments finish to then submit new jobs. This is separate from the experiment configuration schema and does not change how parameter combinations are generated. It only affects which PBS queue each already-generated run is submitted to.
+
+Use these flags together on `pbs_submit_manager.sh`:
+
+```bash
+./pbs_submit_manager.sh \
+  --engine qdrant \
+  --config path/to/run.env \
+  --queue-candidates debug,debug-scaling,capacity \
+  --queue-limits 1,1,5 \
+  --submit-username myuser
+```
+
+- `--queue-candidates`: ordered comma-separated list of PBS queues to try
+- `--queue-limits`: ordered comma-separated list of per-queue job caps for the specified user
+- `--submit-username`: required username used for `qstat -u ...` queue counting
+
+Notes:
+
+- Queue order is preference order. The launcher checks candidates from left to right and submits to the first queue where the user is below the configured limit.
+- If no candidate queue is open, the launcher waits 60 seconds and checks again.
+- With `--generate-only`, the manager does not poll PBS. It uses the first queue candidate when writing `submit.sh`.
 
 ## Docs
 
@@ -66,6 +90,5 @@ This repository is designed to be extensible to allow for new vector databases t
 - [Qdrant engine docs](docs/engines/qdrant.md)
 - [Milvus engine docs](docs/engines/milvus.md)
 - [Weaviate engine docs](docs/engines/weaviate.md)
-
 
 
