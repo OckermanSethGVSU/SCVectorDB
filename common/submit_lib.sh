@@ -6,14 +6,15 @@ print_usage() {
     cat <<'EOF'
 Usage:
   ./pbs_submit_manager.sh --help [--engine <engine>]
-  ./pbs_submit_manager.sh --engine <engine> [--config FILE] [--set KEY=VALUE ...]
-  ./pbs_submit_manager.sh --generate-only --engine <engine> [--config FILE] [--set KEY=VALUE ...]
+  ./pbs_submit_manager.sh --engine <engine> [--config FILE] [--set KEY=VALUE ...] [--queue-candidates Q1,Q2,... --queue-limits N1,N2,... --submit-username USER]
+  ./pbs_submit_manager.sh --generate-only --engine <engine> [--config FILE] [--set KEY=VALUE ...] [--queue-candidates Q1,Q2,... --queue-limits N1,N2,... --submit-username USER]
 
 Examples:
   ./pbs_submit_manager.sh --help --engine qdrant
   ./pbs_submit_manager.sh --engine qdrant
   ./pbs_submit_manager.sh --config qdrant.env
   ./pbs_submit_manager.sh --generate-only --engine qdrant --set TASK=QUERY --set QUERY_BATCH_SIZE="32 64"
+  ./pbs_submit_manager.sh --engine qdrant --queue-candidates debug,debug-scaling,capacity --queue-limits 1,1,5 --submit-username myuser
   ENGINE=qdrant ./pbs_submit_manager.sh
 EOF
 }
@@ -171,6 +172,9 @@ common_set_defaults() {
     ACCOUNT=""
     STORAGE_MEDIUM="memory"
     GENERATE_ONLY="false"
+    CLI_QUEUE_CANDIDATES=""
+    CLI_QUEUE_LIMITS=""
+    CLI_SUBMIT_USERNAME=""
 }
 
 apply_common_overrides() {
@@ -192,6 +196,106 @@ apply_common_overrides() {
     fi
 }
 
+split_space_separated_values() {
+    local raw_value="$1"
+    local output_name="$2"
+    local -n values_ref="$output_name"
+
+    values_ref=()
+    if [[ -n "$raw_value" ]]; then
+        read -r -a values_ref <<< "$raw_value"
+    fi
+}
+
+split_csv_values() {
+    local raw_value="$1"
+    local output_name="$2"
+    local -n values_ref="$output_name"
+    local item
+    local parsed=()
+
+    values_ref=()
+    if [[ -z "$raw_value" ]]; then
+        return 0
+    fi
+
+    IFS=',' read -r -a parsed <<< "$raw_value"
+    for item in "${parsed[@]}"; do
+        item="$(trim_whitespace "$item")"
+        [[ -n "$item" ]] || continue
+        values_ref+=("$item")
+    done
+}
+
+is_positive_integer() {
+    local value="$1"
+    [[ "$value" =~ ^[1-9][0-9]*$ ]]
+}
+
+set_cli_queue_throttle_options() {
+    CLI_QUEUE_CANDIDATES="${1:-}"
+    CLI_QUEUE_LIMITS="${2:-}"
+    CLI_SUBMIT_USERNAME="${3:-}"
+}
+
+load_queue_candidates() {
+    local output_name="$1"
+    local -n queue_ref="$output_name"
+
+    if [[ -n "${CLI_QUEUE_CANDIDATES:-}" ]]; then
+        split_csv_values "$CLI_QUEUE_CANDIDATES" queue_ref
+    elif [[ -n "${QUEUE:-}" ]]; then
+        queue_ref=("$QUEUE")
+    else
+        queue_ref=()
+    fi
+}
+
+validate_queue_limit_configuration() {
+    local queues=()
+    local queue_limits=()
+    local queue_limit
+    local throttle_flag_count=0
+
+    [[ -n "${CLI_QUEUE_CANDIDATES:-}" ]] && throttle_flag_count=$((throttle_flag_count + 1))
+    [[ -n "${CLI_QUEUE_LIMITS:-}" ]] && throttle_flag_count=$((throttle_flag_count + 1))
+    [[ -n "${CLI_SUBMIT_USERNAME:-}" ]] && throttle_flag_count=$((throttle_flag_count + 1))
+
+    if (( throttle_flag_count == 0 )); then
+        return 0
+    fi
+
+    if [[ -z "${CLI_QUEUE_CANDIDATES:-}" || -z "${CLI_QUEUE_LIMITS:-}" || -z "${CLI_SUBMIT_USERNAME:-}" ]]; then
+        echo "--queue-candidates, --queue-limits, and --submit-username must be provided together." >&2
+        return 1
+    fi
+
+    load_queue_candidates queues
+    split_csv_values "${CLI_QUEUE_LIMITS:-}" queue_limits
+
+    if (( ${#queues[@]} == 0 )); then
+        echo "--queue-candidates must contain at least one queue." >&2
+        return 1
+    fi
+
+    if (( ${#queue_limits[@]} > 0 && ${#queues[@]} != ${#queue_limits[@]} )); then
+        echo "--queue-candidates and --queue-limits must contain the same number of entries." >&2
+        return 1
+    fi
+
+    for queue_limit in "${queue_limits[@]}"; do
+        if ! is_positive_integer "$queue_limit"; then
+            echo "--queue-limits entries must be positive integers. Invalid value: $queue_limit" >&2
+            return 1
+        fi
+    done
+
+    if ! command -v qstat >/dev/null 2>&1; then
+        echo "qstat is required when queue throttling flags are configured." >&2
+        return 1
+    fi
+}
+
 validate_common_required_vars() {
     local missing=()
     local run_mode_upper="${RUN_MODE^^}"
@@ -207,6 +311,26 @@ validate_common_required_vars() {
         echo "Missing required common settings: ${missing[*]}" >&2
         return 1
     fi
+
+    if [[ "$run_mode_upper" == "PBS" ]]; then
+        validate_queue_limit_configuration || return 1
+    fi
+}
+
+prime_queue_for_validation() {
+    local queue_names=()
+
+    if [[ -n "${QUEUE:-}" || -z "${CLI_QUEUE_CANDIDATES:-}" ]]; then
+        return 0
+    fi
+
+    load_queue_candidates queue_names
+    if (( ${#queue_names[@]} == 0 )); then
+        return 0
+    fi
+
+    QUEUE="${queue_names[0]}"
+    queue="$QUEUE"
 }
 
 resolve_engine_dir() {
@@ -367,6 +491,122 @@ write_run_config_snapshot() {
     } > "$target_file"
 }
 
+count_jobs_in_queue_from_qstat() {
+    local qstat_output="$1"
+    local queue_name="$2"
+
+    awk -v target_queue="$queue_name" '
+        function queue_matches(queue_field, requested_queue) {
+            if (requested_queue == "debug") {
+                return queue_field == "debug"
+            }
+
+            if (requested_queue == "debug-scaling") {
+                return queue_field == "debug-scaling" || queue_field ~ /^debug-s/
+            }
+
+            return queue_field == requested_queue
+        }
+
+        $1 !~ /^[0-9]/ {
+            next
+        }
+
+        {
+            queue = $3
+            if (queue_matches(queue, target_queue)) {
+                count++
+            }
+        }
+
+        END {
+            print count + 0
+        }
+    ' <<< "$qstat_output"
+}
+
+find_open_queue_for_user() {
+    local submit_username="$1"
+    local queue_names=()
+    local queue_limits=()
+    local qstat_output
+    local i
+    local active_jobs
+
+    load_queue_candidates queue_names
+    split_csv_values "${CLI_QUEUE_LIMITS:-}" queue_limits
+
+    if ! qstat_output="$(qstat -u "$submit_username" 2>/dev/null)"; then
+        echo "qstat failed while checking queue usage for ${submit_username}." >&2
+        return 2
+    fi
+
+    for i in "${!queue_names[@]}"; do
+        active_jobs="$(count_jobs_in_queue_from_qstat "$qstat_output" "${queue_names[$i]}")"
+        if (( active_jobs < queue_limits[$i] )); then
+            printf '%s\n' "${queue_names[$i]}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+wait_for_open_queue() {
+    local submit_username="$1"
+    local selected_queue
+    local status
+    local queue_label="${CLI_QUEUE_CANDIDATES:-$QUEUE}"
+
+    while true; do
+        selected_queue="$(find_open_queue_for_user "$submit_username")"
+        status=$?
+
+        if (( status == 0 )); then
+            printf '%s\n' "$selected_queue"
+            return 0
+        fi
+        if (( status != 1 )); then
+            return "$status"
+        fi
+
+        echo "No queue slot available for ${submit_username} in [${queue_label}]; waiting 60 seconds before retrying." >&2
+        sleep 60
+    done
+}
+
+resolve_submission_queue_for_current_run() {
+    local run_mode_upper="${RUN_MODE^^}"
+    local queue_names=()
+    local queue_limits=()
+    local submit_username
+    local selected_queue
+
+    if [[ "$run_mode_upper" != "PBS" ]]; then
+        return 0
+    fi
+
+    load_queue_candidates queue_names
+    split_csv_values "${CLI_QUEUE_LIMITS:-}" queue_limits
+
+    if (( ${#queue_names[@]} == 0 )); then
+        echo "QUEUE must contain at least one PBS queue." >&2
+        return 1
+    fi
+
+    if (( ${#queue_limits[@]} == 0 )); then
+        selected_queue="${queue_names[0]}"
+    elif [[ "${GENERATE_ONLY:-false}" == "true" ]]; then
+        selected_queue="${queue_names[0]}"
+    else
+        submit_username="$CLI_SUBMIT_USERNAME"
+        selected_queue="$(wait_for_open_queue "$submit_username")" || return 1
+    fi
+
+    QUEUE="$selected_queue"
+    queue="$selected_queue"
+}
+
 maybe_submit_job() {
     local run_dir="$1"
     local submit_script="$2"
@@ -383,6 +623,7 @@ maybe_submit_job() {
             cd "$run_dir"
             qsub "$submit_script"
         )
+        sleep 1
     else
         echo "Run mode is ${run_mode}; submission skipped."
     fi
