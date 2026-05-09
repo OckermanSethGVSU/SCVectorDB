@@ -1,4 +1,11 @@
 
+if [[ -n "${PBS_O_WORKDIR:-}" ]]; then
+    SCRIPT_DIR="$PBS_O_WORKDIR"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+cd "$SCRIPT_DIR"
+
 if [[ -f ./run_config.env ]]; then
     set -a
     source ./run_config.env
@@ -123,13 +130,14 @@ PYTHON_ENV_VARS=(
 )
 
 
-RUN_DIR="$(pwd)"
-BASE_DIR="$(dirname "$RUN_DIR")"
+RUN_DIR="${RUN_DIR:-$SCRIPT_DIR}"
+BASE_DIR="${BASE_DIR:-$(dirname "$RUN_DIR")}"
 
 
 export myDIR="$(basename "$RUN_DIR")"
 export RESULT_PATH="$RUN_DIR"
 export RUNTIME_STATE_DIR="${RUN_DIR}/runtime_state"
+echo "[INFO] Using run directory: $RUN_DIR"
 cd "$RUN_DIR"
 
 mkdir -p "$RUNTIME_STATE_DIR"

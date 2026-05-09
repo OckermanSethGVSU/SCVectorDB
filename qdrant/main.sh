@@ -70,12 +70,26 @@ wait_for_launch_stop_flag() {
     sleep 30
 }
 
+if [[ -n "${PBS_O_WORKDIR:-}" ]]; then
+    SCRIPT_DIR="$PBS_O_WORKDIR"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+cd "$SCRIPT_DIR"
 
-if [[ -z "${BASE_DIR:-}" ]]; then
-    BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f ./run_config.env ]]; then
+    set -a
+    source ./run_config.env
+    set +a
 fi
 
-RUN_DIR="${RUN_DIR:-$BASE_DIR/$myDIR}"
+RUN_DIR="${RUN_DIR:-$SCRIPT_DIR}"
+if [[ -z "${BASE_DIR:-}" ]]; then
+    BASE_DIR="$(dirname "$RUN_DIR")"
+fi
+
+echo "[INFO] Using run directory: $RUN_DIR"
+cd "$RUN_DIR"
 
 if [[ "$PLATFORM" == "POLARIS" ]]; then
     ml use /soft/modulefiles
@@ -90,18 +104,11 @@ elif [[ "$PLATFORM" == "AURORA" ]]; then
     module load frameworks
 fi
 
-set -a
-source ./run_config.env
-set +a
-
-
 if [[ -n "${ENV_PATH:-}" ]]; then
     echo "Activating Python environment: $ENV_PATH"
     source "$ENV_PATH/bin/activate"
     echo "ENV_PATH not set; using current Python environment: $(command -v python3)"
 fi
-
-cd "$RUN_DIR"
 
 if [[ "$STORAGE_MEDIUM" == "DAOS" ]]; then
     DAOS_POOL="radix-io"
