@@ -449,7 +449,7 @@ EOF
     cat <<EOF
 #PBS -A ${ACCOUNT}
 #PBS -o workflow.out
-#PBS -e workflow.err
+#PBS -e workflow.out
 
 EOF
 }

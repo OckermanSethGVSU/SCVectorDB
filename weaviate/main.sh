@@ -25,6 +25,8 @@ resolve_mixed_insert_start_id() {
     fi
 }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 if [[ -f ./run_config.env ]]; then
     set -a
