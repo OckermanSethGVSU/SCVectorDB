@@ -150,7 +150,14 @@ mkdir -p "${TARGET_BASE}/node${RANK}"
 # echo "REGISTRY                : $(tr '\n' '; ' < "$OUTPUT_FILE")"
 # echo "============================================================"
 
-IMAGE="docker://semitechnologies/weaviate:1.36.0"
+WEAVIATE_LOCAL_SIF="${WEAVIATE_LOCAL_SIF:-./weaviate.sif}"
+WEAVIATE_IMAGE_URI="${WEAVIATE_IMAGE_URI:-docker://semitechnologies/weaviate:1.36.0}"
+
+if [[ -f "$WEAVIATE_LOCAL_SIF" ]]; then
+    IMAGE="$WEAVIATE_LOCAL_SIF"
+else
+    IMAGE="$WEAVIATE_IMAGE_URI"
+fi
 
 COMMON_ARGS=(
     --fakeroot

@@ -58,6 +58,16 @@ engine_apply_overrides() {
 # Validate required values and schema choices after overrides are resolved.
 engine_validate_config() {
     schema_validate_current_values "$ENGINE_SCHEMA_PREFIX"
+
+    if [[ "${RUN_MODE^^}" == "PBS" && "${ALLOW_REMOTE_WEAVIATE_IMAGE:-false}" != "true" && -z "${WEAVIATE_SIF:-}" ]]; then
+        echo "WEAVIATE_SIF is required for PBS runs unless ALLOW_REMOTE_WEAVIATE_IMAGE=true." >&2
+        return 1
+    fi
+
+    if [[ "${RUN_MODE^^}" == "PBS" && -n "${WEAVIATE_SIF:-}" && "$WEAVIATE_SIF" == */* ]]; then
+        echo "WEAVIATE_SIF must be a filename under $ENGINE_DIR/sifs, not a path: $WEAVIATE_SIF" >&2
+        return 1
+    fi
 }
 
 # Print resolved Weaviate settings before run directory generation/submission.
@@ -163,6 +173,14 @@ engine_copy_payload() {
         copy_engine_items "$ENGINE_DIR/weaviateSetup" "$target_dir" \
             "launchWeaviateNodeLocal.sh"
     else
+        if [[ "${ALLOW_REMOTE_WEAVIATE_IMAGE:-false}" != "true" ]]; then
+            if [[ ! -f "$ENGINE_DIR/sifs/$WEAVIATE_SIF" ]]; then
+                echo "Required payload item missing: $ENGINE_DIR/sifs/$WEAVIATE_SIF" >&2
+                echo "Run $ENGINE_DIR/scripts/download_sif.sh [version] to download a Weaviate SIF, then set WEAVIATE_SIF to that filename." >&2
+                return 1
+            fi
+            cp "$ENGINE_DIR/sifs/$WEAVIATE_SIF" "$target_dir/weaviate.sif"
+        fi
         copy_engine_items "$ENGINE_DIR/weaviateSetup" "$target_dir" \
             "launchWeaviateNode.sh" \
             "mapping.py"
