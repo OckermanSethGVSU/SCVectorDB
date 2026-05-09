@@ -27,7 +27,7 @@ import (
 )
 
 const idPropName = "doc_id"
-const searchableStabilizationPeriod = 60 * time.Second
+const searchableStabilizationPeriod = 30 * time.Second
 
 type NodeInfo struct {
 	Rank     int
