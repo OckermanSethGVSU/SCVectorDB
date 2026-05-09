@@ -109,6 +109,8 @@ if [[ "$TASK" == "MIXED" ]]; then
     resolve_mixed_insert_start_id
     NO_PROXY="" no_proxy="" http_proxy="" https_proxy="" HTTP_PROXY="" HTTPS_PROXY="" ./mixed
     touch "runtime_state/flag.txt"
+    python3 mixed_timeline.py --log-dir mixed_logs/ --throughput-only
+
 fi
 
 

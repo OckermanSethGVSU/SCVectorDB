@@ -148,7 +148,8 @@ engine_copy_payload() {
         "multi_client_summary.py"
     if [[ "$TASK" == "MIXED" ]]; then
         copy_engine_items "$ENGINE_DIR/scripts" "$target_dir" \
-            "npy_inspect.py"
+            "npy_inspect.py" \
+            "mixed_timeline.py"
     fi
     if [[ -d "$ENGINE_DIR/pythonUtils" ]]; then
         copy_optional_engine_items "$ENGINE_DIR" "$target_dir" "pythonUtils"
