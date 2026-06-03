@@ -1,3 +1,7 @@
+
+**This is an archive to keep the link used for the initial SC26 AD/AE submission. The updated, renamed repo is available at [VECHINI](https://github.com/OckermanSethGVSU/VECHINI). If accepted, we will use the updated repo for the final AD/AE process.**
+
+
 # VECHINI
 
 VECHINI (**V**ector **E**valuation and **C**haracterization for **Hi**gh-performance **N**earest-neighbor **I**nfrastructure.) is a work-in-progress tool for running vector database (VDB) experiments on PBS HPC platforms that support Apptainer and MPI. Using `pbs_submit_manager.sh` and configuration files, users can launch customized single- and multi-node experiments to evaluate key aspects of VDB performance. The goal is to help users answer questions about performance on their target HPC platform. We focus on a few of the key stages of the VDB lifecycle, including data ingestion, index construction, and query serving. Currently, we support [Qdrant](https://qdrant.tech/), [Milvus](https://milvus.io/), and [Weaviate](https://weaviate.io/).
